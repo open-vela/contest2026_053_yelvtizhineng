@@ -755,7 +755,7 @@
 - **越界量**：横屏 480 宽一行 = 960B → 单行 PUTAREA 越界 320B/行
   （img test 每行都扫掉 shutdown_handlers+quiet+swap+rxbuf[0..300]）；
   414 宽预览行 = 828B → 越界 188B/行；LVGL 全宽 24 行 flush = 23040B →
-  越界 ~22.4KB（覆盖到 g_cam_rxbuf 前 ~22KB）。
+  越界 \~22.4KB（覆盖到 g_cam_rxbuf 前 \~22KB）。
 - **为什么"画面正常却内存被毁"**：wrram 交换循环先把整块（含越界区）写完，
   再 SPI_SNDBLOCK 从同一地址读回 → 面板数据自洽（显示正确）；
   越界**写**却真实破坏了 .bss。这就是 swap 随机 on/off（set_swap(false)

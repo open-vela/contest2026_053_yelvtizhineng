@@ -380,7 +380,7 @@ printf → syslog ring(196B, CONFIG_SYSLOG_BUFSIZE=196)
   - TX_CONF=0x08089200（sig_loopback=1、tdm_en=1、left_align=1）✓
 - **真凶**：hal_i2s_write 用 **I2S TX_DONE 作块完成信号 = 错**（TX_DONE 语义=FIFO 空，DMA 启动前即置位 → 每块假完成）→ 播放只发出 FIFO 开头一小段 → tone 48000B "0 ticks 返回 + TX_IDLE=0" → 用户听到"都的一声"
 - **修复**：改用 **GDMA OUT_TOTAL_EOF_CH0_INT_ST(bit3)**（官方 esp32s3_i2s.c L2320 同款）+ 函数末尾等 TX_IDLE=1（串行发完）+ 打印真实耗时（tone 48000B → 50ticks=24k / 25ticks=48k）
-- **判读**：播放耗时 ~50 ticks → 24k 体系正确，播放完整（440Hz 500ms"嘟——"）；~25 ticks → 48k 体系（软件采样率全面改 48k）；0 ticks 且 TX_IDLE=1 → DMA 数据没进 FIFO（查 DMA 通道/时钟）
+- **判读**：播放耗时 \~50 ticks → 24k 体系正确，播放完整（440Hz 500ms"嘟——"）；\~25 ticks → 48k 体系（软件采样率全面改 48k）；0 ticks 且 TX_IDLE=1 → DMA 数据没进 FIFO（查 DMA 通道/时钟）
 
 ### 2026-08-25（定案2）系统卡死 = GDMA OUT/IN 中断共用线 → 中断风暴
 - **现象**：`plant voice tone` 卡在 `[Voice] TX: bytes=512` 后无任何返回（多版本复现）
@@ -505,7 +505,7 @@ printf → syslog ring(196B, CONFIG_SYSLOG_BUFSIZE=196)
 - 对比：说话时峰值 7065 / 10385 / 14053
 
 **依据结论**：
-- 手工门限候选：底噪上界 ~300，语音下界 ~7000 → 门限 500 附近有 2 倍以上
+- 手工门限候选：底噪上界 \~300，语音下界 \~7000 → 门限 500 附近有 2 倍以上
   余量（**待 RMS/分位数统计确认，勿拍脑袋**）
 - 生产方案：xiaozhi 同款 **NSNet2**（esp-sr AFE）——同硬件 40dB 增益验证过，
   比任何手工门限可靠；之前崩溃（dl_nn_args_t.c:137 断言）是 NuttX 移植问题，
@@ -597,7 +597,7 @@ printf → syslog ring(196B, CONFIG_SYSLOG_BUFSIZE=196)
   ≈5900ms（标称 3000ms，凑满 48000 采样耗时 ≈2×）
 - **根因**：硬件 RX FIFO 仅 64B≈0.67ms；预读链**单深** = 收满 1 个 apb
   （2044B≈21ms）才由 worker 提交下一个 → apb 间 DMA 空窗（worker 往返
-  >0.67ms）→ 每 ~21ms 丢一小段 → 数据周期断裂（回放卡）+ 有效吞吐 ~50%
+  >0.67ms）→ 每 \~21ms 丢一小段 → 数据周期断裂（回放卡）+ 有效吞吐 \~50%
   （凑满 3s 数据花 5.9s 墙钟 → "录制长、播放短"）
 - **修复**（hal_i2s.c）：预读链深度 1→2（HAL_RX_PREFETCH_DEPTH=2，A/B 乒乓）：
   - submit 改临界区"窗口检查+预订"（≤2，read_slot 与 worker 回调并发安全）

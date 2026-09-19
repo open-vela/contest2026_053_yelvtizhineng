@@ -320,7 +320,7 @@ plant cam diag           # 分层硬件诊断（含 L0b 帧率测量）
 - **先跑一次 `plant img test` 确认 LCD 直写链路本身 OK**（分块修复后应仍四象限正确），
   再跑 `plant cam capture` 看 frame head/像素统计判断 rxbuf 数据是否正常。
 同时可关注 `plant cam capture` 的诊断输出（frame head/像素统计）判断 rxbuf 数据是否正常。
-**视频要平滑的关键**：一帧 capture(~30ms)+缩放+写屏(~10ms) ≈ 25 FPS 上限；
+**视频要平滑的关键**：一帧 capture(\~30ms)+缩放+写屏(\~10ms) ≈ 25 FPS 上限；
 避免 LVGL 与预览线程同时写 LCD 取景框区域（ioctl 锁已串行化，但取景框内不要放 LVGL 对象
 且 LVGL 全宽 flush 有 rowbuff_be 越界隐患——越界本身不修的话，预览区域要避开整行 480 宽 flush，
 或接受在 LCD 侧修复）。

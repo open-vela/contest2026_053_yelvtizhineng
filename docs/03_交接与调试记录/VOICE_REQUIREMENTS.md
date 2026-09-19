@@ -97,7 +97,7 @@ UI（screen_voice.c）
 
 | # | 问题 | 证据 | 影响 |
 |---|---|---|---|
-| 1 | **I2S RX 过采样 ~1.64×**（实测 ~157k 采样/s，应为 96k）| AUDIO_HANDOVER_NEXT_AI.md §0：寄存器回读/示波器说 24kHz，但 RX 数据量 1.64× → 实际帧率 ~39.25kHz | **音调偏高 ~1.64×、录音回放是嘶声**——语音体验的根本障碍 |
+| 1 | **I2S RX 过采样 \~1.64×**（实测 \~157k 采样/s，应为 96k）| AUDIO_HANDOVER_NEXT_AI.md §0：寄存器回读/示波器说 24kHz，但 RX 数据量 1.64× → 实际帧率 \~39.25kHz | **音调偏高 \~1.64×、录音回放是嘶声**——语音体验的根本障碍 |
 | 2 | TTS 是假的（回放录音占位）| voice_service.c:146-149 | 用户听到的是自己声音，不是 AI 回复 |
 | 3 | AI 回复是本地规则，非 MiMo | voice_service.c:55-102 | 无法真正"聊天" |
 | 4 | `ai_common_http_post` 走 **HTTP 明文**（无 TLS）| ai_common.h 注释 | 音频/文本明文传输；HTTPS 需 mbedtls（TODO）|
