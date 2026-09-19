@@ -216,11 +216,23 @@ cd mobile/plant_android
   由队友使用 **DeepSeek Harness** 在 openvela 工作区（Linux 虚拟机）内完成，共 6 个会话、约 14 万个事件
 - **主程序、云平台、手机端与文档**：由本人在 **Codex** 辅助下完成
 
-> 说明：本届大赛的日志采集工具目前只支持 Claude Code / AIoT-IDE / OpenCode / Codex / MiMo Code / Cursor
-> 六种工具（事件 schema 的 `tool` 字段为枚举值），而我们的两个工具分别是 **Codex（桌面版）**
-> 与 **DeepSeek Harness**。Codex 的历史会话可导出但官方适配器解析不了其新格式；
-> DeepSeek Harness 的 `tool` 取值不在枚举内。**相关证据与复现步骤已随问题反馈给组委会**，
-> `logs/` 目录将在组委会答复后按最终结论补齐。团队绝不伪造、修改任何日志。
+> **关于 AI Coding 日志（`logs/`）**：本作品主线程全程在 **Codex（桌面版）** 里完成。
+> 需要如实说明的是，开发期我们**没有把 AI 工具开在 openvela 工作区内**，也没有留意到日志
+> 要在会话结束时由采集钩子自动落盘——一开始的做法是先在本机把开发测试做起来，作品最后
+> 整理好才一次性提交到 GitHub；加上**公司网络访问 GitHub 不稳定**，也倾向于把提交集中到
+> 最后一次做、减少访问频率。所以官方钩子全程没有触发，`logs/` 到提交时仍然是空的。
+>
+> 这批日志是我们事后用**官方事件 schema**、从本机 Codex 的**原始会话转录**导出补齐的。
+> 官方已发布版的 Codex 适配只能解析 Claude Code 形状的转录（官方仓在途 PR #52 才是针对
+> Codex rollout 格式的解析器，尚未合入，且带“会话须在工作区内”的闸门），因此我们按该 PR 的
+> 内容规则（只保留 user/assistant 真实对话、丢弃工具前言）实现了等价的格式摊平，并额外保留
+> 思考过程与工具调用，**已通过官方防作弊校验脚本 `validate-log.py`（ALL OK，43,563 条事件 / 14 个文件）**。
+> 每个会话的源文件 sha256 记录在 `logs/tadycharming/manifest.json`，可逐条核对；
+> 详情与限制见 [`logs/README.md`](./logs/README.md)。
+>
+> 团队**绝不伪造、修改任何日志**。队友早期在 Linux 虚拟机上用 **DeepSeek Harness** 完成的
+> 驱动调试会话（6 个会话、约 14 万事件）因该工具取值不在官方 schema 的 `tool` 枚举内、
+> 无法按官方契约导出，未收入 `logs/`，一并在此说明。
 
 ### 协作方式
 
