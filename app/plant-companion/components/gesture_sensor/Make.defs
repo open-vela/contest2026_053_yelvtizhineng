@@ -1,0 +1,7 @@
+############################################################################
+# apps/plant-companion/components/gesture_sensor/Make.defs
+############################################################################
+
+ifneq ($(CONFIG_PLANT_GESTURE_SENSOR),)
+CONFIGURED_APPS += $(APPDIR)/plant-companion/components/gesture_sensor
+endif

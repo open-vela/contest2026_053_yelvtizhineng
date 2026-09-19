@@ -1,0 +1,17 @@
+arch/xtensa/src/esp32s3/Make.defs
+arch/xtensa/src/esp32s3/esp32s3_allocateheap.c
+arch/xtensa/src/esp32s3/esp32s3_cam_dvp.c
+arch/xtensa/src/esp32s3/esp32s3_cam_dvp.h
+arch/xtensa/src/esp32s3/esp32s3_lowputc.c
+arch/xtensa/src/esp32s3/esp32s3_lowputc.h
+arch/xtensa/src/esp32s3/esp32s3_sdmmc.c
+arch/xtensa/src/esp32s3/esp32s3_spiram.c
+arch/xtensa/src/esp32s3/esp32s3_spiram.h
+arch/xtensa/src/esp32s3/esp32s3_wifi_adapter.c
+arch/xtensa/src/esp32s3/esp32s3_wlan.c
+arch/xtensa/src/esp32s3/hal_i2s.c
+boards/xtensa/esp32s3/esp32s3-box/configs/lvgl/defconfig
+boards/xtensa/esp32s3/esp32s3-box/src/esp32s3_board_touchsceen_gt911.c
+drivers/lcd/st7789.c
+drivers/serial/serial.c
+fs/littlefs/Make.defs

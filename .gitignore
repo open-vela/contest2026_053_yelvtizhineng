@@ -1,0 +1,46 @@
+# 编译产物
+*.o
+*.d
+*.a
+.built
+.depend
+Make.dep
+
+# 服务器运行时
+server/plant_server/data/media/?
+server/plant_server/data/*.db-*
+server/plant_server/__pycache__/
+server/plant_server/**/__pycache__/
+*.pyc
+server/plant_server/server_*.log
+
+# 手机端构建产物
+mobile/plant_android/build/gen/
+mobile/plant_android/build/*.apk
+mobile/plant_android/build/res.zip
+
+# 系统
+Thumbs.db
+.DS_Store
+
+# 注意：logs/ 下的 AI Coding 日志必须提交，不要忽略！
+
+# 敏感文件（禁止入库）
+*.keystore
+*.jks
+*.pem
+*.key
+.env
+.env.*
+
+# Android 构建产物
+mobile/plant_android/build/
+
+# 字体源文件（体积大，按 README 自行下载）
+*.otf
+*.ttf
+
+# 编译/调试产物
+*.dep
+app/plant-companion/Make.dep
+app/plant-companion/tools/server/debug_audio/

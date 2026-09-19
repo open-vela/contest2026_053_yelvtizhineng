@@ -1,36 +1,103 @@
-# contest2026_053_yelvtizhineng
+# 植小伴 · AI 智能养植伴侣
 
-👋 欢迎参加 **2026 首届 openvela AI 硬件开发者大赛**！
-
-这是组委会为你的队伍创建的**专属参赛仓库**（本仓为样例/模板，队伍编号 `053`；你看到的将是你自己的 `contest2026_<编号>_<队伍名>`）。比赛期间，你的全部参赛代码、打包产物与 AI Coding 日志都提交到这里。
-
-> 本仓既是「代码仓」，又内置了一键拉取整套 openvela 工程的 `repo` 清单（manifest）。你只需跟它打交道，**自始至终只动一个文件夹**。
+> 参赛队伍：**叶绿体智能**（北京见壤智能科技有限公司）
+> 仓库：`contest2026_053_yelvtizhineng` ｜ 赛道：**AI 硬件产品创新**
+> 主控：CHD-ESP32-S3-Box ｜ 系统：**openvela**（NuttX） ｜ 大模型：**小米 MiMo**
 
 ---
 
-## 一、先读这些官方文档
+## 一、作品简介
 
-**通用（所有赛道必读）：**
+**植小伴是一台"会看病、会说话"的 AI 养植伴侣。**
 
-| 文档                                                                                                                                     | 用途                                           |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| [《大赛总览》](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/contest_overview.md)                        | 赛道、流程、评分、资源，建议先通读             |
-| [《参赛代码提交指南》](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/code_submission_guide.md)           | 仓库获取、提交流程、时间与权限（**以此为准**） |
-| [《AI Coding 日志归集与提交手册》](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/ai_coding_log_guide.md) | 如何导出 AI 对话日志并提交到 `logs/`           |
+市面上的养花监测器大多只做一件事：测出湿度、提醒你浇水，然后就没有然后了——
+叶子为什么发黄、要不要施肥、是不是晒狠了，用户还是不知道，最后传感器进抽屉。
 
-**按你的赛道选读（三选一）：**
+植小伴把这件事做成了**完整闭环**：**监测 → 诊断 → 养护任务 → 情感陪伴**。
 
-| 赛道                  | 教程导航                                                                                                                                                 |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 快应用 / 手表应用创新 | [快应用教程导航](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/quickapp/quickapp_guide_index.md)                         |
-| AI 硬件产品创新       | [AI 硬件赛道教程导航](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/ai_hardware/ai_hardware_guide_index.md)              |
-| 新硬件适配            | [新硬件适配赛道教程导航](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/hardware_porting/hardware_porting_guide_index.md) |
+| 能力 | 说明 |
+|------|------|
+| **八参数实测** | 一块小板接 RS485 八合一土壤传感器，实时读出 温度 / 水分 / EC / pH / 盐分 / 氮 / 磷 / 钾，三秒刷新一次 |
+| **拍照即知** | 板载摄像头取景拍照 → 云端大模型看图 → 返回品种、匹配度、健康分与对症建议 |
+| **会说话** | 按住说话、松手就行；回答不仅显示文字，还会**念出来**。说完话到出声 **6~8 秒**（优化前 43 秒） |
+| **落成任务** | 诊断结果自动变成"今天该做什么"，设备上点一下确认，成长日记里就多一笔 |
+| **有伴** | 手机端社区晒图、点赞、一键理赔——养死了也赔，历史传感器数据就是理赔凭证 |
+
+**亮点**
+
+1. **一颗 ESP32-S3 跑通四路外设**：图形界面（LVGL）、摄像头（DVP）、麦克风与扬声器（双 codec）、八合一土壤传感器（RS485/UART），并在 openvela 上稳定共存
+2. **语音链路做了实测优化**：定位到 SD 卡写入只有 ~23.5 KB/s 这个瓶颈，改为**边下边播 + 音频瘦身（24k→16k、只念回答）**，端到端时延从 43 秒压到 6~8 秒
+3. **三端齐活**：嵌入式固件 + 云平台 + 手机端 App，另有网页版管理台可运维设备
+4. **成本极低**：BOM 不足 50 元
+
+**代码规模**（自研部分）
+
+| 端 | 语言 | 文件 | 行数 |
+|----|------|------|------|
+| 嵌入式固件 | C | 93 | **31,600** |
+| 云平台 | Python | 56 | **6,160** |
+| 手机端 App | Java | 2 | **942** |
+
+> 另含约 15 万行第三方代码（乐鑫 esp_sr 语音识别库、cJSON、中文字模），未计入上表。
 
 ---
 
-## 二、第一步：拉取完整工程
+## 二、选题方向
 
-用组委会提供的命令一键拉取「openvela 全量源码 + 你的专属仓」：
+**AI 硬件产品创新**（自定细分方向：智能养植伴侣）
+
+选择理由：
+- 有真实且具体的痛点——**80% 的室内绿植死于浇水不当**，而前代产品（Parrot / Edyn / Koubachi / PlantLink）全部阵亡，死因高度一致：**只测不管**
+- 适合检验 openvela 的"图形 + AI + 多媒体"三项核心能力：我们三项**全部落地**
+- 端云分工天然清晰：实时性与降级放端、大模型与多模态放云
+
+---
+
+## 三、目录结构
+
+```text
+contest2026_053_yelvtizhineng/
+├── app/
+│   └── plant-companion/        嵌入式固件（openvela / NuttX 应用）
+│       ├── ui/                 LVGL 界面：首页 / 数据 / 任务 / 日记 / 拍照 / 语音 / 网络 / 升级
+│       ├── components/         摄像头 DVP、土壤传感器、LCD、音频 codec、SD、电池监测
+│       ├── services/           上云桥、AI 服务、语音服务、记录服务、OTA 服务
+│       ├── ai_module/          AI 对话 / 看图 / 语音的端侧编排
+│       ├── communication/      WiFi 管理、云客户端
+│       ├── ota/                A/B 双槽 OTA（含设计文档与工作记录）
+│       └── docs/               架构、摄像头交接、语音要求、内存预算等设计与调试文档
+├── server/
+│   └── plant_server/           云平台（FastAPI）：设备桥、AI 网关、社区、理赔、计费、管理台
+├── mobile/
+│   └── plant_android/          手机端 App（Android · Java）：首页、拍照问诊、问答、社区、理赔、会员
+├── patches/                    nuttx 侧改动（需单独向 nuttx 仓提 PR，见第六节）
+│   ├── nuttx_改动文件/          17 个被改动的 nuttx 源文件（按仓库相对路径存放）
+│   ├── nuttx_板级配置/          esp32s3-box 板级配置目录（含我们新增的 openvela/defconfig）
+│   └── _diff与清单/             nuttx_changes.diff、改动文件清单
+├── docs/                       技术文档（架构与接口 / 编译烧录与部署 / 交接与调试 / 提交与展示）
+├── tools/                      编译脚本、串口调试工具
+├── logs/                       AI Coding 日志
+├── README.md                   本文件
+└── contest2026_053_yelvtizhineng.xml   manifest（含一条 <linkfile> 映射）
+```
+
+### 关于映射
+
+植小伴嵌入式端是**标准 NuttX 应用**：`app/plant-companion/Make.defs` 里用
+`$(APPDIR)/plant-companion` 注册自身，板级配置用 `CONFIG_PLANT_COMPANION=y` 打开。
+因此 manifest 中映射为：
+
+```xml
+<linkfile src="app/plant-companion" dest="apps/plant-companion"/>
+```
+
+`repo sync` 后它会出现在 openvela 工作区的 `apps/plant-companion`，**无需改动任何路径即可编译**。
+
+---
+
+## 四、运行方式
+
+### 4.1 拉取工程
 
 ```bash
 repo init -u https://github.com/open-vela/contest2026_053_yelvtizhineng \
@@ -38,111 +105,187 @@ repo init -u https://github.com/open-vela/contest2026_053_yelvtizhineng \
 repo sync -c -j8
 ```
 
-同步后，你的整个仓库位于工作区的 `contest2026_053_yelvtizhineng/`，openvela 全量源码在外层（`nuttx/`、`apps/`、`packages/`、`vendor/` 等）。
+同步完成后，本仓位于工作区的 `contest2026_053_yelvtizhineng/`；
+`app/plant-companion` 会软链到工作区 `apps/plant-companion`。
 
----
+> Windows 用户提示：`repo` 创建工作区需要创建符号链接，请在 **WSL** 或
+> **开启开发者模式**的 Windows（Git Bash）下操作，否则会在
+> `.repo/manifests/.git` 处报权限错误。
 
-## 三、第二步：在哪里写代码
+### 4.2 编译固件
 
-**只在自己的仓目录 `contest2026_053_yelvtizhineng/` 里开发。** 不同作品形态放在对应子目录，manifest 会通过 `<linkfile>` 把它们**软链**到 openvela 编译树该在的位置——你不用手动 copy：
-
-| 作品形态 | 你的代码放这里             | 系统自动映射到                                 |
-| -------- | -------------------------- | ---------------------------------------------- |
-| 应用     | `app/hello_app/`           | `packages/demos/contest2026_053_hello_app`     |
-| 快应用   | `quickapp/hello_quickapp/` | `packages/apps/contest2026_053_hello_quickapp` |
-| 板级适配 | `board/contest_board/`     | `vendor/openvela/boards/contest2026_053_board` |
-
-> 用不到的形态目录可以删掉；新增作品时按同样规则加子目录，并在 `contest2026_053_yelvtizhineng.xml` 里补一条 `<linkfile>` 映射即可。**生产仓库（packages/nuttx/vendor 等）零改动。**
-
-建议仓库目录约定（便于评委定位）：
-
-```text
-app/ | quickapp/ | board/   # 你的作品代码
-logs/                       # AI Coding 日志（主动导出后提交，格式见 logs/README.md）
-README.md                   # 作品说明（提交前请改成你自己的，见第六节）
-```
-
-> 仓内附带了一个 `.gitignore.example`，给出了**编译产物**等不需要进仓的文件示例。如需启用，`cp .gitignore.example .gitignore` 后按需增删即可。**注意 `logs/` 下最终导出的 AI Coding 日志必须提交，不要忽略。**
->
-> `logs/` 的目录结构与提交格式见 [logs/README.md](logs/README.md)。
-
----
-
-## 四、第三步：编译与运行
-
-编译/运行步骤随作品形态不同而不同，请参考你所在赛道的教程导航：
-
-- 快应用 / 手表应用：[快应用教程导航](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/quickapp/quickapp_guide_index.md)（含模拟器与开发板部署）。
-- AI 硬件产品创新：[AI 硬件赛道教程导航](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/ai_hardware/ai_hardware_guide_index.md)（环境搭建、编译烧录、Skill 开发）。
-- 新硬件适配：[新硬件适配赛道教程导航](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/hardware_porting/hardware_porting_guide_index.md)（BSP 移植、最小 NSH 基线）。
-
-子目录已通过 manifest 中的 `<linkfile>` 软链进 openvela 编译树，因此构建在 openvela 工作区**根目录**（即你这个仓的上一级）进行。openvela 使用 `build.sh` 作为统一入口，接收一个 **board config 路径**作为参数：
+板级配置为 **`esp32s3-box:openvela`**（我们新增的 defconfig 在
+`patches/nuttx_板级配置/nuttx/boards/xtensa/esp32s3/esp32s3-box/configs/openvela/defconfig`，
+需一并合入 nuttx，见第六节）。
 
 ```bash
-# 进入 openvela 工作区根目录（你的仓的上一级）
-cd ..
-
-# 通用语法：第一个参数是 board config 路径，第二个参数可以是 menuconfig / distclean 等
-./build.sh <board-config-path> [menuconfig|distclean] [-j8]
+cd <工作区根目录>
+./build.sh esp32s3-box:openvela distclean   # 首次或改过配置后
+./build.sh esp32s3-box:openvela -j8
 ```
 
-> 具体的 board config 路径、目标产物、模拟器/真机部署方式请以你所在赛道的教程导航为准。本仓 `app/` `quickapp/` `board/` 三个示例骨架对应的 Kconfig 选项可通过 `menuconfig` 启用。
+产物：`nuttx/nuttx.bin`
+
+### 4.3 烧录
+
+分区表：`nuttx/boards/xtensa/esp32s3/esp32s3-box/configs/openvela/partition-table-2mb-ab.bin`
+
+```bash
+esptool.py --chip esp32s3 --port /dev/ttyACM0 --baud 921600 \
+  --before default-reset --after hard-reset write-flash \
+  --flash-mode dio --flash-freq 80m --flash-size 16MB \
+  0x8000  partition-table-2mb-ab.bin \
+  0x10000 nuttx.bin \
+  0x210000 nuttx.bin
+```
+
+> ⚠️ **两个应用槽都要写**。otadata 可能指向 `ota_0` 或 `ota_1`，
+> 只写 `0x10000` 会出现"烧录成功但版本号没变"的现象。
+> **不要 `erase_flash`，不要写 `0x0`。**
+
+上电后屏幕显示 `=== Firmware V1.3.29 ===` 即成功。
+
+### 4.4 硬件接线
+
+| 外设 | 接法 |
+|------|------|
+| 土壤传感器 | RS485 转换模块 TTL 侧：TX → 板卡 **GPIO40**，RX → 板卡 **GPIO42**（UART0，9600 8N1，Modbus 从站地址 `0x02`） |
+| 摄像头 | 板载 OV3660（DVP） |
+| 音频 | 板载 ES7210（采集）+ ES8311（播放），I2S0 16bit/24kHz |
+| SD 卡 | 板载 SDMMC（1-bit） |
+
+> ⚠️ **GPIO42 / GPIO40 被摄像头 DVP（VSYNC / Y9）与土壤传感器 UART0 共用，不能同时使用。**
+> 固件内已做互斥：进拍照页会暂停传感器轮询并完整关闭摄像头硬件；
+> 离开拍照页再把引脚路由回 UART0。详见 `docs/01_架构与接口/02_硬件与接线.md`。
+
+串口控制台走芯片内置 USB 串口。用 Python 打开串口做自动化时，
+务必先把 DTR/RTS 置低，否则会触发板卡复位：
+
+```python
+import serial
+s = serial.Serial()
+s.port = "COM23"; s.baudrate = 115200; s.timeout = 0.05
+s._dtr_state = False; s._rts_state = False
+s.open()
+```
+
+### 4.5 云平台
+
+```bash
+cd server/plant_server
+python -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+python run_server.py --host 0.0.0.0 --port 8000 --seed
+```
+
+配置项通过环境变量注入（`PLANT_AI_MODE=mimo` 等），详见 `docs/02_编译烧录与部署/04_云平台运行与部署.md`。
+设备端在 `/mnt/sd/plant.cfg` 里填写 `server_host:server_port` 即可连上。
+
+主要接口域：设备桥（心跳 / 遥测 / 语音 / 看图）、植物与任务、社区、理赔、计费、管理台。
+
+### 4.6 手机端 App
+
+```powershell
+cd mobile/plant_android
+.\build.ps1     # 需要 JDK 17 + Android SDK（build-tools 34.0.0 / platforms android-35）
+```
+
+产物：`build/ZhiXiaoBan.apk`。也可直接用浏览器打开云平台的 `/mobile` 页面（同一套前端）。
+
+### 4.7 ⚠️ 运行前需要你自己配置的项
+
+本仓**不含任何密钥**（已全部清理为占位符），完整跑起来需要填以下几处：
+
+| 配置项 | 位置 | 说明 |
+|--------|------|------|
+| MiMo API Key | `patches/nuttx_板级配置/.../configs/openvela/defconfig` 的 `CONFIG_PLANT_AI_API_KEY` | 在小米 MiMo 控制台申请；`app/plant-companion/tools/test_mimo_*.py` 里也各有一处 |
+| WiFi 账号密码 | `app/plant-companion/components/system_monitor/device_cfg.h` | 默认值已置为 `YOUR_WIFI_PASSWORD`，也可开机后在屏幕上选网输入 |
+| 云平台地址 | 设备端 `/mnt/sd/plant.cfg` 的 `server_host`；手机端 `MainActivity.java` 的 `YOUR_SERVER_HOST` | 指向你自己部署的服务器 |
+| 管理台口令 | 环境变量 `PLANT_ADMIN_PASSWORD` | 不设置则需显式配置 |
 
 ---
 
-## 五、第四步：提交作品
-
-1. **fork** 你的专属仓 → 开发 → `git commit` 并推送 → 向专属仓发起 **Pull Request**，可**自行 review 并合入**（无需等组委会）。
-2. **AI Coding 日志**：与 AI 工具的对话会自动记录到本机 staging（不会自动上传），需你**主动导出/打包**选定会话到仓内 `logs/` 目录后一并提交。详见[《AI Coding 日志归集与提交手册》](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/ai_coding_log_guide.md)。
-3. 若需改动 **nuttx 等公共仓库**，不在本仓改，而是 fork 对应公共仓、以 PR 提交到 `dev-ai-contest-2026` 分支，由组委会 review 后合入。
-
-> ⏰ **提交作品截止：9 月 20 日**。截止后统一收回 push 权限，仍可查看 / clone。
->
-> 获奖后再按要求将作品 PR 至 openvela 上游对应仓库（走标准 PR + CI 流程）。
-
-### 关于 PR 与 CLA
-
-- 本仓所有改动通过 **Pull Request** 合入（分支保护强制，可自行合入自己的 PR）。
-- 首次贡献需在[**官网签署 CLA**](https://openvela.com/#/community/cla)；PR 上会自动跑 `cla/signature` 检查，在官网签署成功后，在 PR 评论 `/check-cla` 复检即可通过。
-
 ---
-
-## 六、提交前：把本 README 改成你的作品说明
-
-本文件目前是组委会给的**使用说明书**。**作品提交前，请把它替换成你自己作品的说明**，方便评委快速了解你做了什么、怎么跑起来。建议至少包含以下内容：
-
-```markdown
-# <你的作品名>
-
-## 一、作品简介
-<一句话/一段话说明这个作品是什么、解决什么问题、亮点在哪>
-
-## 二、选题方向
-<快应用 / 手表应用创新 ｜ AI 硬件产品创新 ｜ 新硬件适配 ｜ 自定方向，并简述理由>
-
-## 三、目录结构
-<列出你这个仓里各目录/文件的作用，例如：>
-- `app/xxx/`        — <说明>
-- `board/xxx/`      — <说明>
-- `quickapp/xxx/`   — <说明>
-- `logs/`           — AI Coding 日志
-- `docs/` 或其他    — <说明>
-
-## 四、运行方式
-<拉取工程后，如何编译、烧录/部署、运行的完整步骤；最好能让评委照着一步步复现>
 
 ## 五、AI Coding 使用说明
-<说明本作品如何借助 AI 辅助开发：
-- 在需求拆解 / 方案设计 / 编码 / 调试 / 文档等环节如何与 AI 协作；
-- AI 对开发效率或质量带来的实际帮助。
-完整对话日志见 logs/ 目录>
-```
 
-> 提示：将会根据「作品本身 + 你的 README 说明 + `logs/` 里的 AI Coding 日志」来理解和评估你的作品，README 写清楚很重要。
+本作品从需求定义、架构设计、嵌入式开发、云端与 App 实现，到调试与文档撰写，
+**全程借助 AI 编程助手协作完成**，具体分工：
+
+- **嵌入式驱动早期攻关**（摄像头 DVP 预览与花屏、LCD 花屏、土壤传感器读取、ES8311/ES7210 音频噪声）：
+  由队友使用 **DeepSeek Harness** 在 openvela 工作区（Linux 虚拟机）内完成，共 6 个会话、约 14 万个事件
+- **主程序、云平台、手机端与文档**：由本人在 **Codex** 辅助下完成
+
+> 说明：本届大赛的日志采集工具目前只支持 Claude Code / AIoT-IDE / OpenCode / Codex / MiMo Code / Cursor
+> 六种工具（事件 schema 的 `tool` 字段为枚举值），而我们的两个工具分别是 **Codex（桌面版）**
+> 与 **DeepSeek Harness**。Codex 的历史会话可导出但官方适配器解析不了其新格式；
+> DeepSeek Harness 的 `tool` 取值不在枚举内。**相关证据与复现步骤已随问题反馈给组委会**，
+> `logs/` 目录将在组委会答复后按最终结论补齐。团队绝不伪造、修改任何日志。
+
+### 协作方式
+
+| 环节 | 与 AI 的协作方式 |
+|------|-----------------|
+| 需求拆解 | 用对话梳理使用场景与验收标准，逐条落成可验证的需求条目 |
+| 方案设计 | 让 AI 对比端云职责划分、降级策略与引脚复用方案，产出取舍依据 |
+| 编码 | AI 直接读改仓库代码：新写界面页、驱动适配、协议桥接，并同步补 Kconfig / Make.defs |
+| 调试 | **最关键的用法**：把串口日志、对象树转储、电平实测贴给 AI，由它定位根因并给出改法 |
+| 验证 | 让 AI 写脚本做闭环验证：串口注入点击、拍照后自动比对识别结果、OTA 全流程回归 |
+| 文档 | 把调试结论沉淀成交接文档（摄像头、语音、OTA、内存预算等），便于后续接手 |
+
+### 几个真实例子
+
+1. **语音时延 43 秒 → 6~8 秒**：AI 逐段测量链路耗时，定位到 SD 卡写入只有 ~23.5 KB/s，
+   提出"边下边播 + 音频瘦身（24k→16k、只念回答）"，改完实测达标
+2. **引脚复用冲突**：摄像头 DVP 与土壤传感器 UART0 共用 GPIO42/40，
+   AI 设计出"进拍照页关闭摄像头并暂停轮询、离页回收引脚"的互斥序列
+3. **OTA "升了不生效"**：AI 从启动日志与 otadata 状态定位到分区表与应用槽位不一致，
+   改为**双槽同写**并在文档里写清，避免后人再踩
+4. **界面小字看不见**：AI 发现任务页标题标签从未写入文本、子控件吞掉了点击事件，
+   两处修复后任务页才真正可用
+
+### AI 在效率上的实际帮助
+
+- 串口日志驱动的"贴日志 → 定位 → 改 → 复测"闭环，把单点问题的平均定位时间从小时级压到分钟级
+- 三端代码风格与接口约定由 AI 保持一致，跨端字段对齐几乎不出错
+- 文档与代码同步更新，交接成本大幅下降
+
+完整对话日志见 [`logs/`](./logs/)。
 
 ---
 
-## 附：仓库命名规范
+## 六、nuttx 侧改动（需单独提 PR）
 
-`contest2026_<编号>_<队伍名>` — 编号三位零填充；队名 slug（全小写、英文/拼音、连字符）。例：`contest2026_053_yelvtizhineng`。
-（仓库由组委会统一创建，**每队仅一个仓**，无需自行命名。）
+按大赛规则，**公共仓库不在本仓修改**。本作品对 nuttx 的改动共 **17 个文件**，
+全部放在 `patches/` 下，并附完整 diff（`patches/_diff与清单/nuttx_changes.diff`）。
+
+改动主题：
+
+| 主题 | 涉及文件 |
+|------|---------|
+| 摄像头 DVP 驱动与引脚回收 | `arch/xtensa/src/esp32s3/esp32s3_cam_dvp.[ch]` |
+| UART0 引脚回收（解决与摄像头复用冲突） | `arch/xtensa/src/esp32s3/esp32s3_lowputc.[ch]`、`Make.defs` |
+| 串口写入限时等待（避免"打开串口不读"拖死控制台） | `drivers/serial/serial.c` |
+| I2S 异步写与音频链路 | `arch/xtensa/src/esp32s3/hal_i2s.c` |
+| 内存/PSRAM 布局 | `esp32s3_allocateheap.c`、`esp32s3_spiram.[ch]` |
+| SDMMC、WiFi 适配稳定性 | `esp32s3_sdmmc.c`、`esp32s3_wifi_adapter.c`、`esp32s3_wlan.c` |
+| 板级配置与触摸 | `configs/openvela/defconfig`、`configs/lvgl/defconfig`、`esp32s3_board_touchsceen_gt911.c` |
+| LCD 驱动 | `drivers/lcd/st7789.c` |
+| littlefs | `fs/littlefs/Make.defs` |
+
+---
+
+## 七、已知限制与后续工作
+
+1. **继电器未接入**：养护方案的"自动执行"目前是干跑形态（设备上点确认即完成），
+   接上继电器后沿用同一套接口即可真正驱动水泵与补光灯
+2. **偶发崩溃**：摄像头 DVP 启动与语音录音启动各出现过一次 `EXCCAUSE=001c` 异常，
+   复位可恢复、非必现，正在定位（疑似 DMA 描述符或缓存一致性）
+3. **SD 卡 1-bit 模式**：写入带宽受限，语音链路已改为不落卡以绕开
+4. **唤醒词未启用**：当前是按键说话，未使用大赛统一唤醒词
+
+---
+
+## 八、致谢
+
+感谢大赛组委会提供的 openvela 平台与小米 MiMo 大模型能力。
