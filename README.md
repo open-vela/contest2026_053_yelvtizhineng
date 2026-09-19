@@ -230,9 +230,12 @@ cd mobile/plant_android
 > 每个会话的源文件 sha256 记录在 `logs/tadycharming/manifest.json`，可逐条核对；
 > 详情与限制见 [`logs/README.md`](./logs/README.md)。
 >
-> 团队**绝不伪造、修改任何日志**。队友早期在 Linux 虚拟机上用 **DeepSeek Harness** 完成的
-> 驱动调试会话（6 个会话、约 14 万事件）因该工具取值不在官方 schema 的 `tool` 枚举内、
-> 无法按官方契约导出，未收入 `logs/`，一并在此说明。
+> 团队**绝不伪造、修改任何日志**。队友 **杨涛** 前期在 Linux 虚拟机的 openvela 工作区内用
+> **DeepSeek Harness（dsh）** 做的嵌入式驱动调试会话（6 个会话，原始约 14 万条事件、
+> 折算为 8,337 条对话与工具事件）也已一并提交：因为该工具取值不在官方 schema 的
+> `tool` 枚举内，无法生成符合 schema 的事件，故放在 `logs/_unsupported_tool_dsh/`
+> 作补充材料，并**保留真实 `tool` 取值、不伪装成其它工具**；正式校验集
+> （`logs/tadycharming/`）仍是 ✅ ALL OK。该工具能否计入有效工时以组委会结论为准。
 
 ### 协作方式
 

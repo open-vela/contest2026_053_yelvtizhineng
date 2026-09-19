@@ -88,14 +88,37 @@ manifest 的 `event_count` 与实际行数是否一致（跨天多文件按同�
 1. **只有主线程的会话。** 本机共 11 个候选 rollout，其中 8 个属于本产品的会话已全部收录；
    另外 3 个会话的 cwd 是 `AI_CODING`（一个是问 Codex skills 怎么用，两个是 `reply with ok`
    之类的探测），与本作品无关，**按隐私门控的原则未收录**。
-2. **队友早期的驱动调试会话未包含。** 那部分是用 **DeepSeek Harness** 在 Linux 虚拟机的
-   openvela 工作区内完成的（6 个会话、约 14 万事件）。该工具的取值不在官方 schema 的
-   `tool` 枚举内（`opencode / claude-code / codex / kiro / mimocode / cursor`），
-   无法按官方契约导出，故未收入本目录；我们已在反馈中说明。
+2. **队友的驱动调试会话单独放在补充目录。** 那部分是用 **DeepSeek Harness（dsh）**
+   在 Linux 虚拟机的 openvela 工作区内完成的（6 个会话；原始约 14 万条事件，
+   折算成对话与工具事件 8,337 条）。该工具的取值不在官方 schema 的 `tool` 枚举内
+   （`opencode / claude-code / codex / kiro / mimocode / cursor`），无法生成
+   schema-valid 的事件，因此放在 `logs/_unsupported_tool_dsh/` 作补充材料
+   （详见下一节），并保留真实的 `tool` 取值，不伪装成其它工具。
 3. **官方工作区闸门覆盖不到我们的用法**（会话 cwd 在工作区外），
    这一点也已一并反馈，等待组委会结论。
 
-## 六、如何自行核对
+## 六、附：队友 DeepSeek Harness（dsh）会话
+
+队员 **杨涛** 前期在 Linux 虚拟机的 openvela 工作区（`/home/vboxuser/openvela`）内
+用 **DeepSeek Harness（`@deepseek-ai/dsh`）** 做嵌入式驱动调试，共 **6 个会话、8,337 条事件**。
+
+该工具的取值 **不在官方 schema 的 `tool` 枚举内**，无法生成符合 schema 的事件，因此：
+
+- 放在 `logs/_unsupported_tool_dsh/<handle>/` 作为**补充材料**（目录名以 `_` 开头，明确非标准）；
+- 该目录**没有 `manifest.json`**，官方校验脚本不会把它当成员目录解析 →
+  本目录（`logs/`）的正式校验结果不受影响，仍是 ✅ ALL OK；
+- 事件里**保留真实 `tool` 取值 `dsh`**，不伪装成枚举里的其它工具；
+- 内容规则与 codex 部分一致：保留对话正文 / 思考 / 工具调用与结果，
+  丢弃流式增量事件（`*-chunks`，内容已被 `assistant/message` 覆盖）、运行时状态事件
+  （`step/*`、`turn/*`、`permission/*` 等）与 `<system-reminder>` 工具前言；
+- 数据来源是该工具自带的会话导出包 `dsh-session-session-*.zip`，
+  内部 `session.jsonl` 的 **sha256 / 字节数**记在
+  `logs/_unsupported_tool_dsh/<handle>/sources.json`，可逐条核对。
+
+> 该工具是否计入"有效工时"以组委会结论为准（手册目前列出六种工具）。
+> 这部分工作记录本身是真实的，故一并提交备查。
+
+## 七、如何自行核对
 
 ```bash
 # 1) 官方校验（应输出 ✅ ALL OK）
