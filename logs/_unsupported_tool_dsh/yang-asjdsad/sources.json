@@ -1,0 +1,168 @@
+{
+  "note": "DeepSeek Harness (dsh) session exports converted to the contest event schema shape. 'dsh' is NOT one of the tool values in the official event/manifest JSON Schema, so this directory intentionally has NO manifest.json and is skipped by tools/validate-log.py; the validated submission lives in the sibling member directories.",
+  "team_id": "contest2026_053_yelvtizhineng",
+  "github_login": "yang-asjdsad",
+  "tool": "dsh",
+  "converted_at": "2026-09-19T11:29:00Z",
+  "sessions": [
+    {
+      "session_id": "1598ade2-b368-435c-9fad-1f7e668f4c63",
+      "tool": "dsh",
+      "cwd": "/home/vboxuser/openvela",
+      "started_at": "2026-09-09T01:55:16.066Z",
+      "last_event_at": "2026-09-09T08:24:41.416Z",
+      "event_count": 680,
+      "files": [
+        {
+          "path": "2026-09-09/dsh__1598ade2-b368-435c-9fad-1f7e668f4c63.jsonl",
+          "event_count": 680,
+          "size": 1628947
+        }
+      ],
+      "sources": [
+        {
+          "zip": "dsh-session-session-1598ade2-b368-435c-9fad-1f7e668f4c63.zip",
+          "inner": "session.jsonl",
+          "sha256": "34f0bc4358b7df46bdb50e9e6c8f7444df758ff78cbd52991e5c3ff1aad27ba9",
+          "size": 9039708
+        }
+      ]
+    },
+    {
+      "session_id": "48264a9f-1562-482d-a801-56c2602ffa51",
+      "tool": "dsh",
+      "cwd": "/home/vboxuser/openvela",
+      "started_at": "2026-09-09T08:28:55.646Z",
+      "last_event_at": "2026-09-10T05:46:42.294Z",
+      "event_count": 1916,
+      "files": [
+        {
+          "path": "2026-09-09/dsh__48264a9f-1562-482d-a801-56c2602ffa51.jsonl",
+          "event_count": 872,
+          "size": 1639382
+        },
+        {
+          "path": "2026-09-10/dsh__48264a9f-1562-482d-a801-56c2602ffa51.jsonl",
+          "event_count": 1044,
+          "size": 2225321
+        }
+      ],
+      "sources": [
+        {
+          "zip": "dsh-session-session-48264a9f-1562-482d-a801-56c2602ffa51.zip",
+          "inner": "session.jsonl",
+          "sha256": "77bec2ab109e3881cc7f46fb3eab599f5284c2321567fefd855311d53551976a",
+          "size": 20400929
+        }
+      ]
+    },
+    {
+      "session_id": "4dc26ba6-932d-4768-bd53-aee5157f977c",
+      "tool": "dsh",
+      "cwd": "/home/vboxuser/openvela",
+      "started_at": "2026-09-01T08:43:13.967Z",
+      "last_event_at": "2026-09-01T09:55:21.972Z",
+      "event_count": 500,
+      "files": [
+        {
+          "path": "2026-09-01/dsh__4dc26ba6-932d-4768-bd53-aee5157f977c.jsonl",
+          "event_count": 500,
+          "size": 1351685
+        }
+      ],
+      "sources": [
+        {
+          "zip": "dsh-session-session-4dc26ba6-932d-4768-bd53-aee5157f977c.zip",
+          "inner": "session.jsonl",
+          "sha256": "cfe2c6e27edb82496a37c35b8f4a972aac430862fccf3a634462d866175517a8",
+          "size": 7056649
+        }
+      ]
+    },
+    {
+      "session_id": "6577e57e-ae63-4404-a5b0-2a3ed0d7c4df",
+      "tool": "dsh",
+      "cwd": "/home/vboxuser/openvela",
+      "started_at": "2026-08-27T08:55:30.009Z",
+      "last_event_at": "2026-09-01T02:35:54.773Z",
+      "event_count": 3171,
+      "files": [
+        {
+          "path": "2026-08-27/dsh__6577e57e-ae63-4404-a5b0-2a3ed0d7c4df.jsonl",
+          "event_count": 729,
+          "size": 1717234
+        },
+        {
+          "path": "2026-08-31/dsh__6577e57e-ae63-4404-a5b0-2a3ed0d7c4df.jsonl",
+          "event_count": 2414,
+          "size": 3975609
+        },
+        {
+          "path": "2026-09-01/dsh__6577e57e-ae63-4404-a5b0-2a3ed0d7c4df.jsonl",
+          "event_count": 28,
+          "size": 39736
+        }
+      ],
+      "sources": [
+        {
+          "zip": "dsh-session-session-6577e57e-ae63-4404-a5b0-2a3ed0d7c4df (1).zip",
+          "inner": "session.jsonl",
+          "sha256": "bbb690a9b439b0e83365b3dc620d5577e5a00123ef4b730ad7455fd51a8f59c9",
+          "size": 32335739
+        },
+        {
+          "zip": "dsh-session-session-6577e57e-ae63-4404-a5b0-2a3ed0d7c4df.zip",
+          "inner": "session.jsonl",
+          "sha256": "bbb690a9b439b0e83365b3dc620d5577e5a00123ef4b730ad7455fd51a8f59c9",
+          "size": 32335739
+        }
+      ]
+    },
+    {
+      "session_id": "ad70f4f7-ab6d-4f42-a7ab-1c62b50fd267",
+      "tool": "dsh",
+      "cwd": "/home/vboxuser/openvela",
+      "started_at": "2026-08-27T01:31:12.821Z",
+      "last_event_at": "2026-08-27T08:53:33.045Z",
+      "event_count": 1935,
+      "files": [
+        {
+          "path": "2026-08-27/dsh__ad70f4f7-ab6d-4f42-a7ab-1c62b50fd267.jsonl",
+          "event_count": 1935,
+          "size": 3663127
+        }
+      ],
+      "sources": [
+        {
+          "zip": "dsh-session-session-ad70f4f7-ab6d-4f42-a7ab-1c62b50fd267.zip",
+          "inner": "session.jsonl",
+          "sha256": "9691c67421bcc4f0d0b995f898442bc30148ed611b3fe331b7064c54047c5aba",
+          "size": 21753440
+        }
+      ]
+    },
+    {
+      "session_id": "c25afd5e-0fe3-415c-80df-9d47bd1a8b02",
+      "tool": "dsh",
+      "cwd": "/home/vboxuser/openvela",
+      "started_at": "2026-08-19T01:35:57.363Z",
+      "last_event_at": "2026-08-19T02:10:55.640Z",
+      "event_count": 135,
+      "files": [
+        {
+          "path": "2026-08-19/dsh__c25afd5e-0fe3-415c-80df-9d47bd1a8b02.jsonl",
+          "event_count": 135,
+          "size": 207691
+        }
+      ],
+      "sources": [
+        {
+          "zip": "dsh-session-session-c25afd5e-0fe3-415c-80df-9d47bd1a8b02.zip",
+          "inner": "session.jsonl",
+          "sha256": "b10131d15c3605b76beb81936f3f917c881a3ca02552201f2fe1d77e0df344f5",
+          "size": 1614045
+        }
+      ]
+    }
+  ]
+}
