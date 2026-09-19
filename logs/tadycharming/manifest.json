@@ -1,0 +1,152 @@
+{
+  "schema_version": "1.0",
+  "team_id": "contest2026_053_yelvtizhineng",
+  "github_login": "tadycharming",
+  "generator": "codex-rollout-adapter@1.0 (local export; see logs/README.md)",
+  "updated_at": "2026-09-19T11:11:02.689551Z",
+  "sessions": [
+    {
+      "session_id": "01a07a44-1bfd-7310-aa1b-6ed8667102c8",
+      "tool": "codex",
+      "started_at": "2026-09-07T05:12:43.326Z",
+      "last_event_at": "2026-09-07T09:44:57.715Z",
+      "event_count": 2267,
+      "file_path": "logs/tadycharming/2026-09-07/codex__01a07a44-1bfd-7310-aa1b-6ed8667102c8.jsonl",
+      "collection_mode": "cli",
+      "health": "ok",
+      "model": "deepseek-v4-flash",
+      "files": [
+        {
+          "path": "logs/tadycharming/2026-09-07/codex__01a07a44-1bfd-7310-aa1b-6ed8667102c8.jsonl",
+          "event_count": 2267
+        }
+      ],
+      "source_integrity": {
+        "captured_at": "2026-09-19T11:11:00.503142Z",
+        "source_files": [
+          {
+            "path": "C:\\Users\\admin\\.codex\\sessions\\2026\\09\\07\\rollout-2026-09-07T13-07-59-01a07a44-1bfd-7310-aa1b-6ed8667102c8.jsonl",
+            "sha256": "f0b072baaa9154c8144661a14d64c9adce9942863ac0fa9a23ae555bd30a803e",
+            "size": 11684498
+          },
+          {
+            "path": "C:\\Users\\admin\\.codex\\sessions\\2026\\09\\07\\rollout-2026-09-07T17-36-30-01a07b39-f169-78c0-b267-cf097943b52f.jsonl",
+            "sha256": "c83ccbf92f00ed354704b8dc82dcbe5ed797cf6a46b4adbdd6f4691842374166",
+            "size": 9831220
+          },
+          {
+            "path": "C:\\Users\\admin\\.codex\\sessions\\2026\\09\\07\\rollout-2026-09-07T17-37-23-01a07b3a-c240-76f1-b49f-ceabfda20a6f.jsonl",
+            "sha256": "16408620ad1274ea083b48ec71416cec622939e5ef40635cad3c65894b7f485c",
+            "size": 27307772
+          },
+          {
+            "path": "C:\\Users\\admin\\.codex\\sessions\\2026\\09\\07\\rollout-2026-09-07T17-44-21-01a07b41-2434-7cc2-8c72-59af81e4f6ee.jsonl",
+            "sha256": "eb11d7a2c634e23ca2b095ff32cd37a8bd13dd4834923b67c336eebbcfaa482b",
+            "size": 452588
+          }
+        ],
+        "note": "Codex rollout transcript(s); exported with a Codex-format adapter because the shipped collector cannot parse the rollout layout - see logs/README.md. Sessions spanning several days are split into one file per day; 'seq' is continuous across those files."
+      }
+    },
+    {
+      "session_id": "01a07b48-cc65-7910-a122-e435fc7dcb2b",
+      "tool": "codex",
+      "started_at": "2026-09-07T09:52:59.444Z",
+      "last_event_at": "2026-09-11T02:49:02.525Z",
+      "event_count": 19065,
+      "file_path": "logs/tadycharming/2026-09-07/codex__01a07b48-cc65-7910-a122-e435fc7dcb2b.jsonl",
+      "collection_mode": "cli",
+      "health": "ok",
+      "model": "deepseek-v4-flash-vision-exp",
+      "files": [
+        {
+          "path": "logs/tadycharming/2026-09-07/codex__01a07b48-cc65-7910-a122-e435fc7dcb2b.jsonl",
+          "event_count": 1862
+        },
+        {
+          "path": "logs/tadycharming/2026-09-08/codex__01a07b48-cc65-7910-a122-e435fc7dcb2b.jsonl",
+          "event_count": 4683
+        },
+        {
+          "path": "logs/tadycharming/2026-09-09/codex__01a07b48-cc65-7910-a122-e435fc7dcb2b.jsonl",
+          "event_count": 5801
+        },
+        {
+          "path": "logs/tadycharming/2026-09-10/codex__01a07b48-cc65-7910-a122-e435fc7dcb2b.jsonl",
+          "event_count": 6026
+        },
+        {
+          "path": "logs/tadycharming/2026-09-11/codex__01a07b48-cc65-7910-a122-e435fc7dcb2b.jsonl",
+          "event_count": 693
+        }
+      ],
+      "source_integrity": {
+        "captured_at": "2026-09-19T11:11:01.156663Z",
+        "source_files": [
+          {
+            "path": "C:\\Users\\admin\\.codex\\sessions\\2026\\09\\07\\rollout-2026-09-07T17-52-43-01a07b48-cc65-7910-a122-e435fc7dcb2b.jsonl",
+            "sha256": "8316ec4168e69bc9e186039b3568739f6bf88b3f499324f880dd4653aa521449",
+            "size": 163728184
+          }
+        ],
+        "note": "Codex rollout transcript(s); exported with a Codex-format adapter because the shipped collector cannot parse the rollout layout - see logs/README.md. Sessions spanning several days are split into one file per day; 'seq' is continuous across those files."
+      }
+    },
+    {
+      "session_id": "01a08e5f-b4cb-7f02-b891-6e6a6df3a716",
+      "tool": "codex",
+      "started_at": "2026-09-11T02:50:46.613Z",
+      "last_event_at": "2026-09-19T11:10:43.585Z",
+      "event_count": 22231,
+      "file_path": "logs/tadycharming/2026-09-11/codex__01a08e5f-b4cb-7f02-b891-6e6a6df3a716.jsonl",
+      "collection_mode": "cli",
+      "health": "ok",
+      "model": "deepseek-flash",
+      "files": [
+        {
+          "path": "logs/tadycharming/2026-09-11/codex__01a08e5f-b4cb-7f02-b891-6e6a6df3a716.jsonl",
+          "event_count": 9421
+        },
+        {
+          "path": "logs/tadycharming/2026-09-12/codex__01a08e5f-b4cb-7f02-b891-6e6a6df3a716.jsonl",
+          "event_count": 857
+        },
+        {
+          "path": "logs/tadycharming/2026-09-14/codex__01a08e5f-b4cb-7f02-b891-6e6a6df3a716.jsonl",
+          "event_count": 80
+        },
+        {
+          "path": "logs/tadycharming/2026-09-15/codex__01a08e5f-b4cb-7f02-b891-6e6a6df3a716.jsonl",
+          "event_count": 937
+        },
+        {
+          "path": "logs/tadycharming/2026-09-16/codex__01a08e5f-b4cb-7f02-b891-6e6a6df3a716.jsonl",
+          "event_count": 5466
+        },
+        {
+          "path": "logs/tadycharming/2026-09-17/codex__01a08e5f-b4cb-7f02-b891-6e6a6df3a716.jsonl",
+          "event_count": 1724
+        },
+        {
+          "path": "logs/tadycharming/2026-09-18/codex__01a08e5f-b4cb-7f02-b891-6e6a6df3a716.jsonl",
+          "event_count": 1920
+        },
+        {
+          "path": "logs/tadycharming/2026-09-19/codex__01a08e5f-b4cb-7f02-b891-6e6a6df3a716.jsonl",
+          "event_count": 1826
+        }
+      ],
+      "source_integrity": {
+        "captured_at": "2026-09-19T11:11:02.310625Z",
+        "source_files": [
+          {
+            "path": "C:\\Users\\admin\\.codex\\sessions\\2026\\09\\11\\rollout-2026-09-11T10-50-32-01a08e5f-b4cb-7f02-b891-6e6a6df3a716.jsonl",
+            "sha256": "fbc233b638bc453668f3243d7cd7244402ce2a3692514da52468b3306e3e8fd1",
+            "size": 128070092
+          }
+        ],
+        "note": "Codex rollout transcript(s); exported with a Codex-format adapter because the shipped collector cannot parse the rollout layout - see logs/README.md. Sessions spanning several days are split into one file per day; 'seq' is continuous across those files."
+      }
+    }
+  ]
+}
