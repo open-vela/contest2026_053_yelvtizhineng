@@ -44,3 +44,6 @@ mobile/plant_android/build/
 *.dep
 app/plant-companion/Make.dep
 app/plant-companion/tools/server/debug_audio/
+
+# 内部材料：仅保留在本机，不随作品提交
+docs/04_提交与展示/
