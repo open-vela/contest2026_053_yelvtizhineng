@@ -1,0 +1,5 @@
+#
+# apps/plant-companion/components/gesture_sensor/Kconfig
+#
+# Kconfig is empty — gesture sensor is configured via parent PLANT_GESTURE_SENSOR.
+#

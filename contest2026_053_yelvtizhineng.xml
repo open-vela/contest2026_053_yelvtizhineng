@@ -1,16 +1,19 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <manifest>
   <!--
-    Team repo manifest. Includes the full openvela base project set
-    (openvela.xml in this same repo) and adds this team repo as a self-ref
-    project, exposing its work-form subdirectories to openvela working-tree
-    locations via <linkfile>. remote/default come from the included openvela.xml.
+    植小伴（队伍 053 · 叶绿体智能）专属仓 manifest。
+    include 官方 openvela 全量工程清单，再把自己仓的作品目录通过 <linkfile>
+    软链到 openvela 编译树里该在的位置（只在工作区本地生效，不改动公共仓库）。
   -->
   <include name="openvela.xml"/>
 
   <project path="contest2026_053_yelvtizhineng" name="contest2026_053_yelvtizhineng">
-    <linkfile src="app/hello_app" dest="packages/demos/contest2026_053_hello_app"/>
-    <linkfile src="quickapp/hello_quickapp" dest="packages/apps/contest2026_053_hello_quickapp"/>
-    <linkfile src="board/contest_board" dest="vendor/openvela/boards/contest2026_053_board"/>
+    <!--
+      植小伴嵌入式端是标准 NuttX 应用：
+        · 其 Make.defs 用 $(APPDIR)/plant-companion 注册（APPDIR = apps/）
+        · 板级配置 esp32s3-box:openvela 用 CONFIG_PLANT_COMPANION=y 打开
+      因此映射到 apps/plant-companion，clone 后无需改动任何路径即可编译。
+    -->
+    <linkfile src="app/plant-companion" dest="apps/plant-companion"/>
   </project>
 </manifest>

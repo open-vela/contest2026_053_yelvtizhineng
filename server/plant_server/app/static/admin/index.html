@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>植小伴 · 服务器管理台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- 登录 -->
+<div id="login" class="login-wrap hidden">
+  <form class="login-box" id="login-form" autocomplete="on">
+    <h1>🌱 植小伴管理台</h1>
+    <p class="hint">服务器可视化管理平台</p>
+    <input type="password" id="pwd" placeholder="管理口令" autocomplete="current-password">
+    <button type="submit" id="login-btn">进入</button>
+    <p class="err" id="login-err"></p>
+    <p class="login-tip" id="login-tip"></p>
+  </form>
+</div>
+
+<!-- 主体 -->
+<div id="app" class="hidden">
+  <aside class="sidebar">
+    <div class="brand">🌱 植小伴<span>MANAGE</span></div>
+    <nav id="nav"></nav>
+    <div class="side-foot">
+      <div class="clock" id="clock">--</div>
+      <button class="ghost" id="btn-restart" style="width:100%;margin-bottom:6px">重启服务</button>
+      <button class="ghost" id="btn-logout" style="width:100%">退出登录</button>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <h2 id="page-title">总览</h2>
+      <div class="topbar-right">
+        <span class="chip gray" id="chip-ai">AI -</span>
+        <span class="chip gray" id="chip-dev">设备 -</span>
+        <span class="chip gray" id="chip-clock">--</span>
+        <button class="ghost" id="btn-refresh">刷新</button>
+      </div>
+    </header>
+    <div class="content" id="content"></div>
+  </main>
+</div>
+
+<div class="toast hidden" id="toast"></div>
+
+<div class="modal hidden" id="modal">
+  <div class="modal-box">
+    <button class="modal-close" id="modal-close">×</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

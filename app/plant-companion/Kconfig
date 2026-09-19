@@ -1,0 +1,281 @@
+#
+# apps/plant-companion/Kconfig
+#
+# Plant Companion application — AI smart plant care system
+#
+
+menu "Plant Companion (ZhiXiaoBan)"
+
+config PLANT_COMPANION
+	bool "Plant Companion App"
+	default n
+	---help---
+		Enable the Plant Companion AI smart plant care application.
+		Requires I2C, SPI, LVGL, and WiFi support.
+
+if PLANT_COMPANION
+
+config PLANT_COMPANION_PROGNAME
+	string "Program name"
+	default "plant"
+	---help---
+		NSH builtin command name for the plant companion app.
+
+config PLANT_COMPANION_PRIORITY
+	int "Plant Companion task priority"
+	default 100
+	---help---
+		Task priority for the plant companion main thread.
+
+config PLANT_COMPANION_STACKSIZE
+	int "Plant Companion stack size"
+	default 8192
+	---help---
+		Stack size for the plant companion main thread.
+
+config PLANT_GESTURE_SENSOR
+	bool "Gesture Sensor (ICM-42607-C)"
+	default y
+	---help---
+		Enable ICM-42607-C IMU via I2C (0x68).
+		Provides accelerometer, gyroscope, and temperature readings.
+
+config PLANT_UI_PANEL
+	bool "UI Panel (ST7796 LCD)"
+	default y
+	---help---
+		Enable ST7796 LCD display via SPI 4-wire interface.
+
+config PLANT_UI
+	bool "Product-mode UI (LVGL screens)"
+	default y
+	depends on PLANT_UI_PANEL
+	select GRAPHICS_LVGL
+	---help---
+		Enable the product-mode LVGL UI (7-screen kid-friendly UI).
+		Start with `plant` (no args) or `plant ui`.
+		Requires LVGL with NuttX LCD + touchscreen (LV_USE_NUTTX_LCD /
+		LV_USE_NUTTX_TOUCHSCREEN). Includes Chinese font subsets and
+		design system. See docs/UI_SPEC.md and docs/ARCHITECTURE.md.
+
+if PLANT_UI
+
+config PLANT_UI_SCREEN_HOME
+	bool "Screen: Home (plant overview)"
+	default y
+
+config PLANT_UI_SCREEN_DATA
+	bool "Screen: Sensor data"
+	default y
+
+config PLANT_UI_SCREEN_TASKS
+	bool "Screen: Daily tasks"
+	default y
+
+config PLANT_UI_SCREEN_DIARY
+	bool "Screen: Growth diary"
+	default y
+
+config PLANT_UI_SCREEN_CAMERA
+	bool "Screen: AI photo recognition"
+	default y
+
+config PLANT_UI_SCREEN_VOICE
+	bool "Screen: Voice chat"
+	default y
+
+endif # PLANT_UI
+
+config PLANT_VOICE_AGENT
+	bool "Voice Agent (ES8311 + ES7210)"
+	default n
+	---help---
+		Enable audio DAC (ES8311) and ADC (ES7210) via I2S + I2C.
+
+config PLANT_VOICE_NS
+	bool "esp_sr NSNet2 神经网络降噪"
+	default n
+	depends on PLANT_VOICE_AGENT
+	---help---
+		启用 esp_sr NSNet2（libnsnet/libdl_lib/libhufzip/libc_speech_features）。
+		2026-08-25 决策：默认关（无 NS 可用版，链路已验证）；
+		PSRAM 映射破坏 I2S 的问题解决后再开启（见 VOICE_DEBUG.md 定案3）。
+		开此选项需 PSRAM 映射（模型 337KB 放 PSRAM），当前 esp32s3
+		的 NuttX PSRAM 初始化有缺陷（psram_get_available_size=0）→
+		手写映射会破坏 I2S DMA → 录音超时。故默认 n 保证可用。
+
+config PLANT_VOICE_AUTOTEST
+	bool "Voice auto-test at boot (debugging)"
+	default n
+	depends on PLANT_AI_VOICE
+	---help---
+		Boot-time auto-run of the voice record+play loop, for GDB-driven
+		debugging without a serial console (OpenOCD occupies the USB
+		device). Firmware boots, runs rate test + record + playback
+		automatically, hitting debugger breakpoints.
+
+config PLANT_CAMERA_CAPTURE
+	bool "Camera Capture (OV3660 DVP)"
+	default n
+	---help---
+		Enable OV3660 camera via DVP 8-bit parallel interface.
+
+config PLANT_CAM_DIAG
+	bool "Camera capture diagnostics (pink-block metrics)"
+	default n
+	depends on PLANT_CAMERA_CAPTURE
+	---help---
+		每拍一张额外打印粉块/红偏诊断（粉块嫌疑占比、红通道顶格率、
+		高光去饱和前后的红偏总量），用于逐帧核对"去饱和到底有没有进
+		上传帧"。仅供调试/验收，属刷屏级输出。
+		关闭时只打印一行摘要（分辨率/字节数/去饱和结果/亮度）。
+
+config PLANT_SYSTEM_MONITOR
+	bool "System Monitor (Battery ADC)"
+	default n
+	---help---
+		Enable battery voltage monitoring via ADC1.
+
+config PLANT_SD_CARD
+	bool "SD Card (SDIO 1-bit)"
+	default n
+	depends on ESP32S3_SDMMC
+	---help---
+		Enable SD card support via SDIO 1-bit.
+		Pins (per board schematic): CMD=IO0, CLK=IO43, D0=IO44.
+		Boot-time auto-mount of /dev/mmcsd1 (vfat) at /mnt/sd.
+		Requires FS_FAT and FAT long-name support
+		(CONFIG_FAT_LFN + CONFIG_FAT_LFN_UTF8) for Chinese file names.
+		No card-detect pin: card must be inserted before power-on
+		(hot-plug is not detected).
+
+config PLANT_WIFI_MANAGER
+	bool "WiFi Manager"
+	default n
+	---help---
+		Enable WiFi connection management (STA mode, auto-reconnect).
+
+config PLANT_CLOUD_CLIENT
+	bool "Cloud Client (MQTT + HTTP)"
+	default n
+	---help---
+		Enable cloud communication via MQTT (real-time) and HTTP REST (image upload).
+
+config PLANT_SOIL_SENSOR
+	bool "Soil Sensor (RS485 Modbus)"
+	default n
+	---help---
+		Enable RS485 soil sensor with 8 parameters.
+		Requires UART0 on IO43/IO44.
+
+if PLANT_SOIL_SENSOR
+
+config PLANT_SOIL_SENSOR_DEV
+	string "UART device"
+	default "/dev/ttyS0"
+	---help---
+		UART device for RS485 communication.
+
+config PLANT_SOIL_SENSOR_BAUD
+	int "Baudrate"
+	default 9600
+	---help---
+		Baudrate for RS485 communication.
+
+endif # PLANT_SOIL_SENSOR
+
+config PLANT_PLANT_ARCHIVE
+	bool "Plant Archive (NVS persistent storage)"
+	default n
+	---help---
+		Enable plant species, planting date, and growth log persistent storage.
+
+# OTA Firmware Update Configuration
+
+config PLANT_OTA_UPDATE
+	bool "OTA Firmware Update"
+	default n
+	depends on PLANT_WIFI_MANAGER
+	select NETUTILS_WEBCLIENT
+	select CRYPTO
+	select CRYPTO_SHA2
+	---help---
+		Enable over-the-air firmware update with A/B partition scheme.
+		Boot slot selection is driven by the otadata partition (read by
+		the second-stage bootloader); no KVDB/bootctl layer is used.
+		Requires HAVE_OTA_PARTITION for the flash device nodes.
+
+if PLANT_OTA_UPDATE
+
+config PLANT_OTA_SERVER_HOST
+	string "OTA Server Host"
+	default "192.168.1.100"
+	---help---
+		OTA server hostname or IP address.
+
+config PLANT_OTA_SERVER_PORT
+	int "OTA Server Port"
+	default 8080
+	---help---
+		OTA server HTTP port.
+
+endif # PLANT_OTA_UPDATE
+
+# AI Module Configuration
+
+config PLANT_AI_MODULE
+	bool "Enable AI Module"
+	default n
+	depends on PLANT_WIFI_MANAGER
+	---help---
+		Enable the AI module for plant care analysis.
+		This requires WiFi connectivity to access MiMo API.
+
+if PLANT_AI_MODULE
+
+config PLANT_AI_API_KEY
+	string "MiMo API Key"
+	default ""
+	---help---
+		The API key for Xiaomi MiMo platform.
+		Get it from https://api.xiaomimimo.com
+
+config PLANT_AI_VOICE
+	bool "Enable Voice Conversation (mic -> MiMo -> speaker)"
+	default n
+	depends on PLANT_VOICE_AGENT
+	---help---
+		Enable voice conversation: capture mic (ES7210 via I2S0),
+		encode WAV and talk to the MiMo full-modal model, play the
+		response through the speaker (ES8311).
+
+config PLANT_ACTUATOR
+	bool "Actuator layer (auto water / light / fan ...)"
+	default y
+	---help---
+		板卡侧"自动执行层"：向服务器声明自带哪几路执行器，
+		轮询服务器下发的执行指令，驱动硬件，然后回执。
+		协议三步见 services/actuator_service.h 与 server_bridge.h 。
+
+if PLANT_ACTUATOR
+
+config PLANT_ACTUATOR_GPIO_WATER
+	int "Water pump GPIO (-1 = not wired)"
+	default -1
+	---help---
+		浇水（水泵/电磁阀）占的 GPIO 引脚号；-1 表示还没接线，
+		此时按"干跑"处理：时序与回执照走，不会真的输出电平。
+
+config PLANT_ACTUATOR_ACTIVE_LOW
+	bool "Actuator relay is active-low"
+	default y
+	---help---
+		常见继电器模块是低电平吸合，默认 y。
+		若用高电平触发的 MOS 模块，设为 n。
+
+endif # PLANT_ACTUATOR
+
+endif # PLANT_AI_MODULE
+
+endif # PLANT_COMPANION
+endmenu # Plant Companion

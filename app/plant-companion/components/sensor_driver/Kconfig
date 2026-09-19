@@ -1,0 +1,28 @@
+#
+# apps/plant-companion/components/sensor_driver/Kconfig
+#
+# Soil Sensor configuration
+#
+
+config PLANT_SOIL_SENSOR
+	bool "Soil Sensor (RS485 Modbus)"
+	default n
+	---help---
+		Enable RS485 soil sensor with 8 parameters.
+		Requires UART0 on IO43/IO44.
+
+if PLANT_SOIL_SENSOR
+
+config PLANT_SOIL_SENSOR_DEV
+	string "UART device"
+	default "/dev/ttyS0"
+	---help---
+		UART device for RS485 communication.
+
+config PLANT_SOIL_SENSOR_BAUD
+	int "Baudrate"
+	default 9600
+	---help---
+		Baudrate for RS485 communication.
+
+endif # PLANT_SOIL_SENSOR
