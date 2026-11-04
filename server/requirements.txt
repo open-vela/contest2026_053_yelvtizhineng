@@ -1,0 +1,2 @@
+-r plant_server/requirements.txt
+paho-mqtt>=1.6,<3

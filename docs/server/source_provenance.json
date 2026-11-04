@@ -1,0 +1,623 @@
+{
+  "date": "2026-11-04",
+  "base_commit": "360dbb299d36bb5d89a4684bb7bde95b3b2bd25a",
+  "runtime_source_policy": "Copied from the read-only live snapshot; each public adaptation is listed below. No production service or data was modified.",
+  "files": [
+    {
+      "file": "server/plant_server/README.md",
+      "live_sha256": "872764d26c61c740a2069a62ae13595e5cb281218f8d203986e5d294787ecadc",
+      "release_sha256": "8bc1878c4efc32a87e497fa1a91449d98be7438df8719669a479284ee111f689",
+      "change": "replacement deployment documentation"
+    },
+    {
+      "file": "server/plant_server/backup.sh",
+      "live_sha256": "9dc790f32f668353f98e1d53455dd0bad8c3422485e46f2b23d0a129c3d7f446",
+      "release_sha256": "9dc790f32f668353f98e1d53455dd0bad8c3422485e46f2b23d0a129c3d7f446",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/publish_firmware.py",
+      "live_sha256": "4d8534bd7d0d7604f9ce7a599dfe847984312ab8c4a66e02be29ed5053cb413a",
+      "release_sha256": "4d8534bd7d0d7604f9ce7a599dfe847984312ab8c4a66e02be29ed5053cb413a",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/requirements-m5-vision.txt",
+      "live_sha256": "08446d918500b50d40f0696d4623c15f328fe5f0c39202400687d15c2da51dc6",
+      "release_sha256": "08446d918500b50d40f0696d4623c15f328fe5f0c39202400687d15c2da51dc6",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/requirements.txt",
+      "live_sha256": "780f4ba4b38a8eaf16d6456546180f2ef7eeb8082eabca5e8af55859eb13537f",
+      "release_sha256": "780f4ba4b38a8eaf16d6456546180f2ef7eeb8082eabca5e8af55859eb13537f",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/run_server.py",
+      "live_sha256": "9c44843a537b56d18062f6e36db088472db861104e0c42dd1984fa5e72f8a61e",
+      "release_sha256": "9c44843a537b56d18062f6e36db088472db861104e0c42dd1984fa5e72f8a61e",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/__init__.py",
+      "live_sha256": "0cabca0dfa16d8c1a5724791709d157393a58c1d2452002c59eedf523a171f37",
+      "release_sha256": "0cabca0dfa16d8c1a5724791709d157393a58c1d2452002c59eedf523a171f37",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/admin.py",
+      "live_sha256": "ba3269cf01a85b47cd25d007bd2c69abe0f72ead0fe342153215c485cb2c7349",
+      "release_sha256": "d5b3613248fd692bb2e98c8e4a33a4765365fd834cb28f0b1ac2e0c66353c556",
+      "change": "remove built-in admin password and retired global soil online fallback"
+    },
+    {
+      "file": "server/plant_server/app/config.py",
+      "live_sha256": "dcc38ea5baab584e6807188e81d9a10724217620efe00e6674b43c71e17f73ef",
+      "release_sha256": "dcc38ea5baab584e6807188e81d9a10724217620efe00e6674b43c71e17f73ef",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/db.py",
+      "live_sha256": "f54125782ffc114404c5719c9ac46c42e908ce2bc072df721f679173baa39e1b",
+      "release_sha256": "f54125782ffc114404c5719c9ac46c42e908ce2bc072df721f679173baa39e1b",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/main.py",
+      "live_sha256": "bf310b9d7dea6418307ae7c061a9781d608c4aa767e284c0f8c0c9814f42e6ae",
+      "release_sha256": "efbe3cc2723cb83f01d9ebbff0b02c267970a3d79261fb28e5131119892a9c60",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/plant_server/app/ratelimit.py",
+      "live_sha256": "6c3abc0e1be69ea346868cc2417e36d4893a7c301a3beebd95f86526013a2383",
+      "release_sha256": "6c3abc0e1be69ea346868cc2417e36d4893a7c301a3beebd95f86526013a2383",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/security.py",
+      "live_sha256": "ea1c90adb0550ac220bd09efb94073e13cb454029545a064687507a4278b0a35",
+      "release_sha256": "ea1c90adb0550ac220bd09efb94073e13cb454029545a064687507a4278b0a35",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/utils.py",
+      "live_sha256": "55d274693b0ba12668e8d89899dc5667336aa9d04889fbc51602cfcb45a2520b",
+      "release_sha256": "55d274693b0ba12668e8d89899dc5667336aa9d04889fbc51602cfcb45a2520b",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/resources/growth_catalog.json",
+      "live_sha256": "c4dae4271a77abbc54d7a60a5a7199e75e7ac3dc5a30c98b6d4a64ed32378ba5",
+      "release_sha256": "c4dae4271a77abbc54d7a60a5a7199e75e7ac3dc5a30c98b6d4a64ed32378ba5",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/__init__.py",
+      "live_sha256": "417ddb672819b4aa287be3c08b7ddf6c1f08f00b87f39ddb872110afa91a248b",
+      "release_sha256": "417ddb672819b4aa287be3c08b7ddf6c1f08f00b87f39ddb872110afa91a248b",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/actuator.py",
+      "live_sha256": "b801a27f53d7f884cf3aee8e7b40495aa858fe2de05f8ecf8c65aba6a6acf155",
+      "release_sha256": "b801a27f53d7f884cf3aee8e7b40495aa858fe2de05f8ecf8c65aba6a6acf155",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/ai.py",
+      "live_sha256": "09b7d1a05b8cba4d7a5eb7cde667305d32f32801222f5b7b03c68dfd98969617",
+      "release_sha256": "09b7d1a05b8cba4d7a5eb7cde667305d32f32801222f5b7b03c68dfd98969617",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/auth.py",
+      "live_sha256": "4db4856153c0e57277dd84f28e45e7da2fbb61eb450ced3a51d868dfec1939ec",
+      "release_sha256": "4db4856153c0e57277dd84f28e45e7da2fbb61eb450ced3a51d868dfec1939ec",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/billing.py",
+      "live_sha256": "3324b932c1e5d1ec8a5ec1c945fb206103bb24be807ffae937481bcdb7143908",
+      "release_sha256": "3324b932c1e5d1ec8a5ec1c945fb206103bb24be807ffae937481bcdb7143908",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/community.py",
+      "live_sha256": "93701eb0f015f31f0f69e36d2f3356e678b0ecbf34655ff667620b57de3349a1",
+      "release_sha256": "93701eb0f015f31f0f69e36d2f3356e678b0ecbf34655ff667620b57de3349a1",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/device_bridge.py",
+      "live_sha256": "309333379bcc5dd4aaa5d0c2c714b5722e0a4cba7af888fab9f0c32607bd87fb",
+      "release_sha256": "309333379bcc5dd4aaa5d0c2c714b5722e0a4cba7af888fab9f0c32607bd87fb",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/devices.py",
+      "live_sha256": "4b40c47fecf2a561fe89a541e280ee1894679f544c8274365bd063813b8d61e7",
+      "release_sha256": "40a132556e746813f6afa771a5ae57cb4e2d6f52a9885c2e469b90c7414fee09",
+      "change": "remove legacy bind-time automatic device creation"
+    },
+    {
+      "file": "server/plant_server/app/routers/events.py",
+      "live_sha256": "fb36ef5292029a491e78bd0ced439ff4ec994cd91457bca2a4c27b055a6828ac",
+      "release_sha256": "fb36ef5292029a491e78bd0ced439ff4ec994cd91457bca2a4c27b055a6828ac",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/expo.py",
+      "live_sha256": "7725b37828e87f02c4f0671060f7267288da10910ef5558e0846f279e024238e",
+      "release_sha256": "7725b37828e87f02c4f0671060f7267288da10910ef5558e0846f279e024238e",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/insurance.py",
+      "live_sha256": "b2c305143c898c57291ddda65968ccde0f5cc7130f0a3a7ded3285bf764a66df",
+      "release_sha256": "b2c305143c898c57291ddda65968ccde0f5cc7130f0a3a7ded3285bf764a66df",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/learning.py",
+      "live_sha256": "9a686d841db98708e0aa5f6cdc8d469f0732c04b13490c267af9ddbd72eaf909",
+      "release_sha256": "9a686d841db98708e0aa5f6cdc8d469f0732c04b13490c267af9ddbd72eaf909",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/media.py",
+      "live_sha256": "810f1829e4f22ea19a3b2f48968115ae3143dcf654f7c93dc842ae21e99a920d",
+      "release_sha256": "810f1829e4f22ea19a3b2f48968115ae3143dcf654f7c93dc842ae21e99a920d",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/mqtt_admin.py",
+      "live_sha256": "dedac7841cd5d452489c237fd7170f9cb0d04878993578a0128d71e1293d76a6",
+      "release_sha256": "0aeec1425b3b90145410dae40092b5dd73ca5214f03ca369277ef9d4700b3cbd",
+      "change": "JSON gateway service control and read-only credential-free configuration"
+    },
+    {
+      "file": "server/plant_server/app/routers/plants.py",
+      "live_sha256": "a4a4c889cef08df4f95a45f14236aa35035276afd5cc1d2e30c919443c74e703",
+      "release_sha256": "a4a4c889cef08df4f95a45f14236aa35035276afd5cc1d2e30c919443c74e703",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/reports.py",
+      "live_sha256": "f5c3d26671164c5efa1558a0db724cc8faa09d06cf7b26b07dbff6dc30217cf4",
+      "release_sha256": "f5c3d26671164c5efa1558a0db724cc8faa09d06cf7b26b07dbff6dc30217cf4",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/system.py",
+      "live_sha256": "c150d7fe26caa787af6ce3736d5d78487912de08c6b8ae70238bd23d353e5dd6",
+      "release_sha256": "c150d7fe26caa787af6ce3736d5d78487912de08c6b8ae70238bd23d353e5dd6",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/tasks.py",
+      "live_sha256": "17fbfda57b9dc161e05fdcac2014f5a49a183a74f4ddff4640d94dffb1799677",
+      "release_sha256": "17fbfda57b9dc161e05fdcac2014f5a49a183a74f4ddff4640d94dffb1799677",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/routers/telemetry.py",
+      "live_sha256": "354904600c94be19a279574fb5a6bfdeb9f48f64f27bdb2297a7c2f58e469ff5",
+      "release_sha256": "1a5b165571ee47d0d79790ba79e81ed77928fc86476764c206f8c4579ede592e",
+      "change": "remove retired fixed-serial sharing endpoint; update only the reporting device online time"
+    },
+    {
+      "file": "server/plant_server/app/routers/vision.py",
+      "live_sha256": "8c873a6ecb29f5d7070c0a042dc16ba23796c6d93ae732193c182d979fee78cb",
+      "release_sha256": "2c7b1adf908c5db66b07f5c64884f0939df0a9fe444fa87ee104b75f9837fd61",
+      "change": "trailing blank-line whitespace normalized; Python AST unchanged"
+    },
+    {
+      "file": "server/plant_server/app/services/__init__.py",
+      "live_sha256": "80512d4eafd97312edc633db7fae4560a67b6f746fb3bd3b60b1b437edb54540",
+      "release_sha256": "80512d4eafd97312edc633db7fae4560a67b6f746fb3bd3b60b1b437edb54540",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/actuator_ops.py",
+      "live_sha256": "99ea62a999446dd62e1ba696868d89bdd0a8b84c6abfb855dee0595027d0e9e5",
+      "release_sha256": "99ea62a999446dd62e1ba696868d89bdd0a8b84c6abfb855dee0595027d0e9e5",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/ai_gateway.py",
+      "live_sha256": "b270b2d4b17678f721e3d514880d8b2987ae3253e03123247bb2c115f02d8740",
+      "release_sha256": "b270b2d4b17678f721e3d514880d8b2987ae3253e03123247bb2c115f02d8740",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/asr_faq_alias.py",
+      "live_sha256": "b7221dbb21eb2983e5f2d97a3b22469b5c3cb6d0d3d806e7a4358b2cc10ef46a",
+      "release_sha256": "2843575aa1235df96cb3e468dfd70e1f343b3e5795fc5c3069a7d36b337b1eef",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/plant_server/app/services/audio_util.py",
+      "live_sha256": "20fcca15aae45a598d6d3cdccee67a8f14ccd943d36b73e6f46b80fbeb06c404",
+      "release_sha256": "20fcca15aae45a598d6d3cdccee67a8f14ccd943d36b73e6f46b80fbeb06c404",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/billing_ops.py",
+      "live_sha256": "e3980dd253df4e29b7cb5cf19041903680a96f8abdc5c5296c05fd30e21e8ddc",
+      "release_sha256": "e3980dd253df4e29b7cb5cf19041903680a96f8abdc5c5296c05fd30e21e8ddc",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/community_seed.py",
+      "live_sha256": "c742d995aafbd6fc6c92ec73a8f37edcfa75cb89180b27bebf0b861181bb7c05",
+      "release_sha256": "c742d995aafbd6fc6c92ec73a8f37edcfa75cb89180b27bebf0b861181bb7c05",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/consensus_asr.py",
+      "live_sha256": "16d47af09d5612175495834d96965e63acc78238cb6efcff0c1182b7e114cb96",
+      "release_sha256": "16d47af09d5612175495834d96965e63acc78238cb6efcff0c1182b7e114cb96",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/demo_plants.py",
+      "live_sha256": "bdad0b736e67f202074b2be33c1c3075bf338312057613ac830392faf143fe60",
+      "release_sha256": "bdad0b736e67f202074b2be33c1c3075bf338312057613ac830392faf143fe60",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/device_reply_stream.py",
+      "live_sha256": "8a4896e3fc8e740a6363c8aec85c5fa35f083d9752dd8e01f4360c76aa32193f",
+      "release_sha256": "19c6147bad6c9d70e623c1921da6a34ed09b3bc1104bc92cd69b41ef73f018bf",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/plant_server/app/services/intent_route.py",
+      "live_sha256": "45054ce7ecc9d068bf34d2ccd838b44f6029b1833105341c921a15f01a328c47",
+      "release_sha256": "45054ce7ecc9d068bf34d2ccd838b44f6029b1833105341c921a15f01a328c47",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/interaction_intents.py",
+      "live_sha256": "d37649469d5711d2756c523b4bee8fad8f4b488d84e1287932e55c78e7cdcf57",
+      "release_sha256": "d846d68ad96296c101028409ae292cba0cea24318fe14f428ebda5453640ee3e",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/plant_server/app/services/media_store.py",
+      "live_sha256": "cd59594daea7aa7a2cab1576c8a417fc9efd14c88c747117ab8d0f5088a766e6",
+      "release_sha256": "cd59594daea7aa7a2cab1576c8a417fc9efd14c88c747117ab8d0f5088a766e6",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/mimo_transport.py",
+      "live_sha256": "129a6bcdc88d42ec52df9353533ca646ca8fd41eee18276e83383e19177c1ad7",
+      "release_sha256": "129a6bcdc88d42ec52df9353533ca646ca8fd41eee18276e83383e19177c1ad7",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/notice_prefetch.py",
+      "live_sha256": "72e5677c1af7d8b82773e075deddde6150567476df65be6215e8779fa29d9c3b",
+      "release_sha256": "86204dd1871823e2922f7f3f6db37ca0960a356217d201cd311816aae1470cbd",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/plant_server/app/services/plant_ops.py",
+      "live_sha256": "3a2533f345ef56e64125c9ff4a13e5206cc76e1be4f7e3e92c1c9f0c642949fe",
+      "release_sha256": "3a2533f345ef56e64125c9ff4a13e5206cc76e1be4f7e3e92c1c9f0c642949fe",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/qa_bank.py",
+      "live_sha256": "b983bc73a97dc05c988295fb939182c74d0d285c764f0fbad4eaef797d3bc7a4",
+      "release_sha256": "b983bc73a97dc05c988295fb939182c74d0d285c764f0fbad4eaef797d3bc7a4",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/repeat_last.py",
+      "live_sha256": "f82239642300d6d3d396adf1f9032a3f77fb2cfcb02c993d4d1709cc40ca4be4",
+      "release_sha256": "5f8b067952aeaff47556a415d19c57fdbfb96cc98a1b0d3ec1c247177951b7c5",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/plant_server/app/services/scene_compact.py",
+      "live_sha256": "a6df0dbb32484d36399b0bd67521458ea3800993bbbe80456ce616b631ce8ce4",
+      "release_sha256": "a6df0dbb32484d36399b0bd67521458ea3800993bbbe80456ce616b631ce8ce4",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/scene_memory.py",
+      "live_sha256": "3bbbef09d3a43cf56d1002d20443e48b01536f2674c6e0a81191178e91be11b5",
+      "release_sha256": "ba322ca8b5e7c30f0bf045f2d1f14bea6bdb6f0ed1334f46cdd23a3a00743c2f",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/plant_server/app/services/seed.py",
+      "live_sha256": "b8aaf31686da0e0e2524642c19c2ab60e2c52a7eb7177ae9a65070527fb1b360",
+      "release_sha256": "b8aaf31686da0e0e2524642c19c2ab60e2c52a7eb7177ae9a65070527fb1b360",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/service_ctl.py",
+      "live_sha256": "a02b28ffd160c6b180dc43503e166a03ada9c8c4a1191562c3ed8ea2079df208",
+      "release_sha256": "a02b28ffd160c6b180dc43503e166a03ada9c8c4a1191562c3ed8ea2079df208",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/streaming_asr.py",
+      "live_sha256": "6f1e39aca59a61b10b233f70a717b999352ea71b9a6ca7a9d9eb48be8c753b62",
+      "release_sha256": "29a957c12de611009cb416b2cbe378ebde7051972ca8f95b4a7fb4c1a2e34f06",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/plant_server/app/services/vision_notice.py",
+      "live_sha256": "35d15be83c4902bc3048be0341b8422d833412facec5c2f0b2cdc616f015e7fb",
+      "release_sha256": "e28460c9609093ea97b4b9cfe4e5be72c40b17da51e3703a33c9d70c60236a9c",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/plant_server/app/services/vision_reply_stream.py",
+      "live_sha256": "243b5f904fb0a6ea760d1d21e6ce263d2e0a0931f1887f55f5781db629b63269",
+      "release_sha256": "5ab894b6f89adc5fea5ea19ba6b8a1db46e469ebe5816ec29808f4f85253dc2c",
+      "change": "trailing blank-line whitespace normalized; Python AST unchanged"
+    },
+    {
+      "file": "server/plant_server/app/services/voice_context.py",
+      "live_sha256": "672793dbc901099d652c0a2f101c3236776064422d552b7c6bb7f2c45a690e05",
+      "release_sha256": "672793dbc901099d652c0a2f101c3236776064422d552b7c6bb7f2c45a690e05",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/voice_hint.py",
+      "live_sha256": "b9ce8dc43173c08af52af1062263ca26c683466f30b7859a1c6287e7fd480e6d",
+      "release_sha256": "b9ce8dc43173c08af52af1062263ca26c683466f30b7859a1c6287e7fd480e6d",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/services/voice_profile.py",
+      "live_sha256": "5fe297aaa82236404abeb1a2a78f30593062410de02b12e9d0e3c5253bac74cf",
+      "release_sha256": "ad2c0e96920d18b4380849fa248d73a4f8b5caf3eec9708b615fedc557b8c515",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/plant_server/app/services/voice_stream.py",
+      "live_sha256": "cdf6359d6656001e916d2036ee104ff8bf9e4d13d55606b43c9e6cdf96e5a0fe",
+      "release_sha256": "1780b7c74da1ff494580c8a07072b6fad9259924c52b064d0c8840374fc627b7",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/plant_server/app/static/expo/app.js",
+      "live_sha256": "b1882f6218ec07dbc85b1ff12682586d35fd29adb7128a99424763c40710938d",
+      "release_sha256": "b1882f6218ec07dbc85b1ff12682586d35fd29adb7128a99424763c40710938d",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/expo/expo_qr.png",
+      "live_sha256": "63563022688797051dd9c0b43ab93c3aa83d6151122fc932eb529f6321120031",
+      "release_sha256": "63563022688797051dd9c0b43ab93c3aa83d6151122fc932eb529f6321120031",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/expo/index.html",
+      "live_sha256": "fac3ce591a0ba7a93938822975d937e431d75464a35a76a1e1461c909b1acd18",
+      "release_sha256": "5238bd872292f3e2e16111e1a5d872aeca3473aca55a6cae29522b14fab31e10",
+      "change": "remove personal contact line"
+    },
+    {
+      "file": "server/plant_server/app/static/expo/style.css",
+      "live_sha256": "c1204f7dab8bb3306891c1054ac6ee4e3082f2ed64efa77d9e9d309dc8b96f0b",
+      "release_sha256": "c1204f7dab8bb3306891c1054ac6ee4e3082f2ed64efa77d9e9d309dc8b96f0b",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/expo/assets/app_diagnose.png",
+      "live_sha256": "545e95ecf33e4910c3744a205a46a487c77c4a1783014ecc8e94ff15680311bd",
+      "release_sha256": "545e95ecf33e4910c3744a205a46a487c77c4a1783014ecc8e94ff15680311bd",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/expo/assets/app_home.png",
+      "live_sha256": "be3fee0198d1218e2fca96a045a321cf7cd71409566e0cc5161c1c9834573840",
+      "release_sha256": "be3fee0198d1218e2fca96a045a321cf7cd71409566e0cc5161c1c9834573840",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/expo/assets/diagnose.jpg",
+      "live_sha256": "a95dcceea9c5f0994f0fc61aa86b47dced92024bedfa71d5b7259729b2b84c3f",
+      "release_sha256": "a95dcceea9c5f0994f0fc61aa86b47dced92024bedfa71d5b7259729b2b84c3f",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/expo/assets/hero.jpg",
+      "live_sha256": "e2d438143645f23456b78798775e69d4f1a16f9dc9a1a0ae11fb383b3d02b71e",
+      "release_sha256": "e2d438143645f23456b78798775e69d4f1a16f9dc9a1a0ae11fb383b3d02b71e",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/expo/assets/product_intro_cover.jpg",
+      "live_sha256": "1b52a88dab36ea610b64d64fb7c097b0653d5d97d8027a4b02ffd3cc7a6de1ab",
+      "release_sha256": "1b52a88dab36ea610b64d64fb7c097b0653d5d97d8027a4b02ffd3cc7a6de1ab",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/expo/assets/sensor.jpg",
+      "live_sha256": "2453b32cf16788b92b351bffff2721c1670429528f7179e237c3e118e373cb6c",
+      "release_sha256": "2453b32cf16788b92b351bffff2721c1670429528f7179e237c3e118e373cb6c",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/expo/assets/voice.jpg",
+      "live_sha256": "5e0f075bc7313a41f20555eb08b2fdc9472fb303a1d214097ccfa68e17848435",
+      "release_sha256": "5e0f075bc7313a41f20555eb08b2fdc9472fb303a1d214097ccfa68e17848435",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/mobile/app-growth-20261104.js",
+      "live_sha256": "11dea447e7279c5fe7030cf960fc942c20f7873c8f8030f9745fccd54b65c8d3",
+      "release_sha256": "13f13c63e9f487e8e0b4d91bc9751dc14954a438bce867559f0daabf29434f30",
+      "change": "ESP32 soil-node binding guidance"
+    },
+    {
+      "file": "server/plant_server/app/static/mobile/app.js",
+      "live_sha256": "8471e6976d7f20455f3bcba30be7066b55e308f36f630fb60663a75f43b74c9e",
+      "release_sha256": "4ba50dfb54213ac1072942e29efe917a0d85e1048b8efb3fba55ad9807074265",
+      "change": "ESP32 soil-node binding guidance"
+    },
+    {
+      "file": "server/plant_server/app/static/mobile/catalog.js",
+      "live_sha256": "5cbca2b14095328acf151241a7146ea431d2b05e89e0a34d130dec0c82a1388a",
+      "release_sha256": "83e88f803b63dae5da98759880b7b6fc5d201f8075f709a71c928d0c0488f6f5",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/plant_server/app/static/mobile/growth.css",
+      "live_sha256": "1122756546bc33d30b2183c03db24f8c6090752a58d6f77f6a0871252934e194",
+      "release_sha256": "1122756546bc33d30b2183c03db24f8c6090752a58d6f77f6a0871252934e194",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/mobile/icon-192.png",
+      "live_sha256": "4321e1e9bb9f00c53e2262bee4163337d519583f217d23186a33615895a025b3",
+      "release_sha256": "4321e1e9bb9f00c53e2262bee4163337d519583f217d23186a33615895a025b3",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/mobile/icon-512.png",
+      "live_sha256": "85e03b88e48033bc200aaf2633898e5f23127270797d6cac603bfdc52c7608d8",
+      "release_sha256": "85e03b88e48033bc200aaf2633898e5f23127270797d6cac603bfdc52c7608d8",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/mobile/index.html",
+      "live_sha256": "627a232f28f48558c9d1529060320866db333df46fadba018a1c30dc95c38913",
+      "release_sha256": "bbe7b620fcfb05fe53819e99fec92c360530ac47ac5ccb707cd6584b47b6531e",
+      "change": "updated PWA asset cache version"
+    },
+    {
+      "file": "server/plant_server/app/static/mobile/manifest.webmanifest",
+      "live_sha256": "964a19e85f11d54b7f71cf4bfc698bef9b7303bd705a4ec0edb3382153982c02",
+      "release_sha256": "964a19e85f11d54b7f71cf4bfc698bef9b7303bd705a4ec0edb3382153982c02",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/mobile/style.css",
+      "live_sha256": "e42139977ace9259604c02dd98c01eaa00205fd2c774abfd940b31801fcad4e6",
+      "release_sha256": "e42139977ace9259604c02dd98c01eaa00205fd2c774abfd940b31801fcad4e6",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/mobile/sw.js",
+      "live_sha256": "28d8925ada14cdcc81c0279eb42a47030e324a58d72861ac11a746782f83fdb1",
+      "release_sha256": "fdb896d46beba8b4cfe98bb14910f7e67da7bc133cbf05d191535d5c806d19a6",
+      "change": "updated PWA asset cache version"
+    },
+    {
+      "file": "server/plant_server/app/static/admin/app.js",
+      "live_sha256": "4e4bb15373440ca9e4a716e7d3c18f4314701727f08155c82ca650d2210562e0",
+      "release_sha256": "7d95009664e773dfe9585b086aa15f3b0804319bfce86293bb46c02730ad31bc",
+      "change": "JSON gateway UI; retired serial controls removed"
+    },
+    {
+      "file": "server/plant_server/app/static/admin/index.html",
+      "live_sha256": "a22d6f957aa548d0ff44541218c681c41b2d52f91d87529a53c61bed46f94012",
+      "release_sha256": "a22d6f957aa548d0ff44541218c681c41b2d52f91d87529a53c61bed46f94012",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/app/static/admin/style.css",
+      "live_sha256": "09285841a3c1b90b3dda0ebd44d57c311f897a650817f7e9dc95cb6971c9faaf",
+      "release_sha256": "09285841a3c1b90b3dda0ebd44d57c311f897a650817f7e9dc95cb6971c9faaf",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/scripts/reset_demo_claims.py",
+      "live_sha256": "87ba5aaa4b88030f153485cd2379a9a8da398f1daf5286799f7617d6f90571d2",
+      "release_sha256": "87ba5aaa4b88030f153485cd2379a9a8da398f1daf5286799f7617d6f90571d2",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/plant_server/scripts/reset_demo_state.py",
+      "live_sha256": "dbaf293c92288b04bd0323ca673652795738e180af75818f9e496b13debfc8b9",
+      "release_sha256": "dbaf293c92288b04bd0323ca673652795738e180af75818f9e496b13debfc8b9",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/box_ai/box_ai_service.py",
+      "live_sha256": "f6f952b42072b8c4e79f05b3325397049e9287e8bed9f505bc94114333b22210",
+      "release_sha256": "528209a8c58467497027a5534c6086c892d6ba2dd3a97b7cced53f9e9e6ee5a5",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/box_ai/box_fast_vision_v1.py",
+      "live_sha256": "dc824e0ff4c5d7e4b8873ab407f3b550ab55488a5d21a10321ac722d32f23c28",
+      "release_sha256": "e76c67f140d70a37df7ce2a2a1b4805a70f9e2aa35e80a12fec00b9433d79c5b",
+      "change": "line endings normalized only"
+    },
+    {
+      "file": "server/box_ai/box_soil_binding.py",
+      "live_sha256": "3f837ccbb29670117ab87c682906431e7d7716a5482f155a4e40cd9e03722af3",
+      "release_sha256": "3f837ccbb29670117ab87c682906431e7d7716a5482f155a4e40cd9e03722af3",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/box_ai/box_standard_voice_v1.py",
+      "live_sha256": "2c11686b2de52b3aca0008fce73e70974e1253e8ba01e7392b76c26d056d1d9e",
+      "release_sha256": "2c11686b2de52b3aca0008fce73e70974e1253e8ba01e7392b76c26d056d1d9e",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/box_ai/qa_bank_v490_20261103.manifest.json",
+      "live_sha256": "e71eb01309234861981ef5753cd4b41f0afed9f15f0a7534ca010f888ac413c1",
+      "release_sha256": "e71eb01309234861981ef5753cd4b41f0afed9f15f0a7534ca010f888ac413c1",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/soil_gateway/mqtt_soil_gateway.py",
+      "live_sha256": "74272992afae3ccf9f5c5f91b7dc7778aa0121ba36fcdd23b551c3295970917f",
+      "release_sha256": "74272992afae3ccf9f5c5f91b7dc7778aa0121ba36fcdd23b551c3295970917f",
+      "change": "unchanged bytes"
+    },
+    {
+      "file": "server/box_ai/box_candidate_bank_v1.py",
+      "live_sha256": "34afb979c284c724641b3d08859d6d964c293fcf10e021ff7d21407d83021d9a",
+      "release_sha256": "34afb979c284c724641b3d08859d6d964c293fcf10e021ff7d21407d83021d9a",
+      "change": "unchanged bytes"
+    }
+  ],
+  "excluded": "Retired serial gateway, personal contact poster, environment files, actual bindings, user databases, media uploads, logs, caches and model weights.",
+  "faq": {
+    "faq_count": 43406,
+    "faq_licenses": {
+      "CC-BY-SA-4.0": 43406
+    },
+    "compressed_faq_bytes": 17170196,
+    "faq_database_sha256": "046afcf6a6e7f8b7384069bf75caf6b59655939ab6ba26044029792c861423fb"
+  },
+  "live_health_read_only_at_snapshot": {
+    "plant_server": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "ai_mode": "mimo",
+        "provider": "mimo",
+        "db": "/opt/plant_server/data/plant.db",
+        "media_dir": "/opt/plant_server/data/media",
+        "time": "2026-11-04 20:06:02"
+      }
+    },
+    "box_ai": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "provider": "mimo",
+        "model": "mimo-v2.6-flash",
+        "plant_binding_changed": false,
+        "qa_formal_entries": 1248,
+        "qa_candidate_entries": 43406,
+        "qa_candidate_snapshot": "v490-20261103"
+      }
+    }
+  }
+}

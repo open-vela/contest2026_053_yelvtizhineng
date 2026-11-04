@@ -28,11 +28,11 @@ MIMO_BASE_URL = os.environ.get(
     "PLANT_MIMO_URL", "https://token-plan-cn.xiaomimimo.com/v1/chat/completions")
 MIMO_API_KEY = (os.environ.get("PLANT_MIMO_KEY", "").strip()
                 or _registry_env("PLANT_MIMO_KEY"))
-MIMO_MODEL = os.environ.get("PLANT_MIMO_MODEL", "mimo-v2.5")
+MIMO_MODEL = os.environ.get("PLANT_MIMO_MODEL", "mimo-v2.6-flash")
 # 2026-09-12：主模型（多模态，能看图/听音）之外再配两个专用模型。
 # 实测那天主模型 mimo-v2.5 整体 500，而 mimo-v2.5-pro（纯文本）和
 # mimo-v2.5-asr（转写）都正常 —— 所以文本问答和语音转写各有退路。
-MIMO_TEXT_MODEL = os.environ.get("PLANT_MIMO_TEXT_MODEL", "mimo-v2.5-pro")
+MIMO_TEXT_MODEL = os.environ.get("PLANT_MIMO_TEXT_MODEL", "mimo-v2.6-pro")
 MIMO_ASR_MODEL = os.environ.get("PLANT_MIMO_ASR_MODEL", "mimo-v2.5-asr")
 TTS_MODEL = os.environ.get("PLANT_TTS_MODEL", "mimo-v2.5-tts")
 TTS_VOICE = os.environ.get("PLANT_TTS_VOICE", "mimo_default")

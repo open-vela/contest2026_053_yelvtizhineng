@@ -10,6 +10,7 @@
   签名 token 放 HttpOnly Cookie，与设备 token、家长账号完全隔离。
   云端部署前务必：改口令、挂 HTTPS、按需加 IP 白名单（见 README 说明）。
 """
+import json
 import os
 import shutil
 import sqlite3
@@ -24,7 +25,7 @@ from .services import media_store
 
 router = APIRouter(prefix="/admin", tags=["管理台"])
 
-DEFAULT_ADMIN_PASSWORD = os.environ.get("PLANT_ADMIN_PASSWORD", "请设置 PLANT_ADMIN_PASSWORD")
+DEFAULT_ADMIN_PASSWORD = ""
 ADMIN_PASSWORD = os.environ.get("PLANT_ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
 COOKIE_NAME = "plant_admin"
 SERVER_START = time.time()
@@ -42,12 +43,21 @@ def _count(sql, params=()):
 
 
 def _online(dev):
-    """沿用设备模块同一套判定（OFFLINE_AFTER_S 内有一次心跳即在线）。"""
-    if not dev or not dev.get("last_seen_at"):
+    """心跳在线；soil-wifi 用最近遥测兜底（网关不发心跳）。"""
+    if not dev:
+        return False
+
+    def g(k):
+        try:
+            return dev[k]
+        except Exception:
+            return None
+
+    ts = g("last_seen_at")
+    if not ts:
         return False
     try:
-        last = time.mktime(time.strptime(dev["last_seen_at"],
-                                         "%Y-%m-%d %H:%M:%S"))
+        last = time.mktime(time.strptime(ts, "%Y-%m-%d %H:%M:%S"))
         return (time.time() - last) <= config.OFFLINE_AFTER_S
     except Exception:
         return False
@@ -109,6 +119,8 @@ def require_admin(request: Request, plant_admin: str = Cookie(None),
 # ── 登录 ──────────────────────────────────────────────────────────────
 @router.post("/login")
 def admin_login(response: Response, body: dict = Body(...)):
+    if not ADMIN_PASSWORD:
+        raise HTTPException(503, "请先配置 PLANT_ADMIN_PASSWORD")
     pwd = str(body.get("password") or "")
     if not pwd or pwd != ADMIN_PASSWORD:
         time.sleep(0.4)          # 放慢暴力尝试
@@ -301,18 +313,21 @@ def plant_detail(plant_id: str, days: int = Query(7, ge=1, le=90),
 
 # ── 遥测 ──────────────────────────────────────────────────────────────
 @router.get("/telemetry")
-def telemetry_series(plant_id: str = Query(""), days: int = Query(7, ge=1,
-                                                                  le=90),
+def telemetry_series(plant_id: str = Query(""), device_id: str = Query(""),
+                     days: int = Query(7, ge=1, le=90),
                      max_points: int = Query(600, ge=50, le=5000),
                      _=Depends(require_admin)):
     since = utils.date_add(_now()[1], -(days - 1)) + " 00:00:00"
     sql = ("SELECT ts,moisture,temp,light,ec,ph,salt,nitrogen,phosphorus,"
-           "potassium,source FROM telemetry "
+           "potassium,source,device_id,plant_id FROM telemetry "
            "WHERE ts>=?")
     params = [since]
     if plant_id:
         sql += " AND plant_id=?"
         params.append(plant_id)
+    if device_id:
+        sql += " AND device_id=?"
+        params.append(device_id)
     sql += " ORDER BY ts"
     rows = db.q(sql, tuple(params))
     return {"ok": True, "days": days, "total": len(rows),
@@ -524,6 +539,67 @@ def read_logs(lines: int = Query(200, ge=10, le=5000),
             "mtime": time.strftime("%Y-%m-%d %H:%M:%S",
                                    time.localtime(st.st_mtime)),
             "lines": _tail(path, lines)}
+
+
+# ── 展会扫码反馈 ──────────────────────────────────────────────────────
+def _expo_feedback_rows():
+    path = os.path.join(config.DATA_DIR, "expo_feedback.jsonl")
+    if not os.path.exists(path):
+        return []
+    rows = []
+    with open(path, "r", encoding="utf-8") as fp:
+        for line in fp:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except Exception:
+                continue
+            if isinstance(item, dict):
+                rows.append(item)
+    return rows
+
+
+@router.get("/expo_feedback")
+def list_expo_feedback(q: str = Query(""), interest: str = Query(""),
+                       source: str = Query(""), days: int = Query(0, ge=0,
+                                                               le=3650),
+                       _=Depends(require_admin)):
+    rows = _expo_feedback_rows()
+    today = _now()[1]
+    if days > 0:
+        since = utils.date_add(today, -(days - 1))
+        rows = [r for r in rows if str(r.get("created_at") or "") >= since]
+
+    q = q.strip().lower()
+    interest = interest.strip().lower()
+    source = source.strip().lower()
+
+    def match(row):
+        if interest and interest not in str(row.get("interest") or "").lower():
+            return False
+        if source and source not in str(row.get("source") or "").lower():
+            return False
+        if q:
+            blob = " ".join(str(row.get(k) or "") for k in
+                            ("name", "company", "contact", "role", "interest",
+                             "message", "source")).lower()
+            if q not in blob:
+                return False
+        return True
+
+    filtered = [r for r in rows if match(r)]
+    filtered.reverse()
+    stats = {
+        "total": len(rows),
+        "today": sum(1 for r in rows
+                     if str(r.get("created_at") or "").startswith(today)),
+        "contact": sum(1 for r in rows if r.get("contact")),
+        "company": sum(1 for r in rows if r.get("company")),
+    }
+    return {"ok": True, "rows": filtered[:1000], "total": len(filtered),
+            "stats": stats, "today": today}
 
 
 # ── 运维：数据库在线备份 ──────────────────────────────────────────────

@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-04",
+  "status": "passed final local release checks",
+  "platform": "Windows / Python 3.14 / isolated test virtualenv using existing system packages",
+  "tests": {
+    "learning": {
+      "passed": 12,
+      "failed": 0
+    },
+    "mqtt_json_gateway": {
+      "passed": 12,
+      "failed": 0
+    },
+    "release_integration": {
+      "passed": 9,
+      "failed": 0
+    }
+  },
+  "total_passed": 33,
+  "javascript_syntax_files": 6,
+  "faq_rebuilt_entries": 43406,
+  "faq_matching_and_query_only": "passed",
+  "external_model_calls": "not performed; requests HTTP blocked in integration tests",
+  "fresh_linux_deployment": "not performed",
+  "live_mqtt_tls_or_hardware_test": "not performed",
+  "production_deployment_or_restart": "not performed",
+  "retired_serial_gateway": "excluded by user instruction",
+  "admin_default_password": "removed; unconfigured login rejected",
+  "gateway_config_credentials": "not returned; covered by regression test",
+  "new_node_provisioning_and_online_isolation": "passed",
+  "source_of_test_logs": "Local files; no production logs included",
+  "privacy_audit": {
+    "live_source_drift": "none",
+    "candidate_text_files_compared": 116,
+    "private_values_compared_without_disclosure": 11,
+    "live_credential_or_contact_matches": 0,
+    "image_gps_metadata": "none",
+    "qr_target": "public /expo/ route; no credential or query",
+    "excluded_private_contact_image": true,
+    "generic_pattern_review": "The Mosquitto password-file path is a path, and 3.1.1.14 in licensed FAQ evidence is an enzyme identifier, not deployment configuration."
+  },
+  "line_endings": "source text normalized to LF; Windows launcher kept with CRLF checkout policy",
+  "publication": "PR workflow; this file records pre-commit checks, not live merge state"
+}

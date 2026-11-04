@@ -59,3 +59,14 @@ app/soil-node/soil_cloud_config.local.h
 /artifacts/soil-node/*.map
 # Keep logs/**/*.jsonl trackable: contest AI logs are required.
 !/app/soil-node/certs/isrgrootx1.pem
+
+# Server runtime state and generated FAQ index; source resources remain tracked.
+/server/**/.venv/
+/server/**/venv/
+/server/**/data/
+/server/**/ota/
+/server/box_ai/*.sqlite3
+/server/box_ai/*.building
+/server/box_ai/soil_bindings.json
+/server/soil_gateway/mqtt_soil_queue.jsonl
+/.venv-server/

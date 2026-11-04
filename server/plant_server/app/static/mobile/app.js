@@ -1235,10 +1235,20 @@
   /* ────────── 绑定设备 ────────── */
   function htmlBind() {
     var h = pageHead('绑定设备', '#/me');
-    h += '<div class="card"><div class="ct">设备序列号 SN</div>'
-      + '<input id="bd-sn" class="lg-input" placeholder="例如 ZXB-DEMO-0001" autocomplete="off">'
+    var kind = state.bindKind || 'board';
+    h += '<div class="card"><div class="ct">设备类型</div><div class="pick-row">'
+      + '<button class="chip ' + (kind === 'board' ? 'g' : '') + '" data-bd-kind="board">📷 智能终端板卡</button>'
+      + '<button class="chip ' + (kind === 'soil' ? 'g' : '') + '" data-bd-kind="soil">📶 无线土壤传感器</button>'
+      + '</div></div>';
+    h += '<div class="card"><div class="ct">'
+      + (kind === 'soil' ? '无线土壤传感器 SN' : '设备序列号 SN') + '</div>'
+      + '<input id="bd-sn" class="lg-input" placeholder="'
+      + (kind === 'soil' ? '例如 ZXB-SOIL-0001' : '例如 ZXB-DEMO-0001') + '" autocomplete="off">'
       + '<div class="muted" style="font-size:11.5px;margin:10px 2px 0;line-height:1.7">'
-      + 'SN 印在板卡背面，也会显示在开机欢迎页上。<br>演示板卡：<b>ZXB-DEMO-0001</b></div></div>';
+      + (kind === 'soil'
+        ? '无线土壤：输入已注册的 ESP32 无线传感器 SN；绑定后云端同步该节点的土壤读数。配网和上报周期请在传感器配置页面设置。'
+        : 'SN 印在板卡背面，也会显示在开机欢迎页上。<br>演示板卡：<b>ZXB-DEMO-0001</b>')
+      + '</div></div>';
     var ps = state.plants || [];
     h += '<div class="card"><div class="ct">绑到哪一盆</div><div class="pick-row">'
       + (ps.length ? ps.map(function (p) {
@@ -1260,6 +1270,7 @@
     var sn = String((($('#bd-sn') || {}).value) || '').trim();
     if (!sn) { toast('先填设备 SN'); return; }
     var body = { sn: sn };
+    if (state.bindKind === 'soil') body.model = 'soil-wifi';
     if (state.bindPlant) body.plant_id = state.bindPlant;
     api('/devices/bind', { method: 'POST', json: body }).then(function (j) {
       toast('绑定成功' + (j.plant && j.plant.name ? '：' + j.plant.name : ''));
@@ -2058,6 +2069,15 @@
     if (pfSave) pfSave.onclick = saveProfile;
     var bdGo = $('#bd-go', view);
     if (bdGo) bdGo.onclick = bindDevice;
+    var kindBtns = view.querySelectorAll('[data-bd-kind]');
+    for (var ki = 0; ki < kindBtns.length; ki++) {
+      (function (b) {
+        b.onclick = function () {
+          state.bindKind = b.getAttribute('data-bd-kind');
+          rerender();
+        };
+      })(kindBtns[ki]);
+    }
     var cfSend = $('#cf-send', view);
     if (cfSend) cfSend.onclick = sendPost;
     var cfText = $('#cf-text', view);

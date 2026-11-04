@@ -22,6 +22,8 @@ class BindIn(BaseModel):
     device_id: str = ""
     # 可选：把这台设备绑到指定的植物上（多盆时用；不传就自动挑一盆）
     plant_id: str = ""
+    # 可选：设备类型提示（如 soil-wifi=无线土壤网关/传感器）
+    model: str = ""
 
 
 @router.post("/register")
@@ -78,7 +80,18 @@ def bind_device(body: BindIn, authorization: str = Header(None)):
         raise HTTPException(404, "设备未注册（先让设备联网注册，或检查 SN）")
     if dev["owner_user_id"] and dev["owner_user_id"] != uid:
         raise HTTPException(403, "设备已绑定其他账号")
+    # 无线土壤网关：记下型号，但不抢占植物的主设备（主设备仍是终端板卡）
+    model = (body.model or "").strip()
+    if model:
+        db.exe("UPDATE devices SET model=? WHERE id=?", (model, dev["id"]))
+        dev = db.one("SELECT * FROM devices WHERE id=?", (dev["id"],))
     db.exe("UPDATE devices SET owner_user_id=? WHERE id=?", (uid, dev["id"]))
+    if (dev["model"] or "").startswith("soil"):
+        # 土壤设备：只认领归属，不改 plants.device_id
+        return {
+            "ok": True, "device": dev, "kind": "soil-wifi",
+            "message": "无线土壤传感器已绑定；土壤数据将同步到该账号",
+        }
     # 绑到哪一盆：显式指定的 > 这盆设备已有的植物 > 账号里还没绑卡的那盆 > 第一盆 > 新建
     # （以前直接拿"第一盆"，账号有两盆时会把设备挂错地方）
     plant = None
@@ -108,8 +121,11 @@ def bind_device(body: BindIn, authorization: str = Header(None)):
         # 一台板卡同一时间只挂一盆：先把别处指向它的摘掉，再指过去
         db.exe("UPDATE plants SET device_id=NULL WHERE device_id=? AND id<>?",
                (dev["id"], plant["id"]))
-        db.exe("UPDATE plants SET device_id=? WHERE id=?", (dev["id"],
-                                                            plant["id"]))
+        # 设备侧自动建的那盆可能还没有主人（user_id 为空）：绑定设备时一并
+        # 认领，否则 App 的"我的植物"里看不到它（多终端首次绑定路径）。
+        db.exe("UPDATE plants SET device_id=?, "
+               "user_id=COALESCE(NULLIF(user_id,''), ?) WHERE id=?",
+               (dev["id"], uid, plant["id"]))
         plant = db.one("SELECT * FROM plants WHERE id=?", (plant["id"],))
     return {"ok": True, "device": dev, "plant": plant}
 
@@ -181,6 +197,19 @@ def device_sync(x_device_token: str = Header(None)):
                 "mood": plant["mood"], "health_level": plant["health_level"]},
             "tasks": tasks, "recent_events": evs,
             "latest_telemetry_ts": last["ts"] if last else None,
+            # 无线土壤：板卡/网关上报后，终端从这里拉最新八项（本地无传感器时用）
+            "latest_telemetry": None if not last else {
+                "ts": last["ts"],
+                "moisture": last["moisture"],
+                "temp": last["temp"],
+                "ec": last["ec"],
+                "ph": last["ph"],
+                "salt": last["salt"],
+                "nitrogen": last["nitrogen"],
+                "phosphorus": last["phosphorus"],
+                "potassium": last["potassium"],
+                "source": last["source"],
+            },
             # 待执行指令（自动浇水/补光…）。板卡可以直接用这个字段，
             # 也可以单独轮询 GET /actuators/pending，两边内容一样。
             "pending_actions": _pending_actions(claims["sub"])}

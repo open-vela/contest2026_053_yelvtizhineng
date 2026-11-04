@@ -44,8 +44,11 @@ async def upload_image(request: Request,
                        authorization: str = Header(None),
                        x_device_token: str = Header(None)):
     claims, kind = either(authorization, x_device_token)
-    plant = resolve_plant(claims, kind, plant_id)
+    # 先把请求体读干净再校验植物：否则服务器在板卡还在发 153KB 图时就返回
+    # 404 并断连接，板卡侧表现为 psock_tcp_send -107（Not connected），
+    # 重试 8 次才降级（2026-09-21 双板卡实测踩到）。
     data = await request.body()
+    plant = resolve_plant(claims, kind, plant_id)
     if not data:
         raise HTTPException(400, "空数据")
     dims = None

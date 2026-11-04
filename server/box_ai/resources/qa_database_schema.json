@@ -1,0 +1,50 @@
+{
+  "schema": [
+    {
+      "type": "table",
+      "name": "metadata",
+      "sql": "CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL)"
+    },
+    {
+      "type": "table",
+      "name": "entries",
+      "sql": "CREATE TABLE entries(id TEXT PRIMARY KEY,question TEXT NOT NULL,normalized TEXT NOT NULL,subject TEXT NOT NULL,payload TEXT NOT NULL)"
+    },
+    {
+      "type": "table",
+      "name": "aliases",
+      "sql": "CREATE TABLE aliases(alias TEXT NOT NULL,fact_id TEXT NOT NULL,PRIMARY KEY(alias,fact_id)) WITHOUT ROWID"
+    },
+    {
+      "type": "table",
+      "name": "grams",
+      "sql": "CREATE TABLE grams(gram TEXT NOT NULL,fact_id TEXT NOT NULL,PRIMARY KEY(gram,fact_id)) WITHOUT ROWID"
+    }
+  ],
+  "metadata": {
+    "normalizer_version": "box-candidate-v1",
+    "count": "43406",
+    "source_count": "43406",
+    "source": "bank_100k_v490.facts",
+    "snapshot_utc": "2026-11-02T16:07:03Z"
+  },
+  "count": 43406,
+  "licenses": {
+    "CC-BY-SA-4.0": 43406
+  },
+  "payload_keys": [
+    "answer",
+    "attribution",
+    "category",
+    "evidence",
+    "examples",
+    "fact_key",
+    "id",
+    "independent_fact_verification",
+    "license",
+    "question",
+    "references",
+    "source",
+    "topic"
+  ]
+}

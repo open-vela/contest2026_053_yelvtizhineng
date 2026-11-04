@@ -66,6 +66,33 @@ def either(authorization=None, x_device_token=None):
         return claims, "device"
     raise HTTPException(401, "缺少凭证")
 
+def auto_plant_for_device(device_id):
+    """给还没有植物的设备自动建一盆（多终端：新板卡刷完即可用）。
+
+    2026-09-21 双板卡实测：第二块板卡注册成功后一直没有植物，拍照上传
+    拿到 404 且服务器在板卡还在发 153KB 图时就断连接，板卡侧表现为
+    -107（Not connected）连试 8 次后降级。设备侧自动建一盆、不绑用户，
+    App 里绑定设备时自动认领，最省事。
+    """
+    dev = db.one("SELECT * FROM devices WHERE id=?", (device_id,))
+    pid = utils.new_id("pl")
+    now = utils.bj_now()
+    db.exe("INSERT INTO plants(id,user_id,device_id,species,name,started_at,"
+           "location,health_score,mood,health_level,updated_at,created_at)"
+           " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+           (pid, (dev["owner_user_id"] if dev else None) or None, device_id,
+            "待识别", "新植物", now[1], "客厅", 80, "😊", "良好",
+            now[0], now[0]))
+    try:
+        from ..services import plant_ops
+        plant_ops.ensure_today_tasks(pid)
+    except Exception as e:
+        print("[plant] ensure_today_tasks skipped: %s" % e)
+    print("[plant] auto-created %s for device %s (multi-terminal onboarding)"
+          % (pid, device_id))
+    return db.one("SELECT * FROM plants WHERE id=?", (pid,))
+
+
 def resolve_plant(claims, kind, plant_id=None, optional=False):
     """按用户/设备解析可访问的 plant；plant_id 缺省取第一盆。
 
@@ -101,5 +128,8 @@ def resolve_plant(claims, kind, plant_id=None, optional=False):
     if not p:
         if optional:
             return None
+        if kind == "device":
+            # 多终端：新板卡还没有植物时自动建一盆，别让拍照/遥测一直 404
+            return auto_plant_for_device(claims["sub"])
         raise HTTPException(404, "还没有植物，请先在 App 添加或绑定设备")
     return p

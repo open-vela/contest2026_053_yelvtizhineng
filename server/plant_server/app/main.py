@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """植小伴 · 服务器大脑（FastAPI 入口）。"""
 import os
+import json
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -10,14 +11,31 @@ from fastapi.staticfiles import StaticFiles
 
 from . import admin, config, db
 from .routers import (actuator, ai, auth, billing, community,
-                      device_bridge, devices, events, insurance, media, plants,
-                      reports, system, tasks, telemetry)
-from .services import plant_ops
+                      device_bridge, devices, events, insurance, media, mqtt_admin,
+                      plants, reports, system, tasks, telemetry, expo, vision)
+from .services import plant_ops, qa_bank
+from .routers import learning
+
+
+def _warm_voice_bank():
+    try:
+        stats=qa_bank.warm_device_indexes()
+        print('[VoiceBankWarm] '+json.dumps(dict(stats,ok=True,pid=os.getpid()),sort_keys=True),flush=True)
+        return stats
+    except Exception as error:
+        # Startup remains available if the optional warmup fails. Never log
+        # bank contents, paths, provider configuration or exception text.
+        category=type(error).__name__
+        if category not in {'OSError','ValueError','TypeError','KeyError','RuntimeError'}:category='Other'
+        try:print('[VoiceBankWarm] '+json.dumps({'ok':False,'category':category,'pid':os.getpid()}),flush=True)
+        except Exception:pass
+        return None
 
 
 @asynccontextmanager
 async def lifespan(app):
     db.init_db()
+    learning.init_learning()
     if config.TOKEN_SECRET_IS_DEFAULT:
         print("[SECURITY] PLANT_TOKEN_SECRET is still the built-in default; "
               "set it before exposing this server to the internet")
@@ -46,6 +64,7 @@ async def lifespan(app):
         billing_ops.ensure_demo_subscription()
     except Exception as e:
         print("[billing] seed skipped: %s" % e)
+    _warm_voice_bank()
     yield
 
 
@@ -63,40 +82,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── 前端资源不做 HTTP 缓存（2026-09-17 踩过的坑） ──
-#   StaticFiles 默认只发 ETag / Last-Modified，**没有 Cache-Control**，
-#   Android WebView 就按"启发式缓存"长期复用旧的 app.js —— 表现是
-#   "服务器改了手机端前端，手机上完全没变化"，重启 App 也没用
-#   （试过：手机只发 /api/v1/* 请求，一次都不来取 /mobile/，
-#    而 Service Worker 在 http 非安全上下文下根本不注册，兜不住）。
-#   这里统一加 no-store：每 次都回源校验，改完立刻生效。
-#   前端文件都很小，且只有一台服务器，这点代价可以忽略。
-_NO_CACHE_PATHS = ("/mobile", "/admin", "/version.json")
-
-
-@app.middleware("http")
-async def no_cache_frontend(request, call_next):
-    resp = await call_next(request)
-    path = request.url.path
-    for p in _NO_CACHE_PATHS:
-        if path == p or path.startswith(p + "/"):
-            resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-            resp.headers["Pragma"] = "no-cache"
-            resp.headers["Expires"] = "0"
-            break
-    return resp
-
 API = "/api/v1"
 for r in (auth.router, devices.router, devices.sync_router, plants.router, telemetry.router,
           events.router, media.router, ai.router, ai.voice_router,
           tasks.router, tasks.growth_router, reports.router, system.router,
           community.router, insurance.router,
-          actuator.router, billing.router):
+          actuator.router, billing.router, expo.router):
     app.include_router(r, prefix=API)
 
 # ── 管理台（网页版）：/api/v1/admin/* 接口 + /admin 页面 ──
 #   独立口令鉴权（见 app/admin.py），不影响设备链路与现有接口。
 app.include_router(admin.router, prefix=API)
+app.include_router(mqtt_admin.router, prefix=API)
+app.include_router(vision.router, prefix=API)
+app.include_router(learning.router, prefix=API)
 
 _ADMIN_STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "static", "admin")
@@ -112,6 +111,13 @@ _MOBILE_STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 if os.path.isdir(_MOBILE_STATIC):
     app.mount("/mobile", StaticFiles(directory=_MOBILE_STATIC, html=True),
               name="mobile")
+
+# ── 展会扫码体验页：/expo 页面（独立静态目录，不依赖 App/管理台） ──
+_EXPO_STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "static", "expo")
+if os.path.isdir(_EXPO_STATIC):
+    app.mount("/expo", StaticFiles(directory=_EXPO_STATIC, html=True),
+              name="expo")
 
 # 设备旧协议兼容层（根路径 /time、/voice/*、/image/analyze）：**无鉴权**。
 # 现固件已全部走 /api/v1/*，公网部署默认不挂载；确需时 PLANT_LEGACY_BRIDGE=1。

@@ -15,7 +15,9 @@ const TABS = [
   ['ai', 'AI 调试', '🤖'],
   ['actuators', '自动执行', '🤖'],
   ['billing', '会员订阅', '💎'],
+  ['expo', '展会反馈', '📝'],
   ['logs', '日志', '📜'],
+  ['mqtt', 'MQTT·土壤', '📡'],
 ];
 
 const state = { tab: 'overview', cache: {}, logTimer: null };
@@ -483,12 +485,24 @@ let TEL_STATE = { plant: '', days: 7 };
 PAGES.telemetry = async (el) => {
   const $ = (s) => el.querySelector(s);
   if (!PLANT_CACHE.length) { try { PLANT_CACHE = (await api('/plants')).plants; } catch (e) {} }
+  if (!window.DEV_CACHE || !DEV_CACHE.length) {
+    try { DEV_CACHE = (await api('/devices')).devices || []; } catch (e) { DEV_CACHE = []; }
+  }
+  TEL_STATE.mode = TEL_STATE.mode || 'plant';
   el.innerHTML = `
   <div class="card"><div class="card-head"><h3>筛选</h3>
     <div class="rowline">
-      <select id="tel-plant">
+      <select id="tel-mode">
+        <option value="plant"${TEL_STATE.mode === 'plant' ? ' selected' : ''}>按植物</option>
+        <option value="device"${TEL_STATE.mode === 'device' ? ' selected' : ''}>按传感器/设备</option>
+      </select>
+      <select id="tel-plant" ${TEL_STATE.mode === 'device' ? 'style="display:none"' : ''}>
         <option value="">全部植物</option>
         ${PLANT_CACHE.map((p) => `<option value="${esc(p.id)}"${TEL_STATE.plant === p.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}
+      </select>
+      <select id="tel-device" ${TEL_STATE.mode === 'plant' ? 'style="display:none"' : ''}>
+        <option value="">全部设备</option>
+        ${(DEV_CACHE || []).map((v) => `<option value="${esc(v.id)}"${TEL_STATE.device === v.id ? ' selected' : ''}>${esc(v.sn)}${v.model ? ' · ' + esc(v.model) : ''}</option>`).join('')}
       </select>
       <select id="tel-days">
         ${[1, 3, 7, 30].map((n) => `<option value="${n}"${TEL_STATE.days === n ? ' selected' : ''}>近 ${n} 天</option>`).join('')}
@@ -508,9 +522,15 @@ PAGES.telemetry = async (el) => {
     ${chartCard('钾 K（mg/kg）', 'tc8', '#7a8b3f')}
   </div>`;
   const load = async () => {
-    TEL_STATE.plant = $('#tel-plant').value;
+    TEL_STATE.mode = $('#tel-mode').value;
+    TEL_STATE.plant = ($('#tel-plant') || {}).value || '';
+    TEL_STATE.device = ($('#tel-device') || {}).value || '';
     TEL_STATE.days = Number($('#tel-days').value);
-    const d = await api('/telemetry?plant_id=' + encodeURIComponent(TEL_STATE.plant) + '&days=' + TEL_STATE.days);
+    const q = 'days=' + TEL_STATE.days
+      + (TEL_STATE.mode === 'device'
+        ? '&device_id=' + encodeURIComponent(TEL_STATE.device)
+        : '&plant_id=' + encodeURIComponent(TEL_STATE.plant));
+    const d = await api('/telemetry?' + q);
     const rows = d.rows.map((r, i) => Object.assign({ i: i }, r));
     $('#tel-count').textContent = '共 ' + d.total + ' 点' + (d.total > rows.length ? '（抽样 ' + rows.length + '）' : '');
     lineChart($('#tc1'), seriesOf(rows, 'moisture'), { color: '#3d8bd4', unit: '%', digits: 0 });
@@ -526,6 +546,12 @@ PAGES.telemetry = async (el) => {
       salt: r.salt, nitrogen: r.nitrogen, phosphorus: r.phosphorus,
       potassium: r.potassium, source: r.source })));
   };
+  $('#tel-mode').addEventListener('change', () => {
+    const m = $('#tel-mode').value;
+    $('#tel-plant').style.display = m === 'device' ? 'none' : '';
+    $('#tel-device').style.display = m === 'plant' ? 'none' : '';
+    load();
+  });
   $('#tel-load').addEventListener('click', load);
   $('#tel-csv').addEventListener('click', () => {
     const rows = JSON.parse(el.dataset.csv || '[]');
@@ -719,7 +745,205 @@ async function jobModal(id) {
   });
 }
 
+/* ── 展会反馈 ─────────────────────────────────────────────────────── */
+let EXPO_STATE = { q: '', interest: '', source: '', days: 0 };
+
+function expoModal(row) {
+  openModal(`<h3>展会反馈 · ${esc(row.name || row.company || '匿名访客')}</h3>
+    <div class="kv" style="grid-template-columns:100px 1fr">
+      <div class="k">提交时间</div><div>${full(row.created_at)}</div>
+      <div class="k">姓名 / 公司</div><div>${esc(row.name || '-')}　${esc(row.company || '-')}</div>
+      <div class="k">联系方式</div><div>${esc(row.contact || '-')}</div>
+      <div class="k">身份 / 意向</div><div>${esc(row.role || '-')} · ${esc(row.interest || '-')}</div>
+      <div class="k">来源二维码</div><div><span class="mono">${esc(row.source || '未标记')}</span></div>
+    </div>
+    <div class="rowline" style="margin:14px 0 6px"><b class="small">反馈内容</b></div>
+    <pre class="json">${esc(row.message || '（未填写文字反馈）')}</pre>`);
+}
+
+PAGES.expo = async (el) => {
+  const query = new URLSearchParams({
+    q: EXPO_STATE.q,
+    interest: EXPO_STATE.interest,
+    source: EXPO_STATE.source,
+    days: String(EXPO_STATE.days || 0),
+  });
+  const d = await api('/expo_feedback?' + query.toString());
+  const s = d.stats || {};
+  el.dataset.expoRows = JSON.stringify(d.rows);
+  const interests = ['产品购买', '渠道合作', '企业采购 / 定制', '技术合作', '投资合作', '其他建议'];
+  el.innerHTML = `
+  <div class="grid stats">
+    ${stat('反馈总数', s.total || 0, '全部展会记录')}
+    ${stat('今日新增', s.today || 0, d.today || '')}
+    ${stat('留下联系方式', s.contact || 0, '可直接跟进')}
+    ${stat('留下公司', s.company || 0, '合作线索')}
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>筛选</h3><div class="rowline">
+      <input type="text" id="ex-q" value="${esc(EXPO_STATE.q)}" placeholder="姓名 / 公司 / 联系方式 / 内容" style="width:280px">
+      <select id="ex-interest"><option value="">全部意向</option>
+        ${interests.map((v) => `<option value="${esc(v)}"${EXPO_STATE.interest === v ? ' selected' : ''}>${esc(v)}</option>`).join('')}
+      </select>
+      <input type="text" id="ex-source" value="${esc(EXPO_STATE.source)}" placeholder="二维码来源 src" style="width:180px">
+      <select id="ex-days">
+        ${[[0, '全部时间'], [1, '今天'], [7, '近 7 天'], [30, '近 30 天']].map(([v, n]) => `<option value="${v}"${EXPO_STATE.days === v ? ' selected' : ''}>${n}</option>`).join('')}
+      </select>
+      <button class="primary" id="ex-load">查询</button>
+      <button class="ghost" id="ex-csv">导出 CSV</button>
+      <span class="chip gray">当前 ${d.total} 条</span>
+    </div></div>
+    <table><thead><tr><th>时间</th><th>姓名 / 公司</th><th>联系方式</th><th>身份 / 意向</th>
+      <th>反馈摘要</th><th>来源</th><th></th></tr></thead>
+    <tbody>${d.rows.map((r, i) => `<tr>
+      <td class="num">${full(r.created_at)}</td>
+      <td><b>${esc(r.name || '匿名')}</b>${r.company ? '<div class="small muted">' + esc(r.company) + '</div>' : ''}</td>
+      <td>${esc(r.contact || '-')}</td>
+      <td>${esc(r.role || '-')}${r.interest ? '<div class="small muted">' + esc(r.interest) + '</div>' : ''}</td>
+      <td class="small" title="${esc(r.message || '')}">${esc((r.message || '').slice(0, 90)) || '<span class="muted">未填写</span>'}</td>
+      <td><span class="mono small">${esc(r.source || '-')}</span></td>
+      <td class="actions"><button class="ghost" data-expo="${i}">查看</button></td></tr>`).join('')
+      || '<tr><td colspan="7" class="muted">还没有符合条件的反馈</td></tr>'}
+    </tbody></table></div>`;
+
+  const load = () => {
+    EXPO_STATE.q = el.querySelector('#ex-q').value.trim();
+    EXPO_STATE.interest = el.querySelector('#ex-interest').value;
+    EXPO_STATE.source = el.querySelector('#ex-source').value.trim();
+    EXPO_STATE.days = Number(el.querySelector('#ex-days').value || 0);
+    go('expo', true);
+  };
+  el.querySelector('#ex-load').addEventListener('click', load);
+  el.querySelector('#ex-interest').addEventListener('change', load);
+  el.querySelector('#ex-days').addEventListener('change', load);
+  el.querySelector('#ex-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
+  el.querySelector('#ex-source').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
+  el.querySelector('#ex-csv').addEventListener('click', () => {
+    const rows = JSON.parse(el.dataset.expoRows || '[]');
+    if (!rows.length) { toast('当前筛选没有数据'); return; }
+    downloadCsv('植小伴_展会反馈_' + new Date().toISOString().slice(0, 10) + '.csv', rows,
+      [['时间', 'created_at'], ['姓名', 'name'], ['公司', 'company'],
+       ['联系方式', 'contact'], ['身份', 'role'], ['关注方向', 'interest'],
+       ['反馈内容', 'message'], ['来源', 'source']]);
+  });
+  Array.from(el.querySelectorAll('[data-expo]')).forEach((b) =>
+    b.addEventListener('click', () => expoModal(d.rows[Number(b.dataset.expo)])));
+};
+
 /* ── 日志 ── */
+/* ── MQTT / 无线土壤 ── */
+PAGES.mqtt = async (el) => {
+  const st = await api('/mqtt/status');
+  const env = (st.gateway && st.gateway.env) || {};
+  const soil = st.last_soil;
+  el.innerHTML = `
+  <div class="card">
+    <div class="card-head"><h3>MQTT 接入状态</h3>
+      <button class="ghost" id="mqtt-refresh">刷新</button></div>
+    <div class="kpi-row">
+      <div class="kpi"><div class="kpi-l">Mosquitto</div>
+        <div class="kpi-v">${st.mosquitto.active ? '运行中' : '停止'}</div>
+        <div class="kpi-s">端口 ${st.mosquitto.port}</div></div>
+      <div class="kpi"><div class="kpi-l">土壤网关</div>
+        <div class="kpi-v">${st.gateway.active ? '运行中' : '停止'}</div>
+        <div class="kpi-s">接收传感器主动上报</div></div>
+      <div class="kpi"><div class="kpi-l">在线 MQTT 连接</div>
+        <div class="kpi-v">${(st.mqtt_clients_estab || []).length}</div>
+        <div class="kpi-s">含无线传感器 / 网关</div></div>
+      <div class="kpi"><div class="kpi-l">最近土壤</div>
+        <div class="kpi-v">${soil && soil.moisture != null ? esc(soil.moisture) + '%' : '暂无'}</div>
+        <div class="kpi-s">${soil ? full(soil.ts) : '等待传感器'}</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>土壤上报接入</h3></div>
+    <div class="form-grid">
+      <label>订阅主题 <input value="${esc(env.SOIL_MQTT_TOPIC || 'plant/+/sensor')}" readonly></label>
+      <label>连接端口 <input value="${esc(env.SOIL_MQTT_PORT || '-')}" readonly></label>
+    </div>
+    <p class="muted">采集周期和传感器参数请在传感器配网页面设置。接入配置由部署环境管理，此页只显示状态。</p>
+    <div class="actions" style="margin-top:12px">
+      <button class="ghost" id="mq-restart">重启网关</button>
+      <button class="ghost" id="mq-stop">停止网关</button>
+      <button class="ghost" id="mq-start">启动网关</button>
+      <button class="ghost" id="mq-log">看日志</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>MQTT 账号</h3>
+      <span class="chip gray">无线传感器 / 网关登录用</span></div>
+    <div class="form-grid">
+      <label>用户名 <input id="mq-user" placeholder="例如 soil-node"></label>
+      <label>密码 <input id="mq-pass" type="password" placeholder="≥4 位"></label>
+    </div>
+    <div class="actions" style="margin-top:10px">
+      <button class="ghost" id="mq-user-add">新增账号</button>
+    </div>
+    <div id="mq-user-list" class="muted" style="margin-top:10px">加载中…</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>无线土壤设备</h3>
+      <span class="chip gray">ESP32 无线传感器</span></div>
+    <table><thead><tr><th>ID</th><th>SN</th><th>型号</th><th>状态</th><th>最后活动</th></tr></thead>
+    <tbody>
+      ${(st.soil_devices || []).map((v) => `<tr>
+        <td class="mono">${esc(v.id)}</td>
+        <td class="mono">${esc(v.sn)}</td>
+        <td>${esc(v.model || '-')}</td>
+        <td>${onlineTag(v)}</td>
+        <td class="num">${full(v.last_seen_at)}</td></tr>`).join('')
+        || '<tr><td colspan="5" class="muted">暂无无线土壤设备（可在手机端绑定）</td></tr>'}
+    </tbody></table>
+  </div>`;
+
+  const $ = (s) => el.querySelector(s);
+  $('#mqtt-refresh').onclick = () => PAGES.mqtt(el, true);
+  const act = async (action) => {
+    await api('/mqtt/gateway', { method: 'POST', body: JSON.stringify({ action }) });
+    toast('网关 ' + action + ' 完成');
+    PAGES.mqtt(el, true);
+  };
+  $('#mq-restart').onclick = () => act('restart');
+  $('#mq-stop').onclick = () => act('stop');
+  $('#mq-start').onclick = () => act('start');
+  $('#mq-log').onclick = async () => {
+    const j = await api('/mqtt/gateway/log?lines=60');
+    openModal('<h3>土壤网关日志</h3><pre style="max-height:320px;overflow:auto;font-size:11px;white-space:pre-wrap">'
+      + esc(j.log || '') + '</pre>');
+  };
+  const loadUsers = async () => {
+    const u = await api('/mqtt/users');
+    $('#mq-user-list').innerHTML = (u.users || []).map((n) =>
+      '<span class="chip gray" style="margin:2px 4px 2px 0">' + esc(n) +
+      ' <a href="#" data-del-user="' + esc(n) + '" style="margin-left:6px">删</a></span>').join('')
+      || '暂无账号';
+    $('#mq-user-list').querySelectorAll('[data-del-user]').forEach((a) => {
+      a.onclick = async (e) => {
+        e.preventDefault();
+        if (!confirm('删除 MQTT 账号 ' + a.dataset.delUser + ' ?')) return;
+        await api('/mqtt/users', { method: 'POST', body: JSON.stringify({
+          username: a.dataset.delUser, action: 'del' }) });
+        toast('已删除');
+        loadUsers();
+      };
+    });
+  };
+  loadUsers();
+  $('#mq-user-add').onclick = async () => {
+    const username = $('#mq-user').value.trim();
+    const password = $('#mq-pass').value;
+    if (!username || !password) { toast('填用户名和密码'); return; }
+    await api('/mqtt/users', { method: 'POST', body: JSON.stringify({
+      username, password, action: 'add' }) });
+    toast('账号已创建');
+    $('#mq-pass').value = '';
+    loadUsers();
+  };
+};
+
 PAGES.logs = async (el) => {
   const $ = (s) => el.querySelector(s);
   el.innerHTML = `<div class="card"><div class="card-head"><h3>服务日志</h3><div class="rowline">

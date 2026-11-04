@@ -1,0 +1,22 @@
+[Unit]
+Description=BOX voice and image AI
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+WorkingDirectory=/opt/plant_box_voice_20261031
+EnvironmentFile=/etc/plant-server.env
+EnvironmentFile=/etc/plant-box-ai.env
+ExecStart=/opt/plant_server/.venv/bin/python -m uvicorn box_ai_service:app --host 127.0.0.1 --port 9012 --workers 1 --no-access-log
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+[Install]
+WantedBy=multi-user.target
