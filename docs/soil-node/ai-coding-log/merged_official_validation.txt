@@ -1,0 +1,6 @@
+=== contest-log-upload validation ===
+Logs dir:       C:\Users\admin\Documents\ChatGPT\植小伴\_out\contest_soil_review_20261104\logs
+Files checked:  15
+Events checked: 51083
+
+✅ ALL OK

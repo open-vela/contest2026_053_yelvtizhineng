@@ -3,7 +3,7 @@
   "team_id": "contest2026_053_yelvtizhineng",
   "github_login": "tadycharming",
   "generator": "codex-rollout-adapter@1.0 (local export; see logs/README.md)",
-  "updated_at": "2026-09-19T11:11:02.689551Z",
+  "updated_at": "2026-11-04T10:55:48.615154+00:00",
   "sessions": [
     {
       "session_id": "01a07a44-1bfd-7310-aa1b-6ed8667102c8",
@@ -147,6 +147,45 @@
         ],
         "note": "Codex rollout transcript(s); exported with a Codex-format adapter because the shipped collector cannot parse the rollout layout - see logs/README.md. Sessions spanning several days are split into one file per day; 'seq' is continuous across those files."
       }
+    },
+    {
+      "session_id": "01a15876-98e6-7c12-a5c1-9465772a9e8c",
+      "tool": "codex",
+      "started_at": "2026-10-20T08:40:06.071Z",
+      "last_event_at": "2026-11-04T01:59:22.708Z",
+      "event_count": 7520,
+      "file_path": "logs/tadycharming/2026-10-20/codex__01a15876-98e6-7c12-a5c1-9465772a9e8c.jsonl",
+      "collection_mode": "backfill-sqlite",
+      "health": "ok",
+      "source_integrity": {
+        "main_sha256": "0c2e77626fe893c0ea2598a609c2044a976ce1194489560c75fe6585b5b59e7d",
+        "main_size": 41754551,
+        "captured_at": "2026-11-04T10:51:46.424937+00:00",
+        "source_format": "native_codex_rollout_jsonl",
+        "source_files": [
+          {
+            "path": "C:\\Users\\admin\\Documents\\ChatGPT\\植小伴\\_out\\AI_Coding日志原始备份_20261104_184015\\土壤无线传感器适配_01a15876-98e6-7c12-a5c1-9465772a9e8c\\rollout-2026-10-20T16-38-49-01a15876-98e6-7c12-a5c1-9465772a9e8c.jsonl",
+            "sha256": "0c2e77626fe893c0ea2598a609c2044a976ce1194489560c75fe6585b5b59e7d",
+            "size": 41754551
+          }
+        ],
+        "native_originator": "codex_work_desktop",
+        "native_source": "vscode"
+      },
+      "redacted_count_total": 142,
+      "source_title": "土壤无线传感器适配",
+      "native_format": "Codex desktop rollout JSONL; no SQLite conversation extraction",
+      "collection_mode_note": "Uses the current official Codex backfill adapter enum; see conversion report for native format.",
+      "manual_selected_session": true,
+      "workspace_gate_passed": false,
+      "native_cwd": "C:\\Users\\admin\\Documents\\ChatGPT\\植小伴",
+      "files": [
+        {
+          "path": "logs/tadycharming/2026-10-20/codex__01a15876-98e6-7c12-a5c1-9465772a9e8c.jsonl",
+          "event_count": 7520,
+          "sha256": "089f7a477db4c5459e29c85ec6663307c2efe21529755d4c0e6a741da8400290"
+        }
+      ]
     }
   ]
 }

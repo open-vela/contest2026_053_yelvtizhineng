@@ -1,0 +1,48 @@
+diff --git a/components/esp_hw_support/clk_ctrl_os.c b/components/esp_hw_support/clk_ctrl_os.c
+--- a/components/esp_hw_support/clk_ctrl_os.c
++++ b/components/esp_hw_support/clk_ctrl_os.c
+@@ -24,7 +24,7 @@
+             spin_unlock_irqrestore((lock), g_flags); \
+             g_flags = UINT32_MAX; \
+         } while(0)
+-#define LOCK_INITIALIZER_UNLOCKED       0
++#define LOCK_INITIALIZER_UNLOCKED       SP_UNLOCKED
+ 
+ typedef spinlock_t lock_type_t;
+ static irqstate_t g_flags = UINT32_MAX;
+diff --git a/components/esp_hw_support/modem_clock.c b/components/esp_hw_support/modem_clock.c
+--- a/components/esp_hw_support/modem_clock.c
++++ b/components/esp_hw_support/modem_clock.c
+@@ -32,7 +32,7 @@
+             spin_unlock_irqrestore((lock), g_flags); \
+             g_flags = UINT32_MAX; \
+         } while(0)
+-#define LOCK_INITIALIZER_UNLOCKED       0
++#define LOCK_INITIALIZER_UNLOCKED       SP_UNLOCKED
+ 
+ typedef spinlock_t lock_type_t;
+ static irqstate_t g_flags = UINT32_MAX;
+diff --git a/components/mbedtls/port/esp_platform_time.c b/components/mbedtls/port/esp_platform_time.c
+--- a/components/mbedtls/port/esp_platform_time.c
++++ b/components/mbedtls/port/esp_platform_time.c
+@@ -8,7 +8,7 @@
+ #include "mbedtls/platform_time.h"
+ 
+ #ifdef MBEDTLS_PLATFORM_MS_TIME_ALT
+-mbedtls_ms_time_t mbedtls_ms_time()
++mbedtls_ms_time_t esp_mbedtls_ms_time(void)
+ {
+     int ret;
+     struct timespec tv = {};
+diff --git a/nuttx/esp32/include/sdkconfig.h b/nuttx/esp32/include/sdkconfig.h
+--- a/nuttx/esp32/include/sdkconfig.h
++++ b/nuttx/esp32/include/sdkconfig.h
+@@ -456,7 +456,7 @@
+ #define CONFIG_MBEDTLS_ECP_DP_CURVE25519_ENABLED 1
+ #define CONFIG_MBEDTLS_ECP_NIST_OPTIM 1
+ 
+-#ifdef CONFIG_ESPRESSIF_WIFI
++#if defined(CONFIG_ESP32_WIFI) || defined(CONFIG_ESPRESSIF_WIFI)
+ #define CONFIG_ESP_WIFI_ENABLED 1
+ #define CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM 10
+ #define CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM 32

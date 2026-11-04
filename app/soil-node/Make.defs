@@ -1,0 +1,3 @@
+ifneq ($(CONFIG_SOIL_NODE),)
+CONFIGURED_APPS += $(APPDIR)/soil-node
+endif

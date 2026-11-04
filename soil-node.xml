@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <!-- Optional dedicated workspace; does not change the main product baseline. -->
+  <include name="contest2026_053_yelvtizhineng.xml"/>
+  <extend-project name="nuttx" path="nuttx" revision="dd92bcf425738734d1b8aed09c2bd4dbe3f2e438"/>
+  <extend-project name="nuttx-apps" path="apps" revision="dcc6a95c3b323e533c98fde8fb209f99e24f0fdd"/>
+  <remote name="soil-mqtt-upstream" fetch="https://github.com/LiamBindle/"/>
+  <remove-project name="apps_netutils_mqttc_MQTT-C"/>
+  <project name="MQTT-C" path="apps/netutils/mqttc/MQTT-C" remote="soil-mqtt-upstream" revision="refs/tags/1.1.5"/>
+</manifest>

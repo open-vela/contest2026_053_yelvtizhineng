@@ -1,0 +1,20 @@
+{
+  "scope": "Candidate index only, not exported official AI Coding logs.",
+  "session_id": "01a195b1-5521-7812-b99f-7195d7c91113",
+  "source_filename": "rollout-2026-11-01T13-59-49-01a195b1-5521-7812-b99f-7195d7c91113.jsonl",
+  "source_sha256": "2c90f7b067ab0e2fcdb3739abf1f56cae21f9bd0e38d959dfec32b43219e57b1",
+  "source_size": 13206954,
+  "captured_on": "2026-11-04",
+  "export_status": "pending_local_review_and_official_export",
+  "raw_content_included": false,
+  "exported_sessions": [
+    {
+      "session_id": "01a15876-98e6-7c12-a5c1-9465772a9e8c",
+      "title": "土壤无线传感器适配",
+      "file_path": "logs/tadycharming/2026-10-20/codex__01a15876-98e6-7c12-a5c1-9465772a9e8c.jsonl",
+      "events": 7520,
+      "status": "official_schema_validated_manual_selected_export",
+      "workspace_gate_passed": false
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+diff --git a/netutils/mqttc/Kconfig b/netutils/mqttc/Kconfig
+--- a/netutils/mqttc/Kconfig
++++ b/netutils/mqttc/Kconfig
+@@ -41,8 +41,10 @@
+ config NETUTILS_MQTTC_WITH_MBEDTLS
+ 	bool "Enable MQTT-C with mbedtls"
+ 	default n
+-	depends on CRYPTO_MBEDTLS
++	depends on SOIL_NODE_MQTT_TLS
+ 	select DEV_URANDOM
++	---help---
++		Use the mbedTLS implementation embedded in the ESP32 HAL.
+ 
+ config NETUTILS_MQTTC_VERSION
+ 	string "MQTT-C Version"
+diff --git a/netutils/mqttc/Make.defs b/netutils/mqttc/Make.defs
+--- a/netutils/mqttc/Make.defs
++++ b/netutils/mqttc/Make.defs
+@@ -26,6 +26,21 @@
+ 
+ ifneq ($(CONFIG_NETUTILS_MQTTC_WITH_MBEDTLS),)
+ CFLAGS += -DMQTT_USE_MBEDTLS
++MQTTC_ESP_HAL_DIR = $(TOPDIR)/arch/xtensa/src/chip/esp-hal-3rdparty
++MQTTC_MBEDTLS_DIR = $(MQTTC_ESP_HAL_DIR)/components/mbedtls
++CFLAGS += -Dmbedtls_ssl_write=esp_mbedtls_ssl_write
++CFLAGS += -Dmbedtls_ssl_read=esp_mbedtls_ssl_read
++CFLAGS += ${INCDIR_PREFIX}$(MQTTC_MBEDTLS_DIR)/mbedtls/include
++CFLAGS += ${INCDIR_PREFIX}$(MQTTC_MBEDTLS_DIR)/mbedtls/library
++CFLAGS += ${INCDIR_PREFIX}$(MQTTC_MBEDTLS_DIR)/port/include
++CFLAGS += ${INCDIR_PREFIX}$(MQTTC_ESP_HAL_DIR)/nuttx/esp32/include
++CFLAGS += ${INCDIR_PREFIX}$(MQTTC_ESP_HAL_DIR)/components/esp_common/include
++CFLAGS += ${INCDIR_PREFIX}$(MQTTC_ESP_HAL_DIR)/components/esp_hw_support/include
++CFLAGS += ${INCDIR_PREFIX}$(MQTTC_ESP_HAL_DIR)/components/esp_rom/include
++CFLAGS += ${INCDIR_PREFIX}$(MQTTC_ESP_HAL_DIR)/components/hal/include
++CFLAGS += ${INCDIR_PREFIX}$(MQTTC_ESP_HAL_DIR)/components/soc/include
++CFLAGS += ${INCDIR_PREFIX}$(MQTTC_ESP_HAL_DIR)/components/soc/esp32/include
++CFLAGS += $(DEFINE_PREFIX)MBEDTLS_CONFIG_FILE="<mbedtls/esp_config.h>"
+ endif
+ 
+ endif
+diff --git a/netutils/mqttc/Makefile b/netutils/mqttc/Makefile
+--- a/netutils/mqttc/Makefile
++++ b/netutils/mqttc/Makefile
+@@ -37,8 +37,6 @@
+ $(MQTTC_UNPACK): $(MQTTC_TARBALL)
+ 	$(Q) tar zxf $(MQTTC_TARBALL)
+ 	$(Q) mv MQTT-C-$(MQTTC_VERSION) $(MQTTC_UNPACK)
+-	$(Q) echo "Patching $(MQTTC_UNPACK)"
+-	$(Q) cat 0001_add_connection_status.patch | patch -s -N -d $(MQTTC_UNPACK) -p1
+ 	$(Q) touch $(MQTTC_UNPACK)
+ 
+ # Download and unpack tarball if no git repo found

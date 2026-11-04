@@ -1,0 +1,21 @@
+{
+  "default_rule_source": "official snapshot_core.py DEFAULT_REDACT_RULES",
+  "discovery_categories": [
+    "quoted_assignment",
+    "plain_assignment",
+    "soil_command",
+    "device_header",
+    "chinese_credential"
+  ],
+  "additional_rule_categories": [
+    "private_key_block",
+    "url_password",
+    "jwt",
+    "discovered_exact_credential_value"
+  ],
+  "placeholder_filter": "Do not treat code expressions, empty fields or obvious placeholders as discovered credentials.",
+  "replacement_marker": "***REDACTED***",
+  "literal_value_patterns_private": true,
+  "replacement_count": 142,
+  "events_affected": 90
+}

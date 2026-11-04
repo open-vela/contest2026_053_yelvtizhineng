@@ -1,0 +1,134 @@
+[
+  {
+    "file": "CMakeLists.txt",
+    "source_sha256": "eaee1372695b9615a36ae514b9e1fba79b6c6279c1faa723488bf617074f7138",
+    "review_sha256": "eaee1372695b9615a36ae514b9e1fba79b6c6279c1faa723488bf617074f7138",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "Kconfig",
+    "source_sha256": "bca40fead6b533d4b64d8968dd453ef99cc7862801d48b99307c6d43e058a3f6",
+    "review_sha256": "bca40fead6b533d4b64d8968dd453ef99cc7862801d48b99307c6d43e058a3f6",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "Make.defs",
+    "source_sha256": "606d92854af7a0774966f50caa07ac3299696298f2a12bcd18b3565749b37b25",
+    "review_sha256": "606d92854af7a0774966f50caa07ac3299696298f2a12bcd18b3565749b37b25",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "Makefile",
+    "source_sha256": "d3e9a89365c39b40afa2e8e8ff1142ba3b04d747871c1790b7080f34dc6c3aab",
+    "review_sha256": "6bab4cf08c73e1c7ee45780c7ea82d1963f493649efc485698ddf57f38d06a13",
+    "change": "include_path_adapter"
+  },
+  {
+    "file": "soil_app.h",
+    "source_sha256": "40fe7e23dce078f18a360cbd5e5d9d1c75b695e1638df5099b5013d01be5bf21",
+    "review_sha256": "40fe7e23dce078f18a360cbd5e5d9d1c75b695e1638df5099b5013d01be5bf21",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_cloud_config.h",
+    "source_sha256": "d118b276c1a216da0d509a3addd9acd17a04e490f68c22561a0c8c1e92dc925a",
+    "review_sha256": "381a84874b534987d78a6521c7358be059b90b4b3a176b4273fd1d1ccae0a9e7",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_config.c",
+    "source_sha256": "335c82efe64604ef9e33d9376198752a29bc7ae9e94ed3171df8184454fb84f3",
+    "review_sha256": "335c82efe64604ef9e33d9376198752a29bc7ae9e94ed3171df8184454fb84f3",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_http.c",
+    "source_sha256": "63fac79f67f69412e74b0213b8546196705bb97c16a72bad31cc55b9e5b79672",
+    "review_sha256": "63fac79f67f69412e74b0213b8546196705bb97c16a72bad31cc55b9e5b79672",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_http.h",
+    "source_sha256": "bc9b1b42705f1f5535449d499765867ed8d89c80a5495bcf8a8be822c264bd73",
+    "review_sha256": "bc9b1b42705f1f5535449d499765867ed8d89c80a5495bcf8a8be822c264bd73",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_mqtt.c",
+    "source_sha256": "d5491f201990ce8c5c6c17c8e2afba5c8131069bfffaa23ef7640b273f7c167c",
+    "review_sha256": "d5491f201990ce8c5c6c17c8e2afba5c8131069bfffaa23ef7640b273f7c167c",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_mqtt.h",
+    "source_sha256": "49361c127802edd0ffcfca31fcb8e7528410d7916f84a5afbd74e007c2730210",
+    "review_sha256": "49361c127802edd0ffcfca31fcb8e7528410d7916f84a5afbd74e007c2730210",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_mqtt_ca.h",
+    "source_sha256": "ac7b3a579ee96a66acd9a06fdbdf51294958cb12dbbc5cd58770088d5560af10",
+    "review_sha256": "ac7b3a579ee96a66acd9a06fdbdf51294958cb12dbbc5cd58770088d5560af10",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_node_main.c",
+    "source_sha256": "f4f2fc6f2ee840e3897b82ca0e5fc2c42b470afd4293c711f71c8111f34d3d4c",
+    "review_sha256": "f4f2fc6f2ee840e3897b82ca0e5fc2c42b470afd4293c711f71c8111f34d3d4c",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_power.c",
+    "source_sha256": "b0c45287489ed189335168be694974bbd4c4b66ff5ccb661f3b7e9410c9aaa45",
+    "review_sha256": "b0c45287489ed189335168be694974bbd4c4b66ff5ccb661f3b7e9410c9aaa45",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_power.h",
+    "source_sha256": "525f18e7c4452cd928ff8fdcfe1d9c025bfe3e7be14dfcf61ad20efe796c1749",
+    "review_sha256": "525f18e7c4452cd928ff8fdcfe1d9c025bfe3e7be14dfcf61ad20efe796c1749",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_sensor.c",
+    "source_sha256": "fe2a0cc623c2d40daf85ada7bbd42ed3f594e6f501fe9a1945997b160e632161",
+    "review_sha256": "1f4a85985b9d44795a256d433537e9fa11795a9b74c7f86a3baf2c7f1acade1c",
+    "change": "include_path_adapter"
+  },
+  {
+    "file": "soil_state.c",
+    "source_sha256": "c125c5cdf4ef1a89841403591e73498e06f7960c037a670c77534754097b3d5a",
+    "review_sha256": "c125c5cdf4ef1a89841403591e73498e06f7960c037a670c77534754097b3d5a",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_state.h",
+    "source_sha256": "13777444882518ba9496edc6091841279e328f15397a9665d3a9a6b4646037e2",
+    "review_sha256": "1992a48c904edd6c8bb9fdb5b5134e405f54f1147afed4e4f6d538ca9d2aae6d",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_time.c",
+    "source_sha256": "40a5e4d2ce4f9838b3351e4f6f46018d923d3ebe6db4f028867aa6a865a9efbc",
+    "review_sha256": "48d5554a84462fad10a5c1c8f89a2ced2b5bb297441f91bb62bde8c96128700b",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_time.h",
+    "source_sha256": "bb2bb7e68804b64d9a54bfc7a533f6d909ddeaf8f9fa874f4ea0f203c253338b",
+    "review_sha256": "f02a770b3c07f55dceaa8940d966aafcd5a5e6ae984755693325cc53f61a841b",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_wifi.c",
+    "source_sha256": "db97caf681d772291d1cd9711049b42a3c4fb246395e352c5d76feb8b32c0536",
+    "review_sha256": "db97caf681d772291d1cd9711049b42a3c4fb246395e352c5d76feb8b32c0536",
+    "change": "none_or_text_normalization"
+  },
+  {
+    "file": "soil_wifi.h",
+    "source_sha256": "773b6ef4d643d16f16654c9fab183556b79e93c815dff30ff53d1230de0c3221",
+    "review_sha256": "773b6ef4d643d16f16654c9fab183556b79e93c815dff30ff53d1230de0c3221",
+    "change": "none_or_text_normalization"
+  }
+]

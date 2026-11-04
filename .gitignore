@@ -47,3 +47,15 @@ app/plant-companion/tools/server/debug_audio/
 
 # 内部材料：仅保留在本机，不随作品提交
 docs/04_提交与展示/
+
+# Wireless soil-node local settings, measurements and firmware outputs.
+app/soil-node/soil_cloud_config.local.h
+**/soil.cfg
+**/soil.state
+**/__pycache__/
+*.pyc
+/artifacts/soil-node/*.bin
+/artifacts/soil-node/*.elf
+/artifacts/soil-node/*.map
+# Keep logs/**/*.jsonl trackable: contest AI logs are required.
+!/app/soil-node/certs/isrgrootx1.pem

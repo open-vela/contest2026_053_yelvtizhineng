@@ -1,5 +1,7 @@
 # 植小伴 · AI 智能养植伴侣
 
+> **2026-11-04 无线土壤传感器更新**：新增独立 ESP32-WROOM-32E / openvela 无线节点；本次只更新此模块。应用入口见 [app/soil-node](app/soil-node/README.md)，接线、编译、烧录及配网见 [运行指南](docs/soil-node/运行指南.md)，变更和核验范围见 [提交检查](docs/soil-node/提交检查.md)。下文保留此前主机、云端和手机端的历史说明，不代表这些部分已更新到本地最新版本。
+
 > 参赛队伍：**叶绿体智能**（北京见壤智能科技有限公司）
 > 仓库：`contest2026_053_yelvtizhineng` ｜ 赛道：**AI 硬件产品创新**
 > 主控：CHD-ESP32-S3-Box ｜ 系统：**openvela**（NuttX） ｜ 大模型：**小米 MiMo**
