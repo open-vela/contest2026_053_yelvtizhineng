@@ -1,0 +1,249 @@
+diff --git a/arch/xtensa/src/common/espressif/esp_wifi_utils.c b/arch/xtensa/src/common/espressif/esp_wifi_utils.c
+--- a/arch/xtensa/src/common/espressif/esp_wifi_utils.c
++++ b/arch/xtensa/src/common/espressif/esp_wifi_utils.c
+@@ -30,6 +30,7 @@
+ #include <sys/param.h>
+ 
+ #include <nuttx/kmalloc.h>
++#include <nuttx/semaphore.h>
+ #include <nuttx/spinlock.h>
+ #include <nuttx/wireless/wireless.h>
+ 
+@@ -58,6 +59,10 @@
+ 
+ #define ESP_IW_EVENT_SIZE(field) \
+   (offsetof(struct iw_event, u) + sizeof(((union iwreq_data *)0)->field))
++
++#ifndef SSID_MAX_LEN
++#  define SSID_MAX_LEN 32
++#endif
+ 
+ #ifdef CONFIG_ESPRESSIF_WIFI_SCAN_RESULT_SIZE
+ #  define WIFI_SCAN_RESULT_SIZE      CONFIG_ESPRESSIF_WIFI_SCAN_RESULT_SIZE
+diff --git a/arch/xtensa/src/common/espressif/esp_wlan.c b/arch/xtensa/src/common/espressif/esp_wlan.c
+--- a/arch/xtensa/src/common/espressif/esp_wlan.c
++++ b/arch/xtensa/src/common/espressif/esp_wlan.c
+@@ -60,6 +60,14 @@
+ #elif CONFIG_ARCH_CHIP_ESP32S3
+ #  include "esp32s3_wifi_adapter.h"
+ #  include "esp32s3_systemreset.h"
++#endif
++
++#ifdef CONFIG_ARCH_CHIP_ESP32
++#  define ESPRESSIF_WLAN_DEVS ESP32_WLAN_DEVS
++#elif defined(CONFIG_ARCH_CHIP_ESP32S2)
++#  define ESPRESSIF_WLAN_DEVS ESP32S2_WLAN_DEVS
++#elif defined(CONFIG_ARCH_CHIP_ESP32S3)
++#  define ESPRESSIF_WLAN_DEVS ESP32S3_WLAN_DEVS
+ #endif
+ 
+ /****************************************************************************
+diff --git a/arch/xtensa/src/esp32/esp32_serial.c b/arch/xtensa/src/esp32/esp32_serial.c
+--- a/arch/xtensa/src/esp32/esp32_serial.c
++++ b/arch/xtensa/src/esp32/esp32_serial.c
+@@ -1390,13 +1390,13 @@
+ 
+ #ifdef HAVE_RS485
+       if ((enabled & UART_TX_BRK_IDLE_DONE_INT_ENA) != 0 &&
+-          (status & UART_TX_DONE_INT_ST) != 0)
++          (priv->status & UART_TX_BRK_IDLE_DONE_INT_RAW) != 0)
+         {
+           /* If all bytes were transmitted, then we can disable the RS485
+            * transmit (TX/nTX) pin.
+            */
+ 
+-          nfifo = REG_MASK(status, UART_TXFIFO_CNT);
++          nfifo = (status & UART_TXFIFO_CNT_M) >> UART_TXFIFO_CNT_S;
+           if (nfifo == 0)
+             {
+               esp32_gpiowrite(priv->config->rs485_dir_gpio,
+@@ -1432,7 +1432,7 @@
+       if ((enabled & (UART_TX_DONE_INT_ENA | UART_TXFIFO_EMPTY_INT_ENA))
+           != 0)
+         {
+-          nfifo = REG_MASK(status, UART_TXFIFO_CNT);
++          nfifo = (status & UART_TXFIFO_CNT_M) >> UART_TXFIFO_CNT_S;
+           if (nfifo < 0x7f)
+             {
+               /* The TXFIFO is not full ... process outgoing bytes */
+diff --git a/arch/xtensa/src/esp32/esp32_wifi_adapter.c b/arch/xtensa/src/esp32/esp32_wifi_adapter.c
+--- a/arch/xtensa/src/esp32/esp32_wifi_adapter.c
++++ b/arch/xtensa/src/esp32/esp32_wifi_adapter.c
+@@ -5952,6 +5952,29 @@
+       goto errout;
+     }
+ 
++  /* Seed the cached AP configuration synchronously.  The AP_START event
++   * runs asynchronously, so an immediate ESSID ioctl must not copy the
++   * zero-initialized cache and set max_connection to zero.
++   */
++
++  ret = esp_wifi_get_config(WIFI_IF_AP, &g_softap_wifi_cfg);
++  if (ret)
++    {
++      ret = wifi_errno_trans(ret);
++      goto errout;
++    }
++
++  if (g_softap_wifi_cfg.ap.max_connection == 0)
++    {
++      g_softap_wifi_cfg.ap.max_connection = 4;
++      ret = esp_wifi_set_config(WIFI_IF_AP, &g_softap_wifi_cfg);
++      if (ret)
++        {
++          ret = wifi_errno_trans(ret);
++          goto errout;
++        }
++    }
++
+   ret = esp_wifi_start();
+   if (ret)
+     {
+diff --git a/arch/xtensa/src/esp32/esp32_wlan.c b/arch/xtensa/src/esp32/esp32_wlan.c
+--- a/arch/xtensa/src/esp32/esp32_wlan.c
++++ b/arch/xtensa/src/esp32/esp32_wlan.c
+@@ -1166,6 +1166,18 @@
+     }
+ 
+   priv->ifup = true;
++
++#ifdef ESP32_WLAN_HAS_SOFTAP
++  /* A started SoftAP can transmit before any station is associated.
++   * Mark its carrier available so socket sends, including DHCP offers,
++   * are not rejected with EHOSTUNREACH.
++   */
++
++  if (priv->ops == &g_softap_ops)
++    {
++      netdev_carrier_on(dev);
++    }
++#endif
+   if (g_callback_register_ref == 0)
+     {
+       ret = esp32_register_shutdown_handler(esp_wifi_stop_callback);
+@@ -1221,6 +1233,13 @@
+   /* Mark the device "down" */
+ 
+   priv->ifup = false;
++
++#ifdef ESP32_WLAN_HAS_SOFTAP
++  if (priv->ops == &g_softap_ops)
++    {
++      netdev_carrier_off(dev);
++    }
++#endif
+ 
+   ret = priv->ops->stop();
+   if (ret < 0)
+diff --git a/arch/xtensa/src/esp32/Make.defs b/arch/xtensa/src/esp32/Make.defs
+--- a/arch/xtensa/src/esp32/Make.defs
++++ b/arch/xtensa/src/esp32/Make.defs
+@@ -284,7 +284,10 @@
+ 	$(Q) git -C chip/$(ESP_HAL_3RDPARTY_REPO)/components/mbedtls/mbedtls reset --quiet --hard
+ endif
+ 	$(Q) echo "Applying patches..."
+-	$(Q) cd chip/$(ESP_HAL_3RDPARTY_REPO)/components/mbedtls/mbedtls && git apply ../../../nuttx/patches/components/mbedtls/mbedtls/*.patch
++	$(Q) cd chip/$(ESP_HAL_3RDPARTY_REPO)/components/mbedtls/mbedtls && \
++	  (git apply --check ../../../nuttx/patches/components/mbedtls/mbedtls/*.patch && \
++	   git apply ../../../nuttx/patches/components/mbedtls/mbedtls/*.patch) || \
++	  echo "mbedTLS patches already applied"
+ endif
+ 
+ ifeq ($(CONFIG_ESP32_WIRELESS),y)
+diff --git a/arch/xtensa/src/esp32/Wireless.mk b/arch/xtensa/src/esp32/Wireless.mk
+--- a/arch/xtensa/src/esp32/Wireless.mk
++++ b/arch/xtensa/src/esp32/Wireless.mk
+@@ -96,12 +96,23 @@
+ CHIP_CSRCS += rsa_alt_helpers.c
+ CHIP_CSRCS += ecdh.c
+ CHIP_CSRCS += pk_ecc.c
++CHIP_CSRCS += entropy_poll.c
++CHIP_CSRCS += ssl_ciphersuites.c
++CHIP_CSRCS += ssl_client.c
++CHIP_CSRCS += ssl_debug_helpers_generated.c
++CHIP_CSRCS += ssl_msg.c
++CHIP_CSRCS += ssl_tls.c
++CHIP_CSRCS += ssl_tls12_client.c
++CHIP_CSRCS += ssl_tls12_server.c
++CHIP_CSRCS += x509.c
++CHIP_CSRCS += x509_crt.c
+ 
+ VPATH += chip$(DELIM)$(ESP_HAL_3RDPARTY_REPO)$(DELIM)components$(DELIM)mbedtls$(DELIM)port
+ 
+ CHIP_CSRCS += esp_hardware.c
+ CHIP_CSRCS += esp_mem.c
+ CHIP_CSRCS += esp_timing.c
++CHIP_CSRCS += esp_platform_time.c
+ 
+ VPATH += chip$(DELIM)$(ESP_HAL_3RDPARTY_REPO)$(DELIM)components$(DELIM)mbedtls$(DELIM)port$(DELIM)md
+ 
+diff --git a/boards/xtensa/esp32/esp32-devkitc/include/board.h b/boards/xtensa/esp32/esp32-devkitc/include/board.h
+--- a/boards/xtensa/esp32/esp32-devkitc/include/board.h
++++ b/boards/xtensa/esp32/esp32-devkitc/include/board.h
+@@ -52,7 +52,7 @@
+ /* GPIO pins used by the GPIO Subsystem */
+ 
+ #define BOARD_NGPIOOUT    1 /* Amount of GPIO Output pins */
+-#define BOARD_NGPIOIN     1 /* Amount of GPIO Input without Interruption */
+-#define BOARD_NGPIOINT    1 /* Amount of GPIO Input w/ Interruption pins */
++#define BOARD_NGPIOIN     0 /* Amount of GPIO Input without Interruption */
++#define BOARD_NGPIOINT    0 /* Amount of GPIO Input w/ Interruption pins */
+ 
+ #endif /* __BOARDS_XTENSA_ESP32_ESP32_DEVKITC_INCLUDE_BOARD_H */
+diff --git a/boards/xtensa/esp32/esp32-devkitc/src/esp32_bringup.c b/boards/xtensa/esp32/esp32-devkitc/src/esp32_bringup.c
+--- a/boards/xtensa/esp32/esp32-devkitc/src/esp32_bringup.c
++++ b/boards/xtensa/esp32/esp32-devkitc/src/esp32_bringup.c
+@@ -36,6 +36,7 @@
+ #include <syslog.h>
+ #include <debug.h>
+ #include <stdio.h>
++#include <spawn.h>
+ 
+ #include <errno.h>
+ #if defined(CONFIG_ESP32_EFUSE)
+@@ -758,6 +759,19 @@
+     }
+ #endif
+ 
++#ifdef CONFIG_SOIL_NODE_AUTOSTART
++  {
++    char *const argv[] = {"soil_node", NULL};
++    pid_t pid;
++
++    ret = posix_spawn(&pid, argv[0], NULL, NULL, argv, NULL);
++    if (ret < 0)
++      {
++        syslog(LOG_ERR, "Failed to start soil_node: %d\n", ret);
++      }
++  }
++#endif
++
+   /* If we got here then perhaps not all initialization was successful, but
+    * at least enough succeeded to bring-up NSH with perhaps reduced
+    * capabilities.
+diff --git a/boards/xtensa/esp32/esp32-devkitc/src/esp32_gpio.c b/boards/xtensa/esp32/esp32-devkitc/src/esp32_gpio.c
+--- a/boards/xtensa/esp32/esp32-devkitc/src/esp32_gpio.c
++++ b/boards/xtensa/esp32/esp32-devkitc/src/esp32_gpio.c
+@@ -54,19 +54,19 @@
+  * used.
+  */
+ 
+-#define GPIO_OUT1    15
++#define GPIO_OUT1    5
+ 
+ /* Input pins. GPIO18 is used as an example, any other inputs could be
+  * used.
+  */
+ 
+-#define GPIO_IN1     18
++#define GPIO_IN1     34
+ 
+ /* Interrupt pins.  GPIO22 is used as an example, any other inputs could be
+  * used.
+  */
+ 
+-#define GPIO_IRQPIN1  22
++#define GPIO_IRQPIN1  35
+ 
+ /****************************************************************************
+  * Private Types

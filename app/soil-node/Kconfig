@@ -1,0 +1,44 @@
+config SOIL_NODE
+	bool "ZhiXiaoBan soil node"
+	default n
+	depends on ESP32_WIFI && NETUTILS_MQTTC
+	---help---
+		OpenVela soil sensor node for ESP32-WROOM-32E.
+		Reads an RS485 Modbus soil sensor, stores configuration,
+		connects Wi-Fi, exposes a provisioning page, and publishes
+		JSON readings over MQTT.
+
+if SOIL_NODE
+
+config SOIL_NODE_PROGNAME
+	string "Program name"
+	default "soil_node"
+
+config SOIL_NODE_PRIORITY
+	int "Task priority"
+	default 100
+
+config SOIL_NODE_AUTOSTART
+	bool "Start the soil node at boot"
+	default y
+
+config SOIL_NODE_STACKSIZE
+	int "Task stack size"
+	default 24576
+
+config SOIL_NODE_DEEP_SLEEP
+	bool "Deep sleep between upload cycles"
+	default y
+
+config SOIL_NODE_MQTT_TLS
+	bool "MQTT over TLS using the ESP32 HAL mbedTLS"
+	default y
+	help
+	  Build MQTT-C against the mbedTLS copy embedded in the ESP32
+	  HAL. This avoids linking a second mbedTLS instance from apps.
+
+config SOIL_NODE_UART_DEV
+	string "RS485 UART device"
+	default "/dev/ttyS1"
+
+endif

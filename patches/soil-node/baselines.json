@@ -1,0 +1,121 @@
+{
+  "checked_at": "2026-11-04",
+  "baselines": {
+    "nuttx": {
+      "repository": "https://github.com/open-vela/nuttx",
+      "revision": "dd92bcf425738734d1b8aed09c2bd4dbe3f2e438"
+    },
+    "apps": {
+      "repository": "https://github.com/open-vela/nuttx-apps",
+      "revision": "dcc6a95c3b323e533c98fde8fb209f99e24f0fdd"
+    },
+    "esp-hal": {
+      "repository": "https://github.com/espressif/esp-hal-3rdparty",
+      "revision": "9fc713a95b1ff150dd0b0647e465d3c624056bb1"
+    }
+  },
+  "files": [
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/common/espressif/esp_wifi_utils.c",
+      "before_sha256": "301a1ff4c74d9d69361ff3833095c3ef3faef1cec7d83d9a8f45490dc7fd91d0",
+      "after_sha256": "8d0173edf5907648de3480257c0f0ba1bff1644957d2633333eb51e4cf988bef"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/common/espressif/esp_wlan.c",
+      "before_sha256": "30960437284a43ae7f41fe48865f4a92f875c45d1ab881de6af155ecd32cd9d5",
+      "after_sha256": "291135c7f3a2711a75a29e241cda200eb16fea925bcbc1d4e188a11a7cee6e6c"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32/esp32_serial.c",
+      "before_sha256": "0827f27d436839b231e3989ae2ed2c07e1865a95b0b4b05e8681c78491abdec8",
+      "after_sha256": "b7d60c65e798230b4802eb5c3a9d821cee35c762e633328422a7d3c744c31164"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32/esp32_wifi_adapter.c",
+      "before_sha256": "76a47716d98901fa4b830f7b8fc4b8107e53981981e3b7f53deeb774be592a4b",
+      "after_sha256": "f319f566b42cddbeeb0bbeb5057ca7df0fead3f0480552504c7329806ef34606"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32/esp32_wlan.c",
+      "before_sha256": "67219c26f877b965e507a4d512252d15eb450ffe89ab127b5093d92263aa5d05",
+      "after_sha256": "0dfce7337c097a3d99c884259194a62cc207315e1360c6e4c0bd46d2a27249a6"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32/Make.defs",
+      "before_sha256": "6e52cc21bae041003564653eaa468a8c482890ce8b4505b96f2182c986870aa7",
+      "after_sha256": "68b9fe86be985f7c74b298c4d8d5b2ac4910c4b432d92046750e2e889a07f485"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32/Wireless.mk",
+      "before_sha256": "4283ab378fc02a68bf7f38a8637bf96ddb44ab81b6a0bd775da5abb12ad2fa28",
+      "after_sha256": "710377a72d105eb5ca468d6ce93f4e27d4e2f4f8649468ed337e46f0cad9cc70"
+    },
+    {
+      "tree": "nuttx",
+      "path": "boards/xtensa/esp32/esp32-devkitc/include/board.h",
+      "before_sha256": "3b6ad79f870ba26615ebb0155dc43f2fddab44814c1f403bdc6d9724d075347e",
+      "after_sha256": "6422df40c569b963c1ecade582f339c43dbaf03114f762e76718eaaf875ed872"
+    },
+    {
+      "tree": "nuttx",
+      "path": "boards/xtensa/esp32/esp32-devkitc/src/esp32_bringup.c",
+      "before_sha256": "477cf03f42b30f918105ebb92e9a69d596b6c45f1f0813abb636ba56d775d469",
+      "after_sha256": "b8e3416c903477c772ac2cd8a37015fa24fb2df2738235f5b741b7d51aaba92d"
+    },
+    {
+      "tree": "nuttx",
+      "path": "boards/xtensa/esp32/esp32-devkitc/src/esp32_gpio.c",
+      "before_sha256": "abf6ef2c17d37d29650b76767332c749effbae66e428d3921354d417143d1eaf",
+      "after_sha256": "5cfe5e549a4b0404c20bda8d757d409460c9e9962842e9c65dedd91893e4ba19"
+    },
+    {
+      "tree": "apps",
+      "path": "netutils/mqttc/Kconfig",
+      "before_sha256": "f5de1149ba08a426e0c0f4f377600e11061301f51de6608da94af2774a5111bd",
+      "after_sha256": "c6a106b525cfd21ee3aa45f11e19323d7b9f227fb0417508f4068c27cb3770d7"
+    },
+    {
+      "tree": "apps",
+      "path": "netutils/mqttc/Make.defs",
+      "before_sha256": "b37d9ea73c60cac2fcb5691d29c813c89aa36732a61a7d794324eab68ec43d82",
+      "after_sha256": "24a1053894e7c349ad60cd63ad70759b42c21c4ecb8d59beff6d988b4cc87dbf"
+    },
+    {
+      "tree": "apps",
+      "path": "netutils/mqttc/Makefile",
+      "before_sha256": "1c40cc56a31ca7d895089e99be57bf87d5c89e284f9fdbffe8ed70ad79c9f08a",
+      "after_sha256": "71f77c1e5825fed767685994aa8b1e707757e18c783f17e815a7d9d20b035457"
+    },
+    {
+      "tree": "esp-hal",
+      "path": "components/esp_hw_support/clk_ctrl_os.c",
+      "before_sha256": "df5587b83bc40978a2db93b69ac6b26e5c8115751d372842c1fd29500f33134c",
+      "after_sha256": "70195791048683b0ff6129aa2e045529e48a86f256cbdceaa789a7166f22ac91"
+    },
+    {
+      "tree": "esp-hal",
+      "path": "components/esp_hw_support/modem_clock.c",
+      "before_sha256": "ca42af2e334a6d40945e4a830f3db850f6e838b16363d64eb97427225884c3b0",
+      "after_sha256": "64b030894456c78aabc3fa7a731eba047fb253a490d22dd3a8c9027df29c7567"
+    },
+    {
+      "tree": "esp-hal",
+      "path": "components/mbedtls/port/esp_platform_time.c",
+      "before_sha256": "68b63f013694f5ad155293adc9c9eb1fbfed58300966368b7fcc275f651aa864",
+      "after_sha256": "942733faef621d2a99b468626a76f0792480b3a4b488e2596e1fe9c2509eb3ce"
+    },
+    {
+      "tree": "esp-hal",
+      "path": "nuttx/esp32/include/sdkconfig.h",
+      "before_sha256": "c005e4cb27728283800dde32e68e848fe9fbe5b38202a251073606346a8fe4b2",
+      "after_sha256": "70a57d434c3168917d67aee956dcddd4554775264d10b1dbfde304ba5e559100"
+    }
+  ]
+}

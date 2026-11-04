@@ -1,0 +1,8 @@
+{
+  "nuttx_commit": "fc3f07c0871f4bdaca0d19e48bd9d8b45fe2314b",
+  "apps_commit": "bf70c804de0de6ed18dcd2eaf25d504ff2aabc89",
+  "esp_hal_commit": "9fc713a95b1ff150dd0b0647e465d3c624056bb1",
+  "toolchain": "xtensa-esp32-elf-gcc (crosstool-NG esp-2020r3) 8.4.0",
+  "firmware_sha256": "9faedf4f4094433803472a5d90e49e3151d06e9fe1cc9aef4b35e85261dfe309",
+  "scope": "Complete soil-node app, current board/library replacement files; base SDK and compiler are external dependencies."
+}

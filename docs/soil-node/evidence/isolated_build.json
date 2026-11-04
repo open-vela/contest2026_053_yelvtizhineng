@@ -1,0 +1,8 @@
+{
+  "build_root": "/tmp/contest_soil_review_20261104_chy3qxru",
+  "configure_exit": 0,
+  "build_exit": 0,
+  "log": "/tmp/contest_soil_review_20261104_chy3qxru/review_build.log",
+  "scope": "Independent workspace reconstructed from recorded local SDK snapshots; official patch preimages verified; cached HAL and MQTT-C dependencies reused. Not a fresh network repo sync or hardware test.",
+  "firmware_sha256": "6e831dae9fddb81b0bf720bd115c7d227a17950c36f871a1ddd8060b2d7ec762"
+}

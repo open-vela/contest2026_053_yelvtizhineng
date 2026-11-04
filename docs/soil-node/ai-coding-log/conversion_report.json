@@ -1,0 +1,107 @@
+{
+  "source_title": "土壤无线传感器适配",
+  "source_session_id": "01a15876-98e6-7c12-a5c1-9465772a9e8c",
+  "source_sha256": "0c2e77626fe893c0ea2598a609c2044a976ce1194489560c75fe6585b5b59e7d",
+  "source_size": 41754551,
+  "source_records": 22570,
+  "export_events": 7520,
+  "export_roles": {
+    "user": 92,
+    "assistant": 340,
+    "tool": 7088
+  },
+  "native_tool_calls": 3544,
+  "native_tool_outputs": 3544,
+  "tool_pairs_complete": true,
+  "first_ts": "2026-10-20T08:40:06.071Z",
+  "last_ts": "2026-11-04T01:59:22.708Z",
+  "json_lexical_unicode_escapes": {
+    "U+0085": 12,
+    "U+2028": 0,
+    "U+2029": 0
+  },
+  "json_decoded_values_unchanged_by_serialization": true,
+  "models": [
+    "deepseek-flash"
+  ],
+  "skipped_native_record_types": {
+    "session_meta/": 1,
+    "event_msg/task_started": 75,
+    "response_item/message": 37,
+    "world_state/": 9,
+    "turn_context/": 66,
+    "event_msg/item_completed": 6393,
+    "response_item/reasoning": 2742,
+    "token_usage_record/": 2767,
+    "event_msg/token_count": 2777,
+    "event_msg/task_complete": 75,
+    "event_msg/thread_settings_applied": 101,
+    "compacted/": 5,
+    "event_msg/thread_goal_updated": 2
+  },
+  "redaction": {
+    "distinct_credential_values": 7,
+    "candidate_occurrences_by_rule": {
+      "plain_assignment": 22,
+      "quoted_assignment": 6,
+      "chinese_credential": 1,
+      "soil_command": 21
+    },
+    "replacement_count": 142,
+    "affected_events": 90,
+    "method": "official snapshot_core redact_value + default and documented private custom rules before writing",
+    "credential_values_and_literal_patterns_included": false
+  },
+  "workspace_gate_passed": false,
+  "manual_export_requested_by_user": true,
+  "official_backfill_automatic_collection_claimed": false,
+  "timestamps_invented": false,
+  "content_summarized": false,
+  "current_model_substituted_for_source_model": false,
+  "original_source_unmodified": true,
+  "schema_tools": [
+    {
+      "path": "tools/export-session.py",
+      "blob_sha": "f2e5e14d60210bc2b961bcdeb610e20f5de38667",
+      "sha256": "2d1aae843a3f13a29b00bf273e45d24924b4a92fe4ac0878d10ddcb7da7cb119",
+      "source_url": "https://github.com/open-vela/.claude/blob/dev-ai-contest-2026/skills/contest-log-collector/tools/export-session.py"
+    },
+    {
+      "path": "adapters/shared/snapshot_core.py",
+      "blob_sha": "c86bd3e87a6593feb3ce9a15d4a1cf3d3161b7e5",
+      "sha256": "ce6ab1ad5b45bffd16748bad3008a059ea39e0e540bc32d8f5b78fa0e76a0faa",
+      "source_url": "https://github.com/open-vela/.claude/blob/dev-ai-contest-2026/skills/contest-log-collector/adapters/shared/snapshot_core.py"
+    },
+    {
+      "path": "adapters/shared/get_github_login.py",
+      "blob_sha": "3691779237e49f83f7fe7d62d591f005bc9f37c3",
+      "sha256": "615afe699ac5e199783e4225288097dba27b24ab2e986a6709a3c6572e424e83",
+      "source_url": "https://github.com/open-vela/.claude/blob/dev-ai-contest-2026/skills/contest-log-collector/adapters/shared/get_github_login.py"
+    },
+    {
+      "path": "adapters/codex/backfill_codex.py",
+      "blob_sha": "470666323019bce0704c8f738c21bf9ce911956f",
+      "sha256": "6e0457261dbe52296bdc216b702b9e508794fc177aece50aeb35f0968d563012",
+      "source_url": "https://github.com/open-vela/.claude/blob/dev-ai-contest-2026/skills/contest-log-collector/adapters/codex/backfill_codex.py"
+    },
+    {
+      "path": "schema/event.schema.json",
+      "blob_sha": "29737ee63baacea0979bb3290d479b9f81fda504",
+      "sha256": "36c9cce5cf8530cb3055e0e26d67cd3969272e4df5c13004ecfc92fe861c3af3",
+      "source_url": "https://github.com/open-vela/.claude/blob/dev-ai-contest-2026/skills/contest-log-collector/schema/event.schema.json"
+    },
+    {
+      "path": "schema/manifest.schema.json",
+      "blob_sha": "a2e2e9814b8ec82f95841d5cea333d2511005d2d",
+      "sha256": "22a9dee6b179df0bd8a9be843df4fb639f2630a3db9a72d3c016878ec5b2bc2d",
+      "source_url": "https://github.com/open-vela/.claude/blob/dev-ai-contest-2026/skills/contest-log-collector/schema/manifest.schema.json"
+    },
+    {
+      "path": "tools/validate-log.py",
+      "blob_sha": "e9fb4ef1ae342d8ee093a088b46193c3fa7246d3",
+      "sha256": "23e601bfe316bedc8ce45b7a69a09e30536314d41c79ff2c5ed3320a59a0a495",
+      "source_url": "https://github.com/open-vela/.claude/blob/dev-ai-contest-2026/skills/contest-log-collector/tools/validate-log.py"
+    }
+  ],
+  "upload_performed": false
+}
