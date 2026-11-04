@@ -1,0 +1,22 @@
+{
+  "pass": true,
+  "version": "2.3.1",
+  "source_archive_sha256": "f26be3e06817b2971f4d575e0542134acdeb4fb152ff44a18f3ed92b15eec1f8",
+  "library_sha256": "33abd9eea95ad948fe7e9920aad1df1e0ce8e7d2020a9e69de16e909df8e39c7",
+  "defined_symbols_namespaced": 48,
+  "loaded_code_and_data_bytes_unchanged": true,
+  "undefined_symbols": [
+    "U free",
+    "U malloc",
+    "U memcpy",
+    "U memmove",
+    "U memset",
+    "U printf",
+    "U pthread_once",
+    "U puts"
+  ],
+  "registry_url": "https://components.espressif.com/components/espressif/esp-sr/versions/2.3.1",
+  "registry_zip_sha256": "10b59046720948a1e35c17b7c8833936a53a11d9571265aade4a4be49e406c62",
+  "official_lock_component_hash": "46b1f70f8b561714b958d1c455213cca07162755d1b8df53498081199f15136f",
+  "mode": "WebRTC VAD, mode 0; no neural model or FreeRTOS task required"
+}

@@ -1,0 +1,21 @@
+{
+  "name": "espressif/esp_new_jpeg",
+  "version": "0.6.1",
+  "source_registry": "https://components.espressif.com/components/espressif/esp_new_jpeg/versions/0.6.1",
+  "official_M5_lock_component_hash": "e6af208a875abd0ecfc0213d3751a11b504b463ebde6930f24096047925fa5c1",
+  "download_archive_sha256": "e1793640f0ad72d6cec00e411d8184ebab1b1d65b242a8bb477df83962eafb17",
+  "target": "esp32s3",
+  "files_sha256": {
+    "esp_jpeg_enc.h": "a73eeee202e52b9285bcfa6cbf2d8d803c2f96e2b3dd6338d26736c3e6eb5deb",
+    "esp_jpeg_common.h": "548c85257c3cecd19c07015be2257ea870b8c9b5c31de9668c1884d5fe387351",
+    "esp_jpeg_version.h": "b39770865850a0c7a51c6dcb2988bd59ceca279b37d4ce60e2b956ae6251df84",
+    "LICENSE": "0bf7f2018fffa1caff5ecbf10d79707b218eea4e26b8c705d744de4556552815",
+    "libesp_new_jpeg.a": "4205b1258ce0ef9fd9946abfc7cd5f105b08316ea567e1136cec60b3e6330896"
+  },
+  "generated_archive": {
+    "file": "libesp_new_jpeg_flash.a",
+    "sha256": "29c7764e798b5039c79fc96c7e98a40b4c5c60fe3106549912664141001551cf",
+    "transform": ".iram1 -> .text.jpeg_task_flash; .iram1.literal -> .literal.jpeg_task_flash",
+    "instructions_and_section_flags_unchanged": true
+  }
+}

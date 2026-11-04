@@ -1,0 +1,44 @@
+############################################################################
+# apps/graphics/lvgl/Make.defs
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.  The
+# ASF licenses this file to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance with the
+# License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+############################################################################
+
+ifneq ($(CONFIG_GRAPHICS_LVGL),)
+CONFIGURED_APPS += $(APPDIR)/graphics/lvgl
+
+# It allows `<lvgl/lvgl.h>` import.
+
+CFLAGS += ${INCDIR_PREFIX}$(APPDIR)/graphics/lvgl
+CXXFLAGS += ${INCDIR_PREFIX}$(APPDIR)/graphics/lvgl
+
+# It allows `<lvgl.h>` import.
+
+CFLAGS += ${INCDIR_PREFIX}$(APPDIR)/graphics/lvgl/lvgl
+CXXFLAGS += ${INCDIR_PREFIX}$(APPDIR)/graphics/lvgl/lvgl
+
+# 2026-09-10 实测坑：字体 .c 一旦重编就编不过——NuttX 的 Kconfig 把
+# LV_ATTRIBUTE_LARGE_CONST / LV_ATTRIBUTE_MEM_ALIGN 当字符串选项，空值落盘成 ""，
+# 而 lv_conf_internal.h 是把 CONFIG_LV_ATTRIBUTE_* 当属性名直接展开的 →
+# static "" const uint8_t glyph_bitmap[] 语法错（含 LVGL 自带 montserrat）。
+# 这里在命令行定义成空（LVGL 内部有 #ifndef 守卫，故生效），
+# 与旧配置（这两项未定义）同义。
+CFLAGS += -DLV_ATTRIBUTE_LARGE_CONST= -DLV_ATTRIBUTE_MEM_ALIGN=
+
+-include $(APPDIR)/graphics/lvgl/lvgl/tests/Make.defs
+
+endif

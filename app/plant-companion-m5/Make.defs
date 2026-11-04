@@ -1,0 +1,9 @@
+############################################################################
+# apps/plant-companion/Make.defs
+#
+# Conditionally include plant-companion in the configured apps list.
+############################################################################
+
+ifneq ($(CONFIG_PLANT_COMPANION),)
+CONFIGURED_APPS += $(APPDIR)/plant-companion
+endif

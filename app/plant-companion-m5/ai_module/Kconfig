@@ -1,0 +1,52 @@
+############################################################################
+# apps/plant-companion/ai_module/Kconfig
+#
+# AI 模块配置选项
+############################################################################
+
+config PLANT_AI_MODULE
+	bool "Enable Plant Companion AI Module"
+	default n
+	depends on ESP32S3_WIFI
+	---help---
+		Enable the AI module for plant care analysis.
+		This requires WiFi connectivity to access MiMo API.
+
+if PLANT_AI_MODULE
+
+config PLANT_AI_API_KEY
+	string "MiMo API Key"
+	default ""
+	---help---
+		The API key for Xiaomi MiMo platform.
+		Get it from https://api.xiaomimimo.com
+
+config PLANT_AI_TEXT_CHAT
+	bool "Enable Text Chat Module"
+	default y
+	---help---
+		Enable the text chat module for plant care Q&A.
+
+config PLANT_AI_IMAGE_DETECT
+	bool "Enable Image Detection Module"
+	default y
+	depends on BOARD_CAMERA_OV3660
+	---help---
+		Enable the image detection module for plant disease
+		detection. Requires camera support.
+
+config PLANT_AI_ANALYSIS
+	bool "Enable AI Analysis Module"
+	default y
+	depends on PLANT_AI_TEXT_CHAT
+	---help---
+		Enable the comprehensive AI analysis module that
+		combines sensor data and image analysis.
+
+config PLANT_AI_DEBUG
+	bool "Enable AI Module Debug"
+	default n
+	---help---
+		Enable debug output for AI module.
+
+endif # PLANT_AI_MODULE
