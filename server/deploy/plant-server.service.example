@@ -1,0 +1,17 @@
+[Unit]
+Description=ZhiXiaoBan Plant Companion Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/plant_server
+EnvironmentFile=/etc/plant-server.env
+ExecStart=/opt/plant_server/.venv/bin/python run_server.py --host 0.0.0.0 --port 8011
+Restart=always
+RestartSec=5
+StandardOutput=append:/opt/plant_server/data/logs/server.log
+StandardError=append:/opt/plant_server/data/logs/server.err.log
+
+[Install]
+WantedBy=multi-user.target

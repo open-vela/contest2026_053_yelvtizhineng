@@ -31,6 +31,10 @@ def _plant_of_device(device_id):
             plant = db.one("SELECT * FROM plants WHERE user_id=? "
                            "ORDER BY created_at LIMIT 1",
                            (dev["owner_user_id"],))
+    if not plant:
+        # 多终端：新板卡第一包数据可能早于 App 绑定，别丢（自动建一盆）
+        from . import auto_plant_for_device
+        plant = auto_plant_for_device(device_id)
     return plant
 
 
@@ -71,6 +75,16 @@ def ingest(body: TeleIn, x_device_token: str = Header(None)):
         if not before:
             saved += 1
             last = rec
+    # soil-wifi 无心跳：遥测到达即刷新在线时间（管理台 MQTT 页用）
+    try:
+        db.exe(
+            "UPDATE devices SET last_seen_at=?, status='online' "
+            "WHERE id=?",
+            (utils.bj_now()[0], claims["sub"]),
+        )
+    except Exception as e:
+        print("[telemetry] soil last_seen skip:", e)
+
     health = None
     if last:
         score, mood, level = plant_ops.apply_telemetry(plant["id"], last)
@@ -85,3 +99,18 @@ def ingest(body: TeleIn, x_device_token: str = Header(None)):
     return {"ok": True, "saved": saved, "plant_id": plant["id"],
             "health": health,
             "auto_actions": len(fired)}
+
+
+@router.get("/latest")
+def telemetry_latest(x_device_token: str = Header(None)):
+    """嵌入式拉最新土壤八项（轻量，避免 devices/sync 大包截断）。"""
+    claims = _claims_device(x_device_token)
+    plant = _plant_of_device(claims["sub"])
+    if not plant:
+        return {"ok": False, "latest_telemetry": None}
+    last = db.one(
+        "SELECT ts,moisture,temp,ec,ph,salt,nitrogen,phosphorus,potassium,"
+        "source FROM telemetry WHERE plant_id=? ORDER BY ts DESC LIMIT 1",
+        (plant["id"],),
+    )
+    return {"ok": True, "latest_telemetry": last}

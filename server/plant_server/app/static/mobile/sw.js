@@ -1,6 +1,6 @@
 /* 植小伴 · 手机端离线壳：页面走「网络优先 + 缓存兜底」，接口一律不缓存 */
-var CACHE = 'zx-mobile-v20260917a';   /* 2026-09-17 自动朗读（回复念出来）：换壳版本号 */
-var SHELL = ['./', './index.html', './style.css', './app.js',
+var CACHE = 'zx-mobile-v20261104-soil-node2';   /* 2026-09-17 自动朗读（回复念出来）：换壳版本号 */
+var SHELL = ['./', './index.html', './style.css?v=20261104-soil-node2', './growth.css?v=20261104-soil-node2', './catalog.js?v=20261104-soil-node2', './app-growth-20261104.js?v=20261104-soil-node2',
              './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
@@ -11,7 +11,7 @@ self.addEventListener('install', function (e) {
 
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (ks) {
-    return Promise.all(ks.filter(function (k) { return k !== CACHE; })
+    return Promise.all(ks.filter(function (k) { return k.indexOf('zx-mobile-') === 0 && k !== CACHE; })
       .map(function (k) { return caches.delete(k); }));
   }).then(function () { return self.clients.claim(); }));
 });

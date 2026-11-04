@@ -8,8 +8,31 @@ import io
 import json
 import re
 import time
+import os
+import threading
 
 from .. import config
+from . import voice_profile
+from .intent_route import FastFallbackRoute
+_FAST_INTENT_ROUTE=FastFallbackRoute()
+
+_http_local = threading.local()
+
+
+def _mimo_http():
+    """Reuse TLS connections per worker, without sharing Session state."""
+    if not hasattr(_http_local, "session"):
+        from .mimo_transport import make_session
+        _http_local.session = make_session()
+    return _http_local.session
+
+def _sse_body(response, chunk_size):
+    # Protocol test doubles and older non-Requests transports retain their
+    # existing iterator. Actual Requests gets a separately retained body iterator.
+    if getattr(response, 'raw', None) is None or not hasattr(response, 'iter_content'):
+        return None
+    from .mimo_transport import SSEBody
+    return SSEBody(response, chunk_size)
 
 IMG_PROMPT = (
     "你是植小伴的植物医生。请观察图片，输出**严格 JSON**（不要 markdown、"
@@ -192,12 +215,14 @@ class AiGateway:
                    "api-key": config.MIMO_API_KEY,
                    "Authorization": "Bearer " + config.MIMO_API_KEY}
         try:
-            r = requests.post(config.MIMO_BASE_URL, headers=headers,
+            r = _mimo_http().post(config.MIMO_BASE_URL, headers=headers,
                               json=payload, timeout=timeout)
         except requests.RequestException as e:
             raise UpstreamError("连接失败 %s: %s" % (type(e).__name__, str(e)[:120]))
         if r.status_code >= 500:
-            raise UpstreamError("HTTP %s %s" % (r.status_code, r.text[:120]))
+            error=UpstreamError("HTTP %s %s" % (r.status_code, r.text[:120]))
+            error.http_status=r.status_code
+            raise error
         r.raise_for_status()
         j = r.json()
         msg = (j.get("choices") or [{}])[0].get("message") or {}
@@ -205,6 +230,19 @@ class AiGateway:
 
     def _mimo_chat(self, payload, timeout=45):
         return self._mimo_chat_ex(payload, timeout)[0]
+
+    def vision_inspect_complete(self, payload, on_prefix=None):
+        """Collect one complete streamed caption without exposing a prefix."""
+        from .vision_reply_stream import complete_caption
+        headers = {'Content-Type': 'application/json',
+                   'api-key': config.MIMO_API_KEY,
+                   'Authorization': 'Bearer ' + config.MIMO_API_KEY}
+        text, metrics = complete_caption(_mimo_http().post,
+                                         config.MIMO_BASE_URL, headers, payload, on_prefix=on_prefix)
+        print('[Vision][Perf] stream headers_ms=%d first_text_ms=%d complete_ms=%d connect_ms=%d fresh=%d' %
+              (metrics['headers_ms'], metrics['first_text_ms'], metrics['complete_ms'],
+               metrics['connect_ms'], metrics['fresh']), flush=True)
+        return text
 
     def _mimo_chat_ex(self, payload, timeout=45):
         """同上，但额外告诉你"最终用的是哪个模型"（自检要如实显示降级结果）。"""
@@ -352,6 +390,13 @@ class AiGateway:
         said = (self.transcribe(wav_bytes) or "").strip()
         if not said or "没听清" in said:
             return "", "没听清，请再说一遍"
+        return said, self.voice_answer(said)
+
+    def voice_answer(self, said):
+        """语音链路的文本作答（占位符重试 + 异常兜底）。
+
+        2026-09-25 秒回层：题库/答案缓存命中时 finalize 不再走这里，
+        只有真正需要大模型的问题才付出这次调用。"""
         try:
             answer = self.chat_text(said, voice=True)
             if looks_like_placeholder(answer):
@@ -364,7 +409,7 @@ class AiGateway:
                     answer = "我刚刚没想清楚，你再说一遍好吗？"
         except Exception:
             answer = "我这边想事情卡住了，等会儿再问我一次好吗？"
-        return said, answer
+        return answer
 
     def audio_understand(self, wav_bytes):
         """兼容壳：仍返回"转写：… 回答：…"一整段（自检等旧调用方在用）。"""
@@ -389,6 +434,109 @@ class AiGateway:
         return _clean_stt(self._mimo_chat(payload, timeout=60))
 
     # ── 对外：文本问答 ──
+    def device_intent(self, system, utterance):
+        payload = {"model": config.MIMO_MODEL,
+                   "messages": [{"role": "system", "content": system},
+                                {"role": "user", "content": utterance}],
+                   "max_completion_tokens": 600,
+                   "thinking": {"type": "disabled"},
+                   "response_format": {"type": "json_object"}, "temperature": 0}
+        return self._mimo_chat(payload, timeout=15)
+
+    def device_intent_stream(self, system, utterance, trace=0, first_content_seconds=None):
+        """Incremental intent JSON; no retry after text. Content-free timings."""
+        import requests
+        from urllib3.util import Timeout
+        from .mimo_transport import IntentStreamDeadline
+        payload={"model":config.MIMO_MODEL,
+                 "messages":[{"role":"system","content":system},
+                             {"role":"user","content":utterance}],
+                 "max_completion_tokens":600,"thinking":{"type":"disabled"},
+                 "response_format":{"type":"json_object"},"temperature":0,"stream":True}
+        headers={"api-key":config.MIMO_API_KEY,"Authorization":"Bearer "+config.MIMO_API_KEY}
+        models=list(dict.fromkeys(m for m in [config.MIMO_MODEL,config.MIMO_TEXT_MODEL] if m))
+        delivered=False;last=None;started=time.monotonic();deadline=started+12.0
+        first_budget=float(first_content_seconds) if type(first_content_seconds) in (int,float) and 2.0<=first_content_seconds<=5.0 else None
+        # Only the existing owner-restricted 2s mode uses this circuit.
+        # Other callers retain their original model order and deadlines.
+        if first_budget==2.0:models=_FAST_INTENT_ROUTE.order(models)
+        for attempt,model in enumerate(models,1):
+            row={'trace':trace if type(trace) is int and trace>=0 else 0,
+                 'pid':os.getpid(),'attempt':attempt,'http_status':0,
+                 'request_start_ms':round((time.monotonic()-started)*1000),
+                 'event_count':0,'content_chars':0,'outcome':'cancelled','category':'none',
+                 'backup_first':bool(models[0]!=config.MIMO_MODEL),
+                 'route_cooldown_ms':_FAST_INTENT_ROUTE.remaining_ms() if first_budget==2.0 else 0}
+            def mark(key):row.setdefault(key,round((time.monotonic()-started)*1000))
+            try:
+                # Historical dual-2s trial failed when both providers needed
+                # more than2s. Keep the original backup 5s availability budget;
+                # the fast 2s limit applies only to the primary model.
+                request_budget=(5.0 if first_budget==2.0 and model!=config.MIMO_MODEL else first_budget)
+                row['first_content_budget_ms']=round(request_budget*1000) if request_budget else 0
+                request_deadline=min(deadline,time.monotonic()+request_budget) if request_budget else deadline
+                remaining=request_deadline-time.monotonic()
+                if remaining<=0:raise requests.Timeout("Intent stream deadline")
+                data=dict(payload,model=model);done=False;total=0
+                guard_kwargs={'first_content_deadline':request_deadline} if first_budget else {}
+                with _mimo_http().post(config.MIMO_BASE_URL,headers=headers,json=data,
+                                       stream=True,timeout=Timeout(total=remaining,connect=min(8,remaining),read=remaining)) as response:
+                    with IntentStreamDeadline(response,deadline,**guard_kwargs) as guard:
+                        mark('headers_ms');row['http_status']=response.status_code
+                        if response.status_code>=500:raise UpstreamError('Intent stream HTTP %d'%response.status_code)
+                        if response.status_code!=200:raise ValueError('Intent stream HTTP %d'%response.status_code)
+                        for key, attribute in [('connect_ms','_plant_connect_ms'),('fresh','_plant_fresh_connection')]:
+                            value=getattr(response,attribute,None)
+                            if type(value) is int and value>=0:row[key]=value
+                        body=_sse_body(response,1)
+                        lines=body.lines() if body else response.iter_lines(chunk_size=1)
+                        for line in lines:
+                            guard.check()
+                            if not line.startswith(b'data:'):continue
+                            raw=line[5:].strip()
+                            if raw==b'[DONE]':done=True;break
+                            mark('first_event_ms');row['event_count']+=1
+                            obj=json.loads(raw)
+                            if obj.get('error'):raise UpstreamError('Intent stream rejected')
+                            part=(((obj.get('choices') or [{}])[0].get('delta') or {}).get('content') or '')
+                            if not isinstance(part,str):raise ValueError('Invalid intent text')
+                            if part:
+                                if not delivered:guard.content_started()
+                                total+=len(part)
+                                if total>65536:raise ValueError('Intent stream limit')
+                                mark('first_content_ms');row['content_chars']=total
+                                delivered=True;yield part
+                        guard.check()
+                        if done and body:
+                            guard.content_complete()
+                            tail=body.finish()
+                            row['drain_ms']=tail['elapsed_ms'];row['drain_outcome']=tail['outcome']
+                if not done or not total:raise UpstreamError('Incomplete intent stream')
+                if first_budget==2.0:_FAST_INTENT_ROUTE.succeeded(model)
+                row['outcome']='completed';return
+            except (requests.RequestException,UpstreamError) as error:
+                category=type(error).__name__
+                row['category']=category if category in {'UpstreamError','ConnectionError','ReadTimeout','ConnectTimeout','Timeout'} else 'Other'
+                expired=time.monotonic()>=deadline
+                row['outcome']='failed' if delivered or expired or attempt==len(models) else 'retry_before_content'
+                last=error
+                if first_budget==2.0 and not delivered and model==config.MIMO_MODEL:
+                    _FAST_INTENT_ROUTE.failed(config.MIMO_MODEL)
+                if expired:raise UpstreamError('Intent stream deadline') from error
+                if delivered:raise UpstreamError('Intent stream interrupted') from error
+                # Preserve exactly the existing pre-first-delta fallback.
+            except ValueError as error:
+                row['category']='ValueError';row['outcome']='failed'
+                raise UpstreamError('Invalid intent stream') from error
+            except Exception:
+                row['category']='Other';row['outcome']='failed'
+                raise
+            finally:
+                mark('done_ms')
+                try:print('[IntentRequestTiming] '+json.dumps(row,sort_keys=True),flush=True)
+                except Exception:pass
+        raise UpstreamError('Intent stream unavailable') from last
+
     def chat_text(self, text, history=None, context=None, voice=False):
         """context：可选的背景补充（比如"用户养的那盆植物 + 最近一次读数"），
         会拼进 system 里。没有它也能聊 —— 没绑植物的新用户照样能随便问。
@@ -445,6 +593,55 @@ class AiGateway:
         return "我在听你说～植物怎么养我会，别的问题也想陪你聊：讲笑话、讲故事、猜谜语都行！"
 
     # ── 对外：TTS ──
+    def tts_pcm_stream(self, text):
+        """Provider SSE -> validated 24k mono PCM16, bounded and cancellable."""
+        from .mimo_transport import ResponseDeadline
+        started=time.monotonic()
+        spoken=voice_tts_text(text)
+        if not spoken:return
+        payload={"model":config.TTS_MODEL,"messages":[
+            {"role":"user","content":voice_profile.STYLE},
+            {"role":"assistant","content":spoken}],
+            "audio":{"voice":voice_profile.VOICE,"format":"pcm16"},
+            "stream":True,"max_completion_tokens":self.MAX_TOKENS}
+        headers={"api-key":config.MIMO_API_KEY,"Authorization":"Bearer "+config.MIMO_API_KEY}
+        with _mimo_http().post(config.MIMO_BASE_URL,headers=headers,json=payload,
+                               stream=True,timeout=(4,15)) as response:
+            if response.status_code!=200:raise UpstreamError("TTS stream HTTP %d"%response.status_code)
+            # First real PCM must arrive within8s; complete audio gets45s.
+            # Nested guards retain ownership until both watchdogs are joined.
+            with ResponseDeadline(response,started+45) as total_guard:
+                body=_sse_body(response,128)
+                lines=body.lines() if body else response.iter_lines(chunk_size=128)
+                def decoded():
+                    total=0;done=False
+                    for line in lines:
+                        total_guard.check()
+                        if not line.startswith(b'data:'):continue
+                        raw=line[5:].strip()
+                        if raw==b'[DONE]':done=True;break
+                        obj=json.loads(raw)
+                        if obj.get('error'):raise UpstreamError('TTS stream rejected')
+                        choice=(obj.get('choices') or [{}])[0]
+                        encoded=((choice.get('delta') or {}).get('audio') or {}).get('data','')
+                        if not encoded:continue
+                        pcm=base64.b64decode(encoded,validate=True);total+=len(pcm)
+                        if len(pcm)%2 or total>4*1024*1024:raise UpstreamError('Invalid TTS PCM length')
+                        if pcm:yield pcm
+                    total_guard.check()
+                    if not done or not total:raise UpstreamError('Incomplete TTS stream')
+                    total_guard.content_complete()
+                    if body:body.finish()
+                source=decoded()
+                try:
+                    with ResponseDeadline(response,started+8) as first_guard:
+                        try:first=next(source)
+                        except StopIteration:raise UpstreamError('Incomplete TTS stream') from None
+                        first_guard.check()
+                    yield first
+                    yield from source
+                finally:source.close()
+
     def tts(self, text):
         """合成语音。text 先用 voice_tts_text 收拾（去 emoji / 压空白 / 限长）。
 
@@ -457,7 +654,7 @@ class AiGateway:
         spoken = voice_tts_text(text)
         if not spoken:
             return None
-        audio = {"voice": config.TTS_VOICE}
+        audio = {"voice": voice_profile.VOICE}
         if config.TTS_SAMPLE_RATE:
             # MiMo TTS 不一定认这个字段；认就白赚 1/3 字节，不认也无害。
             audio["sample_rate"] = config.TTS_SAMPLE_RATE
@@ -467,7 +664,7 @@ class AiGateway:
             "model": config.TTS_MODEL,
             "messages": [
                 # 聊天放开后念的不只是植物内容，语气改成中性（陪小朋友的感觉）
-            {"role": "user", "content": "请用温柔亲切、像陪小朋友聊天的语气朗读"},
+            {"role": "user", "content": voice_profile.STYLE},
                 {"role": "assistant", "content": spoken}],
             "audio": audio,
             "max_completion_tokens": self.MAX_TOKENS,
@@ -477,7 +674,7 @@ class AiGateway:
             headers = {"Content-Type": "application/json",
                        "api-key": config.MIMO_API_KEY,
                        "Authorization": "Bearer " + config.MIMO_API_KEY}
-            j = requests.post(config.MIMO_BASE_URL, headers=headers,
+            j = _mimo_http().post(config.MIMO_BASE_URL, headers=headers,
                               json=payload, timeout=45).json()
             audio_b64 = ((j.get("choices") or [{}])[0]
                          .get("message") or {}).get("audio", {}).get("data", "")

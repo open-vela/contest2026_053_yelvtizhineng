@@ -1,0 +1,375 @@
+{
+  "snapshot": "/opt/plant_box_voice_20261031/qa_bank_v490_20261103.sqlite3",
+  "source_count": 43406,
+  "enabled_candidates": 43406,
+  "quarantined": [],
+  "categories": {
+    "小学图形、空间、测量与几何推理": 726,
+    "水、冰、河流湖泊与水循环": 1236,
+    "海洋、海岸与海洋生态": 1035,
+    "小学数的概念与运算原理，不批量生成纯算式": 644,
+    "飞机、火箭、航天器与飞行原理": 974,
+    "物质、溶解、混合与日常化学原理": 674,
+    "细胞、微生物与基础生命科学，排除医疗建议": 995,
+    "纸、木、玻璃、陶瓷、金属与塑料": 786,
+    "声音、振动、回声与乐器原理": 868,
+    "儿童园艺与植物观察的一般原理": 1174,
+    "能源、发电、节能与资源": 838,
+    "计算机硬件、操作系统与程序基础": 842,
+    "自行车、汽车、火车、船舶与交通原理": 867,
+    "睡眠、记忆、注意与学习的一般原理": 771,
+    "地球结构、岩石矿物与地质现象": 1397,
+    "人体结构、感官与运动的一般科学，排除诊疗营养处方": 837,
+    "食物网、生物多样性与生态系统": 1049,
+    "垃圾分类、循环利用与环境保护原理": 890,
+    "礼貌、合作、情绪表达与同理心，排除心理诊疗": 780,
+    "数字素养、密码常识与信息辨别，排除攻击方法": 825,
+    "汉字、词语、语法与阅读基础，排除作品原文": 421,
+    "光、颜色、影子、镜子与视觉现象": 801,
+    "电、磁与电器工作原理，排除危险实验步骤": 846,
+    "运动项目、动作原理与合作，排除伤病处置": 908,
+    "表达、写作、标点与语言交流原理": 742,
+    "植物器官、生长、繁殖与光合作用": 831,
+    "太阳系、日月星辰与基础天文": 1440,
+    "力、重力、摩擦、平衡与简单机械": 828,
+    "古代历史、考古与历史研究方法，排除争议结论": 1020,
+    "鸟类、羽毛、飞行与迁徙": 856,
+    "常见动物的身体结构与行为": 1423,
+    "机械、工具、机器人与工程基础": 762,
+    "天气、云雨风雪与气候原理": 1174,
+    "粮食、蔬果与农业常识": 889,
+    "传统节日、民俗、文字发展与文化常识": 641,
+    "哺乳动物的生活与适应": 871,
+    "常见花卉、树木与季节变化": 745,
+    "节奏、音高、乐器与音乐基础，不使用歌词": 1016,
+    "建筑、桥梁、道路与城市设施": 798,
+    "绘画、色彩、雕塑、摄影与艺术基础": 806,
+    "温度、热传递、保温与物态变化": 893,
+    "逻辑、分类、规律、估计与概率入门": 681,
+    "衣食住行用品与日常生活中的科学": 1164,
+    "网络、通信、信息传递与数字媒体原理": 829,
+    "昆虫、蜘蛛与常见小型无脊椎动物": 1017,
+    "中国自然地理与地域生活常识": 703,
+    "鱼类、两栖类、爬行类与水生动物": 979,
+    "地图、地形与世界基础地理": 1114
+  },
+  "samples": [
+    {
+      "question": "球和圆柱相交，交线是什么？",
+      "expected_id": "faq100k_00011a198cc3370938bad395",
+      "actual_id": "faq100k_00011a198cc3370938bad395",
+      "pass": true
+    },
+    {
+      "question": "在医学领域，watershed area指的是什么？",
+      "expected_id": "faq100k_0002753e1d1b9bc29c199b2f",
+      "actual_id": "faq100k_0002753e1d1b9bc29c199b2f",
+      "pass": true
+    },
+    {
+      "question": "鲸鱼是怎么呼吸的？呼吸孔有什么用？",
+      "expected_id": "faq100k_00056bab4a31e131dcf8d04c",
+      "actual_id": "faq100k_00056bab4a31e131dcf8d04c",
+      "pass": true
+    },
+    {
+      "question": "数字和数有什么区别？",
+      "expected_id": "faq100k_0007721b55a13e0234cdc2be",
+      "actual_id": null,
+      "pass": false
+    },
+    {
+      "question": "什么是次级成核？",
+      "expected_id": "faq100k_000b8291a14d074376c187f7",
+      "actual_id": "faq100k_000b8291a14d074376c187f7",
+      "pass": true
+    },
+    {
+      "question": "原核细胞和真核细胞分裂方式有什么不同？",
+      "expected_id": "faq100k_00108a38872c0124ad523f03",
+      "actual_id": "faq100k_00108a38872c0124ad523f03",
+      "pass": true
+    },
+    {
+      "question": "哪些材料可以被回收？",
+      "expected_id": "faq100k_00108e3adaf1f07499de142a",
+      "actual_id": "faq100k_00108e3adaf1f07499de142a",
+      "pass": true
+    },
+    {
+      "question": "拉普拉斯为什么修正了牛顿的声速公式？",
+      "expected_id": "faq100k_00133e4e2e4f4bdfdc548d1e",
+      "actual_id": "faq100k_00133e4e2e4f4bdfdc548d1e",
+      "pass": true
+    },
+    {
+      "question": "树是不是一年到头都在长高？",
+      "expected_id": "faq100k_001370df54e3d8a50164c85b",
+      "actual_id": "faq100k_001370df54e3d8a50164c85b",
+      "pass": true
+    },
+    {
+      "question": "无刷直流电动机为什么比用罩极式电动机的交流风扇更省电、更凉快？",
+      "expected_id": "faq100k_00142efadfa8005b537d536a",
+      "actual_id": "faq100k_00142efadfa8005b537d536a",
+      "pass": true
+    },
+    {
+      "question": "iOS是基于哪个操作系统开发的？它属于什么类型的操作系统？",
+      "expected_id": "faq100k_001927ca2c977274d1f69378",
+      "actual_id": null,
+      "pass": false
+    },
+    {
+      "question": "1995年日本神户地震中隧道本身受损情况如何？",
+      "expected_id": "faq100k_00199007ced388c653d3e071",
+      "actual_id": "faq100k_00199007ced388c653d3e071",
+      "pass": true
+    },
+    {
+      "question": "视觉工作记忆的内容存在大脑哪个区域？",
+      "expected_id": "faq100k_001bf0a3088dc6165fe8b2e8",
+      "actual_id": null,
+      "pass": false
+    },
+    {
+      "question": "锥状喀斯特（Kegelkarst）是什么样的热带喀斯特？",
+      "expected_id": "faq100k_001cc04ef29732ecce2ed5ae",
+      "actual_id": "faq100k_001cc04ef29732ecce2ed5ae",
+      "pass": true
+    },
+    {
+      "question": "体循环的作用是什么？",
+      "expected_id": "faq100k_001d11f2cc7032c84610794b",
+      "actual_id": "faq100k_001d11f2cc7032c84610794b",
+      "pass": true
+    },
+    {
+      "question": "干扰之后会发生什么？",
+      "expected_id": "faq100k_001fac683ff46861df158798",
+      "actual_id": "faq100k_001fac683ff46861df158798",
+      "pass": true
+    },
+    {
+      "question": "蚯蚓对堆肥有什么好处？",
+      "expected_id": "faq100k_001fba8e8d410ee4885bc7a7",
+      "actual_id": "faq100k_001fba8e8d410ee4885bc7a7",
+      "pass": true
+    },
+    {
+      "question": "大脑处理信息的速度和说话速度有什么差别？这会造成什么影响？",
+      "expected_id": "faq100k_0022099bb334d1a5a1f4e17b",
+      "actual_id": "faq100k_0022099bb334d1a5a1f4e17b",
+      "pass": true
+    },
+    {
+      "question": "以太网VPN是做什么的？",
+      "expected_id": "faq100k_0025b34e42983d654cf4f1c2",
+      "actual_id": "faq100k_0025b34e42983d654cf4f1c2",
+      "pass": true
+    },
+    {
+      "question": "\"您\"是什么意思?",
+      "expected_id": "faq100k_0025cd7ca429ebb30a522c70",
+      "actual_id": "faq100k_0025cd7ca429ebb30a522c70",
+      "pass": true
+    },
+    {
+      "question": "无机颜料为什么不容易老化变色？",
+      "expected_id": "faq100k_0029d7e5e0e666332bfeaf44",
+      "actual_id": "faq100k_0029d7e5e0e666332bfeaf44",
+      "pass": true
+    },
+    {
+      "question": "串联电路中一个灯泡烧坏了会怎样？",
+      "expected_id": "faq100k_002a76bafc41a1e092edafc4",
+      "actual_id": "faq100k_002a76bafc41a1e092edafc4",
+      "pass": true
+    },
+    {
+      "question": "IJF下面有哪些洲际柔道组织？",
+      "expected_id": "faq100k_002a932fd88c6fe49dad8861",
+      "actual_id": "faq100k_002a932fd88c6fe49dad8861",
+      "pass": true
+    },
+    {
+      "question": "亚里士多德认为修辞学的基础是什么？",
+      "expected_id": "faq100k_002e117fabc68bdd419732c4",
+      "actual_id": "faq100k_002e117fabc68bdd419732c4",
+      "pass": true
+    },
+    {
+      "question": "玉米黄质在气孔张开中起什么作用？绿光有什么影响？",
+      "expected_id": "faq100k_002fdedf36279a1a5d485fc1",
+      "actual_id": "faq100k_002fdedf36279a1a5d485fc1",
+      "pass": true
+    },
+    {
+      "question": "什么是沙罗周期？",
+      "expected_id": "faq100k_0030e0798c0118d47bae2050",
+      "actual_id": "faq100k_0030e0798c0118d47bae2050",
+      "pass": true
+    },
+    {
+      "question": "编织绳为什么适合用来悬吊人？",
+      "expected_id": "faq100k_003429f46ec4b54d98a0bc6c",
+      "actual_id": "faq100k_003429f46ec4b54d98a0bc6c",
+      "pass": true
+    },
+    {
+      "question": "飞鱼为什么会飞？",
+      "expected_id": "faq100k_00373488440dcd8e90221408",
+      "actual_id": "faq100k_00373488440dcd8e90221408",
+      "pass": true
+    },
+    {
+      "question": "蝴蝶一年繁殖几代？",
+      "expected_id": "faq100k_003a187cb64162469340c7f1",
+      "actual_id": "faq100k_003a187cb64162469340c7f1",
+      "pass": true
+    },
+    {
+      "question": "电动机属于哪一类装置？",
+      "expected_id": "faq100k_0040a63e78b403fa5f062958",
+      "actual_id": "faq100k_0040a63e78b403fa5f062958",
+      "pass": true
+    },
+    {
+      "question": "主要的气候正反馈有哪些？主要的平衡机制是什么？",
+      "expected_id": "faq100k_0042972fcdae9932971ae731",
+      "actual_id": "faq100k_0042972fcdae9932971ae731",
+      "pass": true
+    },
+    {
+      "question": "害虫和病害每年大约消耗世界小麦产量的多少？",
+      "expected_id": "faq100k_004877770a70bb9219b319b7",
+      "actual_id": "faq100k_004877770a70bb9219b319b7",
+      "pass": true
+    },
+    {
+      "question": "乌龙茶是怎么被发明出来的？",
+      "expected_id": "faq100k_004acb7dc7d945512390892f",
+      "actual_id": "faq100k_004acb7dc7d945512390892f",
+      "pass": true
+    },
+    {
+      "question": "雄性考拉爬新树时会做什么？这有什么作用？",
+      "expected_id": "faq100k_004b59aa4a87aeafd762efcb",
+      "actual_id": "faq100k_004b59aa4a87aeafd762efcb",
+      "pass": true
+    },
+    {
+      "question": "郁金香开花需要什么样的温度条件？",
+      "expected_id": "faq100k_004be96b5df2cb109a39c35d",
+      "actual_id": "faq100k_004be96b5df2cb109a39c35d",
+      "pass": true
+    },
+    {
+      "question": "奥尔加农（organum）最简单的形式是怎么做的？",
+      "expected_id": "faq100k_0056f0a44163f59b92b2aa31",
+      "actual_id": "faq100k_0056f0a44163f59b92b2aa31",
+      "pass": true
+    },
+    {
+      "question": "人行横道倒计时信号灯是什么时候开始在美国旧金山试用的？",
+      "expected_id": "faq100k_00572e347201a48bc4918522",
+      "actual_id": "faq100k_00572e347201a48bc4918522",
+      "pass": true
+    },
+    {
+      "question": "单壳皮机身的特点是什么？早期是怎么做的？",
+      "expected_id": "faq100k_005829cc2b10c013faba6e23",
+      "actual_id": "faq100k_005829cc2b10c013faba6e23",
+      "pass": true
+    },
+    {
+      "question": "迦陵伽帝国是什么时候结束的？",
+      "expected_id": "faq100k_0058e992f52df5c550d7d730",
+      "actual_id": "faq100k_0058e992f52df5c550d7d730",
+      "pass": true
+    },
+    {
+      "question": "坎帕纳浮雕是什么？它和大理石浮雕有什么关系？",
+      "expected_id": "faq100k_005c4548988b74d0f2efb7b1",
+      "actual_id": "faq100k_005c4548988b74d0f2efb7b1",
+      "pass": true
+    },
+    {
+      "question": "维也纳标准平均海水是什么？",
+      "expected_id": "faq100k_006221702a02d783228f3302",
+      "actual_id": "faq100k_006221702a02d783228f3302",
+      "pass": true
+    },
+    {
+      "question": "两岁小孩会数数就代表真懂了吗？",
+      "expected_id": "faq100k_0080e10854474d50eaa98c4a",
+      "actual_id": "faq100k_0080e10854474d50eaa98c4a",
+      "pass": true
+    },
+    {
+      "question": "为什么联合国要设立国际天然纤维年？",
+      "expected_id": "faq100k_008a24760e026b9a98431ca9",
+      "actual_id": "faq100k_008a24760e026b9a98431ca9",
+      "pass": true
+    },
+    {
+      "question": "HTTPS加密时会把网址里的哪些内容也保护起来？",
+      "expected_id": "faq100k_0090a04653644d40d2ba455c",
+      "actual_id": "faq100k_0090a04653644d40d2ba455c",
+      "pass": true
+    },
+    {
+      "question": "螳螂主要在什么时候活动和捕猎？",
+      "expected_id": "faq100k_00d0183278cbabdb735163cf",
+      "actual_id": "faq100k_00d0183278cbabdb735163cf",
+      "pass": true
+    },
+    {
+      "question": "\"广东四小龙\"指的是哪四个城市？为什么？",
+      "expected_id": "faq100k_011a3a6e5b532237780ead7a",
+      "actual_id": "faq100k_011a3a6e5b532237780ead7a",
+      "pass": true
+    },
+    {
+      "question": "鱿鱼是什么时候从其他头足类中分化出来的？",
+      "expected_id": "faq100k_012e202f350f4a408e8f4f06",
+      "actual_id": "faq100k_012e202f350f4a408e8f4f06",
+      "pass": true
+    },
+    {
+      "question": "在南极圈以内，一年中至少有一次会出现什么奇特的太阳现象？",
+      "expected_id": "faq100k_016f3fe19050e32e8e07356b",
+      "actual_id": "faq100k_016f3fe19050e32e8e07356b",
+      "pass": true
+    }
+  ],
+  "negative_tests": [
+    {
+      "question": "现在这盆植物的湿度是多少",
+      "hit": false
+    },
+    {
+      "question": "我的绿萝是不是生病了",
+      "hit": false
+    },
+    {
+      "question": "请比较地球和火星的公转周期",
+      "hit": false
+    },
+    {
+      "question": "先讲太阳再讲月亮",
+      "hit": false
+    },
+    {
+      "question": "请设计一个关于星际邮递员和机器人菜园的新故事",
+      "hit": false
+    }
+  ],
+  "build_seconds": 23.93,
+  "snapshot_bytes": 133599232,
+  "snapshot_sha256": "046afcf6a6e7f8b7384069bf75caf6b59655939ab6ba26044029792c861423fb",
+  "query_max_ms": 0.34,
+  "query_median_ms": 0.28,
+  "maximum_rss_kib": 154948,
+  "normalizer_version": "box-candidate-v1"
+}

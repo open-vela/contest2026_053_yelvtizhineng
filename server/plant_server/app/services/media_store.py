@@ -66,7 +66,12 @@ def save_image(owner_user_id, plant_id, data, fmt, w=None, h=None):
         img = Image.open(io.BytesIO(data))
         img.load()
         jpg_path = os.path.join(base, mid + ".jpg")
-        jpeg_bytes = _save_jpeg(img, jpg_path)
+        # Preserve the camera encoder's original JPEG bytes.  Re-encoding at
+        # quality 85 here caused visible generational blur even though the
+        # device had already uploaded a good 1024x768 JPEG.
+        jpeg_bytes = data
+        with open(jpg_path, "wb") as f:
+            f.write(jpeg_bytes)
         thumb = img.copy()
         thumb.thumbnail((160, 120))
         thumb_path = os.path.join(base, mid + "_thumb.jpg")

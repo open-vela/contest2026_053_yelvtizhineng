@@ -15,3 +15,18 @@
 /logs/README.md text eol=lf
 /logs/tadycharming/manifest.json text eol=lf
 /logs/tadycharming/2026-10-20/codex__01a15876-98e6-7c12-a5c1-9465772a9e8c.jsonl text eol=lf
+
+/server/**/*.py text eol=lf
+/server/**/*.js text eol=lf
+/server/**/*.css text eol=lf
+/server/**/*.html text eol=lf
+/server/**/*.md text eol=lf
+/server/**/*.txt text eol=lf
+/server/**/*.example text eol=lf
+/server/**/*.json text eol=lf
+/docs/server/** text eol=lf
+/server/**/*.gz binary
+
+/server/**/*.sh text eol=lf
+/server/**/*.webmanifest text eol=lf
+/server/**/*.cmd text eol=crlf
