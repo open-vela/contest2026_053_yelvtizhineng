@@ -33,7 +33,7 @@ ESP32-BOX 装入可爱的豌豆外壳，摄像头可以前后转动，既能观�
 
 ### 多形态探索
 
-除豌豆外壳 ESP32-BOX 外，团队已展示 M5Stack 桌面机器人及积木小车形态，探索舵机视角、语音互动和搭建玩法。**本次完整整理与构建验证针对 BOX、独立无线节点和服务器；本仓未提供经同等验证的 M5 完整固件复现入口。**
+除豌豆外壳 ESP32-BOX 外，团队已展示 M5Stack 桌面机器人及积木小车形态。M5Stack CoreS3 的 v1.3.672 源码与验证范围见 [M5 入口](docs/m5/README.md)。
 
 “见壤智慧养植大脑”是后续研发方向：结合大模型、Agent、植物生长机理和专家研究，逐步验证种植决策与教育场景。相关设想与当前已验证的设备控制、植物体检分别说明。
 
@@ -58,6 +58,7 @@ flowchart LR
 | 目录 | 内容与入口 |
 | --- | --- |
 | [app/plant-companion](app/plant-companion/README.md) | BOX v1.3.239 应用、UI、摄像头、语音与必要第三方依赖 |
+| [app/plant-companion-m5](docs/m5/README.md) | M5Stack CoreS3 v1.3.672 应用、独立板级配置与实机验证 |
 | [board/box](board/box/configs/contest_v239/defconfig) | BOX 完整构建配置 |
 | [patches/box](patches/box/baselines.json) | 固定 SDK 参考提交、底层补丁及文件校验值 |
 | [tools/box](tools/box/prepare.py) | SDK 预检、构建和实际分区校验烧录工具 |

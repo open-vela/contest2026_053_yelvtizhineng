@@ -1,0 +1,2407 @@
+{
+  "version": "1.3.672",
+  "contest_base": "a871abd5c4ad525ae24b6533a8371c0399849366",
+  "sdk_heads": {
+    "apps": "bf70c804de0de6ed18dcd2eaf25d504ff2aabc89",
+    "nuttx": "fc3f07c0871f4bdaca0d19e48bd9d8b45fe2314b"
+  },
+  "historical_binary": {
+    "sha256": "277f778cbe30edeef159fc6a5c99a94c5b5308b4edc52d5cc8afa93c2381fcc0",
+    "bytes": 4794688
+  },
+  "historical_source_sha256": {
+    "apps/graphics/lvgl/lvgl/src/drivers/nuttx/lv_nuttx_lcd.c": "d80237ebbd16a68fa4792c446dbe60aa39c2a6da6f276489a00948d2acadfc93",
+    "apps/plant-companion/Makefile": "6db048c7875557bfbceee10eb846682de507fe3c73712e9acaa5e040aa6ea92d",
+    "apps/plant-companion/ai_module/ai_voice/ai_voice.c": "fc3fda6d71163e51ba1130864b5c940302908a97871d088958290b78c549b5e0",
+    "apps/plant-companion/ai_module/ai_voice/ai_voice.h": "4da0b18bbea24d2a95df22e0981dffa4dcec65ffdd649968f28ff30687df8b05",
+    "apps/plant-companion/ai_module/ai_voice/wake_ack_pcm.h": "a6491bd3f740f17028db224bedd5c1d7ccee7cc12d6d61e593c2a8196ab3360e",
+    "apps/plant-companion/ai_module/ai_voice/wake_ack_queue.h": "68afef996db392464f21c37d50a22b7ee8fc00792591025acbf5e3d39266dc69",
+    "apps/plant-companion/ai_module/ai_voice/wake_ack_timbre.h": "29b1e2615d6b789fc86b1993a041a56915bdaf6aec082c23683ee3b43f72174f",
+    "apps/plant-companion/components/camera_capture/camera_capture.c": "4136a0f8762221a9de296a728ec528f5a08fa88f5791d3f1bf594e5f556e0133",
+    "apps/plant-companion/components/camera_capture/camera_capture.h": "962aaecd521372fddb69db2ee3b39bb4fc175f710d8d4341e251736b18475742",
+    "apps/plant-companion/components/stackchan_body/body_buscheck.inc": "eacf8347570f8e050ef3f00cd655840d4081b59c527f3d8f108dca035176b763",
+    "apps/plant-companion/components/stackchan_body/body_feedback_policy.h": "c6d151b9480f39ebf2af8a0eec8a1f94d893a69b90fcd9503e1c48c1bec0512b",
+    "apps/plant-companion/components/stackchan_body/body_goal_ack_proof.h": "e0cde484e1ed32979be93771204482d7a7d87cdfc390371facc690780f8f4073",
+    "apps/plant-companion/components/stackchan_body/body_holdcheck.inc": "8c45ed1a817405d3ab6419d663877ca79b2cbb5d2765ff7771157200fc5347c7",
+    "apps/plant-companion/components/stackchan_body/body_loop_clock.h": "cdc2856e98ebb6c43414bee771fc1d816afb3acbc1085c52f574c5770cea3940",
+    "apps/plant-companion/components/stackchan_body/body_observe_policy.h": "f18f05c5333703886b77f10f2c1df3674d713f0d0148b122652f35571a4f50b4",
+    "apps/plant-companion/components/stackchan_body/body_official_flow.inc": "a4d8b6b50754afadf372562a9b3c56b16839932f0343dedbc7372be9e8ca6de6",
+    "apps/plant-companion/components/stackchan_body/body_prepare_clock.h": "fa927596677a2d9652d494070e527fd6ba7cfc7cd636f89b425bc69cd7786bc8",
+    "apps/plant-companion/components/stackchan_body/body_ramp.h": "07b437afa37604dc5a35566cefbdfeb7892e73099b8c5543c15e52db7bf62598",
+    "apps/plant-companion/components/stackchan_body/body_readstress.inc": "62cc603abe8ebadbc31818c8eebb1780a0f173a596c6352d4ec30db6367fd38d",
+    "apps/plant-companion/components/stackchan_body/body_servo_config.h": "3395a160c4dcdcb57f0a429e62a12e75e3ca7fd7ca2c60161471f32f87f26697",
+    "apps/plant-companion/components/stackchan_body/body_sync_policy.h": "1ae7ca6c9fc1527c4025d1723ec0b720fa2c25286cb5a3c24da4c0f823390d40",
+    "apps/plant-companion/components/stackchan_body/body_sync_runtime.inc": "c4b88876ad61e20e68d9833b9d83168f58652bf48e13a61fa5e258ad949d6ebe",
+    "apps/plant-companion/components/stackchan_body/body_timeout_diagnostic.h": "24748fffa248dc7ffe24a11df79ebb8cb7b41c343a12b697edec1ef9cc60b769",
+    "apps/plant-companion/components/stackchan_body/body_timeout_diagnostic.inc": "0315754587b8c00be635ecba691eb78db0fad3fa61788922838d3c094a1936ce",
+    "apps/plant-companion/components/stackchan_body/motion_limits.h": "cba385a3154fcfb5dc6e733c38bec3239418200e069573a392a22f78c1f9660c",
+    "apps/plant-companion/components/stackchan_body/stackchan_body.c": "929e2c67150e16ba1b23f7153aeae8c5a3e1ad39c208aaed6b2e5b704d68faf4",
+    "apps/plant-companion/components/stackchan_body/stackchan_body.h": "5f07a1be1aa4e75b627e7ffbf1fc970768dd5ef039a17dd2e4e18af8beca3f64",
+    "apps/plant-companion/components/voice_agent/aw88298.c": "86d428b830275e241e54c8e8353588f4b49036117b2bdc201905ae36e9c22af3",
+    "apps/plant-companion/components/voice_agent/voice_timbre.c": "08f84b4da4cc44c282fdb9a578d241f1a5a582c990038d1b341919d5fdca7cfc",
+    "apps/plant-companion/components/voice_agent/voice_timbre.h": "ecd1f3daa1ef64bb2bb548290d546983b65476503d20f8ae015e4994a0801be0",
+    "apps/plant-companion/components/voice_vad/voice_vad.c": "3e1eedba297f2b116daffebb423350a4450d095c71bf85fe6320a2a14e62ae6c",
+    "apps/plant-companion/components/voice_vad/voice_vad.h": "6894a874d6c796818774f1a4da7d17d17910bc89169574b162754b460ecc486e",
+    "apps/plant-companion/main/app_main.c": "d4f87fa95c6a706d7183edbafa3abc3fad76c023bf2828747662e0277d871aa0",
+    "apps/plant-companion/ota/ota.h": "5f90f075221758f2514bafe0dc94dbb14a4814087aa6c7163d76fd3d66cb4b54",
+    "apps/plant-companion/services/interaction_service.c": "3613fad8dabb432269eb418b07ab6099d1e2055bd45312ab26d2e302000c3267",
+    "apps/plant-companion/services/power_service.c": "400af61e548ff3f2f0e3dd83a3da34388babcf11fcb637a9537f6e1bb21d5974",
+    "apps/plant-companion/services/server_bridge.c": "f3b9cc0050227b10704223ceaebf6400b7c62bf779140a11619a1557d1666836",
+    "apps/plant-companion/services/server_bridge.h": "15caad950c3bface73dd06177d95c4008570d88c66ce69d415351b533cb3d7c8",
+    "apps/plant-companion/services/voice_service.c": "cfa5a4f9072d257a238abaea06b6aeed965b506a25fdbb34899d228d5d985e4b",
+    "apps/plant-companion/services/voice_service.h": "310fdd1b08796bde713397d46fb5aee4355589d7ec1d91e36e8cca4967c68b21",
+    "apps/plant-companion/services/voice_ui_result.h": "295813862cfbea857cb16723eab26fa307e36e6128c4e34864c297e7671dbe29",
+    "apps/plant-companion/ui/assets/fonts/lv_font_face_16.c": "bdd9f0b374de10e9762fc59f3e092a2a154797d9a4ae5c59d100a0c48b8a6c24",
+    "apps/plant-companion/ui/assets/fonts/lv_font_face_25.c": "093a954aefd77a25c879ff03faeb2c0405e4efdf388de4e8c020ab15a91abd32",
+    "apps/plant-companion/ui/screens/screen_camera.c": "55600b13ef56052f53942369d0f43148e3e03518dca3be6c241c9a0b7e942fe0",
+    "apps/plant-companion/ui/screens/screen_data.c": "d46fa7f998007d80dfee49e7b561d33cb03e89477fc2cb598fd9b5566c62f494",
+    "apps/plant-companion/ui/screens/screen_diagnose.c": "57a6ff5f3f514fc555c749344d74183b22ddd58a11040d1e362fbecd6a80a63a",
+    "apps/plant-companion/ui/screens/screen_diary.c": "031ea1b84c0578c2a9ab81f94e64d2af807ddb07c1b20ad6d849585c7f6efb54",
+    "apps/plant-companion/ui/screens/screen_home.c": "a5c85e6fca6060f3d8d30fba48c96c9d4a5f9b8b7ea9215537533f6204824ba7",
+    "apps/plant-companion/ui/screens/screen_ota.c": "b4b32da9fe425824362f8b8e86226d5a25294797bb8687dcdb1050e261749e91",
+    "apps/plant-companion/ui/screens/screen_tasks.c": "b53e9a6555eca3400236e1be4846c745280495fdbc4b64dc3de617e7354ee58f",
+    "apps/plant-companion/ui/screens/screen_voice.c": "c3c06763970cea1cd89802ba8202dfe24b8ab913ba9c1e965151764e988ea212",
+    "apps/plant-companion/ui/screens/screen_voice.h": "c6937357eb36dae7cd1fbcf0fc969674f8fcd578ba06b2a93eefa67cafa455b1",
+    "apps/plant-companion/ui/screens/screen_wifi.c": "5fcd7ac058fc134edf777a540505d43bafcae826a58d3373bf7fa5575ce75c42",
+    "apps/plant-companion/ui/screens/voice_face_cache.h": "b46da242146d1935307a20cddb817a5aadcd5b2b7de41513453b6c084ae3d878",
+    "apps/plant-companion/ui/screens/voice_face_model.h": "803746b434eb9fa73eb46f3561bb35b3729b28d60eaca635755089c55abc6c44",
+    "apps/plant-companion/ui/theme/companion_style.h": "cc9c5c197a9f71a111eeccfcafc4aa754819179514634ab307a7154c02cbb737",
+    "apps/plant-companion/ui/theme/theme_plant.c": "48e8be065e9a465248fcdbe17c5c6f99036df6061a5cadd40348b908cdc2e85e",
+    "apps/plant-companion/ui/theme/theme_plant.h": "60a422d941628a6ddb8891f7a5bf7a354d79ac11c598f0ec812de3cf79bb5835",
+    "apps/plant-companion/ui/ui_app.c": "23abb2165f2c15012409cf06d77a3b6317f90dc8fb4fc01d67248c520da8e10d",
+    "apps/plant-companion/ui/widgets/widget_bottomnav.c": "cb980e5eb4284822612d8d615af52cfcf31e02240407bdb3da524a77ac19705a",
+    "nuttx/arch/xtensa/src/esp32s3/esp32s3_lowputc.c": "cb1c81a896bc608e72c4de741c843e61f506a91e21775925ff3003318bea5926",
+    "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_faultpins.h": "e533950bc44f2f71c73b76e5d78ab6e3c7b27a823fffb087587d26f8a33e43ed",
+    "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_halfduplex.h": "c1a88579b3000387a94c3e96f6dff8886bf761ba143c29c9072a57c47abf0b7a",
+    "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_rx_policy.h": "59315d2405948372ff82d387c58900f401771bb4929d8c6b14a253861f7895cf",
+    "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_timing.h": "46624ca33cc97d07b75cd257bdcbe286b6bbeab01cbce6cb7391f5f9c953b2e0",
+    "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_txmirror.h": "acde0629ace9307dc23f65ad7cf08dbd1d95f8c6a91c42deb5ab463b461b4de1",
+    "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_txwait.h": "f5aebd44128c6bf8c8d613cb59693590d6ba14add8c5a6f6edb59ef7330a9b2c",
+    "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_wire_counter.h": "a1876e0e93d4136e4aa93ecedeff9cb29f58a3f6b723fa00aa586b6ae33b9bd0",
+    "nuttx/arch/xtensa/src/esp32s3/esp32s3_serial.c": "2e1c705b27a9cad8268295e8af6daf62953ec1b9b1db28082c6badd8aef77108",
+    "nuttx/arch/xtensa/src/esp32s3/esp32s3_usbserial.c": "4be90a7fb8186774579496234fc79353f3401d99cf2f87ee2708dafe5ee19353",
+    "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_cores3.c": "ac62fe59c8b364e6b045ab8f63f5e978702b771b282e7ab755242d230983e2cb"
+  },
+  "historical_config_sha256": "ef67ec1884b84dbb868cc0a995d92947088ef9098d8a3ae0573fdc5cb0568d67",
+  "review_files": {
+    "patches/m5/sdk-overlay/apps/graphics/lvgl/lvgl/src/drivers/nuttx/lv_nuttx_lcd.c": {
+      "sdk_path": "apps/graphics/lvgl/lvgl/src/drivers/nuttx/lv_nuttx_lcd.c",
+      "sha256": "d80237ebbd16a68fa4792c446dbe60aa39c2a6da6f276489a00948d2acadfc93",
+      "build_archive_verified": true
+    },
+    "patches/m5/sdk-overlay/apps/graphics/lvgl/Make.defs": {
+      "sdk_path": "apps/graphics/lvgl/Make.defs",
+      "sha256": "7188d09cf15436d8a87735089c9d370413240662997e8557076c6aadffcff184",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/apps/graphics/lvgl/Makefile": {
+      "sdk_path": "apps/graphics/lvgl/Makefile",
+      "sha256": "71545d256b5288c82e9e4fc4209a303d1d218d7bd549d719bbace323c2235675",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/apps/netutils/cjson/Makefile": {
+      "sdk_path": "apps/netutils/cjson/Makefile",
+      "sha256": "a5c86b80032db90e2d1cb5292e1512d196a19137145c9c70c4d5e7c091145157",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/apps/netutils/mqttc/Makefile": {
+      "sdk_path": "apps/netutils/mqttc/Makefile",
+      "sha256": "bd7db00ddef6d122a8b0a4f34dc34b65bdd70b4ebf0d4ac49899d7618520f563",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_chat/ai_chat.c": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_chat/ai_chat.c",
+      "sha256": "026b60e80e1cf67d41f8241c9893e67668e9a13ecad9ef953a10e96251edcc42",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_chat/ai_chat.h": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_chat/ai_chat.h",
+      "sha256": "845573a091dbe202b8cdeb8320c0af8fe26c868f569de226b74ffef1cbc13dca",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_common.c": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_common.c",
+      "sha256": "184e4a590f4e5c03cab71a96f5eacb9c339a68e2457f095e579310cb37fcbea5",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_common.h": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_common.h",
+      "sha256": "1ee13c9d2491f50334c681e892a814da564ed24c127ec9e2c8253451060b7867",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_engine/ai_engine.c": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_engine/ai_engine.c",
+      "sha256": "e8a3fec68208ae75ec9f98382214148d65a1b228613819ef702e7402290db0b3",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_engine/ai_engine.h": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_engine/ai_engine.h",
+      "sha256": "6f80814b11b7517ad592ab1a300b854f25c649c57cb2b50014cf64898d9ce195",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_image/ai_image.c": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_image/ai_image.c",
+      "sha256": "9e53c8995f9ff9723b7010a202b9cba2107b2aa6a6e8eb165b17f015ad17a80f",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_image/ai_image.h": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_image/ai_image.h",
+      "sha256": "1d27cc9041fbd200236e821321170469a723b2daa7fbac1ae44d68dd67687c4a",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_voice/ai_ns.c": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_voice/ai_ns.c",
+      "sha256": "64c5c07cf02c8d8fcdbdbe821ff4e68ca29613bf94966a694a1b25cfc957394a",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_voice/ai_ns.h": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_voice/ai_ns.h",
+      "sha256": "5fda76be0047f7ac8a65df065b93917d8604ce4accc1753140c46c43b51c10be",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_voice/ai_voice.c": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_voice/ai_voice.c",
+      "sha256": "fc3fda6d71163e51ba1130864b5c940302908a97871d088958290b78c549b5e0",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ai_module/ai_voice/ai_voice.h": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_voice/ai_voice.h",
+      "sha256": "4da0b18bbea24d2a95df22e0981dffa4dcec65ffdd649968f28ff30687df8b05",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ai_module/ai_voice/VOICE_DEBUG.md": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_voice/VOICE_DEBUG.md",
+      "sha256": "6bc43df97cfc4976fd898d17012e42781f0691c3aa2804129b7e8d50208dd433",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_voice/voice_fixture.h": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_voice/voice_fixture.h",
+      "sha256": "77b6fe8e9359c695b4f0fa2cd74315a3f5c05399767cdae1d8f813b7540ab1df",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_voice/wake_ack_queue.h": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_voice/wake_ack_queue.h",
+      "sha256": "68afef996db392464f21c37d50a22b7ee8fc00792591025acbf5e3d39266dc69",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ai_module/ai_voice/wake_ack_timbre.h": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_voice/wake_ack_timbre.h",
+      "sha256": "29b1e2615d6b789fc86b1993a041a56915bdaf6aec082c23683ee3b43f72174f",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ai_module/Kconfig": {
+      "sdk_path": "apps/plant-companion/ai_module/Kconfig",
+      "sha256": "8daae7ec1ed55642e2890243be5525930258ee4abcb1440f86e3714e90b9adf1",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/Makefile": {
+      "sdk_path": "apps/plant-companion/ai_module/Makefile",
+      "sha256": "a852a6fff1669eeac9865daa0c66760a02433d7fb4930217f5a5100a5679d6e8",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/VOICE_WORKLOG.md": {
+      "sdk_path": "apps/plant-companion/ai_module/VOICE_WORKLOG.md",
+      "sha256": "fbb0ca35636fb26f1a745d614a34602e66994de1f01cb7c8bbb8cdc6b6f1c7db",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/app/ai_engine.h": {
+      "sdk_path": "apps/plant-companion/app/ai_engine.h",
+      "sha256": "51664fadbf5ff42a0b6f172fc429cff540fdea7aa76add0371d4b132f96f5788",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/app/app_task.h": {
+      "sdk_path": "apps/plant-companion/app/app_task.h",
+      "sha256": "94ac94463a4ac16e4e467c0655f74146fe9179a451ff8b4bceae344afc6315f6",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/communication/cloud_client/cloud_client.h": {
+      "sdk_path": "apps/plant-companion/communication/cloud_client/cloud_client.h",
+      "sha256": "4c9a9ef67dab213015ff915db04ca6f49512c7cda2ef1d43c549d35fd41c6a1b",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/communication/wifi_manager/wifi_manager.c": {
+      "sdk_path": "apps/plant-companion/communication/wifi_manager/wifi_manager.c",
+      "sha256": "f37f0bbbc87157a92b3ed624003f5c98cde0def6dd5f3d2ccbb9c47f50e02129",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/communication/wifi_manager/wifi_manager.h": {
+      "sdk_path": "apps/plant-companion/communication/wifi_manager/wifi_manager.h",
+      "sha256": "eb64628963d0b12160fa7e5c604b982f745d002e0a9b39c5ceca3bbffba8d659",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/camera_capture.c": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/camera_capture.c",
+      "sha256": "4136a0f8762221a9de296a728ec528f5a08fa88f5791d3f1bf594e5f556e0133",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/camera_capture/camera_capture.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/camera_capture.h",
+      "sha256": "962aaecd521372fddb69db2ee3b39bb4fc175f710d8d4341e251736b18475742",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/camera_capture/camera_jpeg.c": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/camera_jpeg.c",
+      "sha256": "fd0f51726fd0603ee4aa1c7851f50ea11cfa675259f034a274e461710ddf4baf",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/camera_jpeg.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/camera_jpeg.h",
+      "sha256": "4571f3485da8e729a7010c0daa7da1371e4a54527bde79f5c6c181496c4036ee",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/camera_voice_budget.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/camera_voice_budget.h",
+      "sha256": "b399c5c5b0830c2978fa39b5f6e3386735a3af96fcbd20a71d2567b4d93f4aff",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/esp32s3_cam_dvp.c": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/esp32s3_cam_dvp.c",
+      "sha256": "2df3be020909e7ff2930b8c013ed8bac5a44ed10888ad17df8f6b53fb6997851",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/esp32s3_cam_dvp.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/esp32s3_cam_dvp.h",
+      "sha256": "519b8b25e542984c709cff3ec03b8f016ff14842a4eb8f4ff1cafc0506c14039",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/esp_jpeg_nuttx.c": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/esp_jpeg_nuttx.c",
+      "sha256": "4a5032c79dd5f6397441a8b5fd7976630ee41b2bc6ce037644d26385790844e6",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/gc0308.c": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/gc0308.c",
+      "sha256": "4d9f5ad94d900db008ffc265e7f6bf5f4686b60944ea7d95f68a410809e1c5ac",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/gc0308.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/gc0308.h",
+      "sha256": "2bbb87ce7c394cecdc810d6feb3d9dc8656858d39df79d012b006ad758df3dab",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/gc0308_dvp_8bit_20Minput_320x240_rgb565_be_20fps_subsample.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/gc0308_dvp_8bit_20Minput_320x240_rgb565_be_20fps_subsample.h",
+      "sha256": "88fe9aba01d5ee1ede0c91f080fc30b36e4b033466f81864ac325b6fad74daa3",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/gc0308_dvp_8bit_20Minput_640x480_rgb565_be_16fps.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/gc0308_dvp_8bit_20Minput_640x480_rgb565_be_16fps.h",
+      "sha256": "d654bbb39665cb732ce97e9d19e0d90b37398513aded61c768e5fc0bd9dee195",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/gc0308_regs.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/gc0308_regs.h",
+      "sha256": "be6bf1567d7e02cbaa6cced1f7266660fb3059c8556d999275d117cf6cd7a7c6",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/gc0308_settings.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/gc0308_settings.h",
+      "sha256": "0cbc22b70ad8c8f7e89598cca64177a0bf5cc14bc354a70a142d5452177570f2",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/gc0308_types.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/gc0308_types.h",
+      "sha256": "4411d87800c8a26142fde459c9febd2313c884b55d997131ee1ac0f5f1d8a435",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/IMGFX_LICENSE.txt": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/IMGFX_LICENSE.txt",
+      "sha256": "18f5b91101b93b6140ae0cc23bd420d0c6f9279b7266b72e60e7c380a44e1222",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/jpeg_vendor/esp_jpeg_common.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/jpeg_vendor/esp_jpeg_common.h",
+      "sha256": "548c85257c3cecd19c07015be2257ea870b8c9b5c31de9668c1884d5fe387351",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/jpeg_vendor/esp_jpeg_enc.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/jpeg_vendor/esp_jpeg_enc.h",
+      "sha256": "a73eeee202e52b9285bcfa6cbf2d8d803c2f96e2b3dd6338d26736c3e6eb5deb",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/jpeg_vendor/esp_jpeg_version.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/jpeg_vendor/esp_jpeg_version.h",
+      "sha256": "b39770865850a0c7a51c6dcb2988bd59ceca279b37d4ce60e2b956ae6251df84",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/jpeg_vendor/LICENSE": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/jpeg_vendor/LICENSE",
+      "sha256": "0bf7f2018fffa1caff5ecbf10d79707b218eea4e26b8c705d744de4556552815",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/jpeg_vendor/PROVENANCE.json": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/jpeg_vendor/PROVENANCE.json",
+      "sha256": "cd56f843f45987c1231a2b76fac3a1076e1888a351fd8b1f6d0a902e150dd02b",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/tjpgd/tjpgd.c": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/tjpgd/tjpgd.c",
+      "sha256": "86762751da600dd3f5fc8c8de857a63677f9882fd79719def127427d270366a3",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/tjpgd/tjpgd.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/tjpgd/tjpgd.h",
+      "sha256": "a92af55b45756ccc884b667d58c815c908e9854e47f36a082326e748a688e97e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/tjpgd/tjpgdcnf.h": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/tjpgd/tjpgdcnf.h",
+      "sha256": "fe074f301b7b0fd372d8256a64ca67930fce0ec41fd056f001c1ba82d3dfbab3",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/gesture_sensor/gesture_sensor.c": {
+      "sdk_path": "apps/plant-companion/components/gesture_sensor/gesture_sensor.c",
+      "sha256": "b4d241ced339b1625b88beb41e02884fb4d25be0ba78798cac354ec8c9a4a218",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/gesture_sensor/gesture_sensor.h": {
+      "sdk_path": "apps/plant-companion/components/gesture_sensor/gesture_sensor.h",
+      "sha256": "c6684bea3d7d29a987ce273e4ccb9e3da207ed1e8423a265a40de8f78ae92b37",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/gesture_sensor/Kconfig": {
+      "sdk_path": "apps/plant-companion/components/gesture_sensor/Kconfig",
+      "sha256": "5b3df8ae06690afc889d08c14780554d68b0fad83db21b23de4f0b3c7358d7d9",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/gesture_sensor/Make.defs": {
+      "sdk_path": "apps/plant-companion/components/gesture_sensor/Make.defs",
+      "sha256": "7185f4dd04a8999e58bc79e63c823f281e50e0b1f8dda32ab98915d7698b94d7",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/sensor_driver/Kconfig": {
+      "sdk_path": "apps/plant-companion/components/sensor_driver/Kconfig",
+      "sha256": "90ab62b27efec18dc46270e55b90a019debfa5895a47e5643f29846d2204703d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/sensor_driver/sensor_driver.h": {
+      "sdk_path": "apps/plant-companion/components/sensor_driver/sensor_driver.h",
+      "sha256": "9c17e97c1097d41c5dfaf61031a73be7d24248e703b2448cd862ed875a628eaa",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/sensor_driver/soil_sensor.c": {
+      "sdk_path": "apps/plant-companion/components/sensor_driver/soil_sensor.c",
+      "sha256": "4dae3a8b381e3992b5b298b2baea1d20f30df1d65a99ff77f488648e7371678b",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/sensor_driver/soil_sensor.h": {
+      "sdk_path": "apps/plant-companion/components/sensor_driver/soil_sensor.h",
+      "sha256": "55eee6a98b1bf48d7a04bb31afc90cd7f8fff3bc39e48b622b76b117d2fc0403",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_buscheck.inc": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_buscheck.inc",
+      "sha256": "eacf8347570f8e050ef3f00cd655840d4081b59c527f3d8f108dca035176b763",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_feedback_policy.h": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_feedback_policy.h",
+      "sha256": "c6d151b9480f39ebf2af8a0eec8a1f94d893a69b90fcd9503e1c48c1bec0512b",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_goal_ack_proof.h": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_goal_ack_proof.h",
+      "sha256": "e0cde484e1ed32979be93771204482d7a7d87cdfc390371facc690780f8f4073",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_holdcheck.inc": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_holdcheck.inc",
+      "sha256": "8c45ed1a817405d3ab6419d663877ca79b2cbb5d2765ff7771157200fc5347c7",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_loop_clock.h": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_loop_clock.h",
+      "sha256": "cdc2856e98ebb6c43414bee771fc1d816afb3acbc1085c52f574c5770cea3940",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_observe_policy.h": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_observe_policy.h",
+      "sha256": "f18f05c5333703886b77f10f2c1df3674d713f0d0148b122652f35571a4f50b4",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_official_flow.inc": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_official_flow.inc",
+      "sha256": "a4d8b6b50754afadf372562a9b3c56b16839932f0343dedbc7372be9e8ca6de6",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_official_stall.h": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_official_stall.h",
+      "sha256": "66cbaaee0d8fa853455daa85b6ec4da245a7c1b5807691fb6a154b50ceac528d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_power_policy.h": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_power_policy.h",
+      "sha256": "e403850500bb639d34908be76d8046b1372fe74d3000c551a7b15171c1d34bf8",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_prepare_clock.h": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_prepare_clock.h",
+      "sha256": "fa927596677a2d9652d494070e527fd6ba7cfc7cd636f89b425bc69cd7786bc8",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_ramp.h": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_ramp.h",
+      "sha256": "07b437afa37604dc5a35566cefbdfeb7892e73099b8c5543c15e52db7bf62598",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_readstress.inc": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_readstress.inc",
+      "sha256": "62cc603abe8ebadbc31818c8eebb1780a0f173a596c6352d4ec30db6367fd38d",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_servo_config.h": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_servo_config.h",
+      "sha256": "3395a160c4dcdcb57f0a429e62a12e75e3ca7fd7ca2c60161471f32f87f26697",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_sync_policy.h": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_sync_policy.h",
+      "sha256": "1ae7ca6c9fc1527c4025d1723ec0b720fa2c25286cb5a3c24da4c0f823390d40",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_sync_runtime.inc": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_sync_runtime.inc",
+      "sha256": "c4b88876ad61e20e68d9833b9d83168f58652bf48e13a61fa5e258ad949d6ebe",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_timeout_diagnostic.h": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_timeout_diagnostic.h",
+      "sha256": "24748fffa248dc7ffe24a11df79ebb8cb7b41c343a12b697edec1ef9cc60b769",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/body_timeout_diagnostic.inc": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/body_timeout_diagnostic.inc",
+      "sha256": "0315754587b8c00be635ecba691eb78db0fad3fa61788922838d3c094a1936ce",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/LICENSE.smooth_ui_toolkit": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/LICENSE.smooth_ui_toolkit",
+      "sha256": "f9db7ea7026e1ec808bab58868bc949d62a081c1727b17f842e907a3757c5476",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/stackchan_body/motion_limits.h": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/motion_limits.h",
+      "sha256": "cba385a3154fcfb5dc6e733c38bec3239418200e069573a392a22f78c1f9660c",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/NOTICE": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/NOTICE",
+      "sha256": "81ae94706ecc05ab166aefd50ff3d99b5aeba00536a114e349d69ccfbe4577c5",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/stackchan_body/stackchan_body.c": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/stackchan_body.c",
+      "sha256": "929e2c67150e16ba1b23f7153aeae8c5a3e1ad39c208aaed6b2e5b704d68faf4",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/stackchan_body/stackchan_body.h": {
+      "sdk_path": "apps/plant-companion/components/stackchan_body/stackchan_body.h",
+      "sha256": "5f07a1be1aa4e75b627e7ffbf1fc970768dd5ef039a17dd2e4e18af8beca3f64",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/system_monitor/battery_monitor.c": {
+      "sdk_path": "apps/plant-companion/components/system_monitor/battery_monitor.c",
+      "sha256": "f45bc7ffa978c5b551444ab4e5cacd3468f852090e6d9915e227758c7b0266e2",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/system_monitor/battery_monitor.h": {
+      "sdk_path": "apps/plant-companion/components/system_monitor/battery_monitor.h",
+      "sha256": "edba9028df4b9eeccccd9542faacd885a99b001e3506648319a35c8bd0672571",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/system_monitor/device_cfg.c": {
+      "sdk_path": "apps/plant-companion/components/system_monitor/device_cfg.c",
+      "sha256": "608526d50fbd7aa02c8658104b610da5b18eea925e012ebbce791e269c58454f",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/system_monitor/device_cfg.h": {
+      "sdk_path": "apps/plant-companion/components/system_monitor/device_cfg.h",
+      "sha256": "f22ed5875ead271e18d4704685cacd8c9ee17a7f6681aca765f34abf3b074b9e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/system_monitor/sd_card.c": {
+      "sdk_path": "apps/plant-companion/components/system_monitor/sd_card.c",
+      "sha256": "f958f017489f00cbb0c432795979d331e524c389863bcd88a85b21fd058422de",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/system_monitor/sd_card.h": {
+      "sdk_path": "apps/plant-companion/components/system_monitor/sd_card.h",
+      "sha256": "79b0cab9f8a0c77ff4711d6917f9ef081dec13bf31a1c595591a70433f320e2c",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/system_monitor/SD_CARD_ARCHITECTURE.md": {
+      "sdk_path": "apps/plant-companion/components/system_monitor/SD_CARD_ARCHITECTURE.md",
+      "sha256": "0984c32d7899ed0f460775e5c6dd1e2fdd1994a1a0bb6b69db5f23919a562936",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/ui_panel/lcd_st7796.c": {
+      "sdk_path": "apps/plant-companion/components/ui_panel/lcd_st7796.c",
+      "sha256": "9c8a8e73415a8bdc67b8f574f06ee05cbce65ccf8f0c4484d7d187fea2c6cf4a",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/ui_panel/lcd_st7796.h": {
+      "sdk_path": "apps/plant-companion/components/ui_panel/lcd_st7796.h",
+      "sha256": "65272c95595b8616307e569a89943ae70ccca93a1395b91a469bdceee35ef1aa",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/AUDIO_HANDOVER_HW_20260821.md": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/AUDIO_HANDOVER_HW_20260821.md",
+      "sha256": "9a98dc32c19ad6d98e92d15255be0401dd604ba9d2fcb7e1f3ce00e00ed04ad1",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/AUDIO_HANDOVER_NEXT_AI.md": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/AUDIO_HANDOVER_NEXT_AI.md",
+      "sha256": "ffb8da7f4843da7134399ee24e14d461e0426aa1fb88c554de1e5161267cd31d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/aw88298.c": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/aw88298.c",
+      "sha256": "86d428b830275e241e54c8e8353588f4b49036117b2bdc201905ae36e9c22af3",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/voice_agent/aw88298.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/aw88298.h",
+      "sha256": "85cb2ea32997af91a4defe249de5a663d589b239a1b05a9b92a39bd8bde91732",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/es7210.c": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/es7210.c",
+      "sha256": "3508982ce1745a062a70f2fb3b046f776a5eba4f14ed67b54cea47be2228a757",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/es7210.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/es7210.h",
+      "sha256": "877a9d3967c36447bf0a0339d6cb1ea585c478e76d3f8847a3371bbdaa89eb8d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/es8311.c": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/es8311.c",
+      "sha256": "7729a4a5f8afa7551f0443d5efca36589475748ac9a59202dfa737061de5c4d5",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/es8311.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/es8311.h",
+      "sha256": "095d0b2ded6c14f488aa4f3a0769d4f23ec072adc7f63ce5adf0fa0c0ebe93b6",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/cjson/cJSON.c": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/cjson/cJSON.c",
+      "sha256": "607e756460fa0de37d20a7a9181f2de29c97bfb7ce5a0e6c2f548243836cd852",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/cjson/cJSON.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/cjson/cJSON.h",
+      "sha256": "25b0145150d500498e4d209cec69c18c42cf818bffcc54690be3b895a2a16dee",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/esp_sr_shim.c": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/esp_sr_shim.c",
+      "sha256": "16140e8656960fa468f83956c0ad0af3eaa1f5ea46a8b9ff470d725bdf9d407d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/c_speech_features_config.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/c_speech_features_config.h",
+      "sha256": "905b0469ccfd4f0f97f66566837c85b4470699e624f5c963bd0b2c6736b95394",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/dl_lib.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/dl_lib.h",
+      "sha256": "8afaa38d0f176eeb53e361bde387669bccacfe08732b1a8a59699ccbdd1c5cfb",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/dl_lib_coefgetter_if.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/dl_lib_coefgetter_if.h",
+      "sha256": "24bd85c23504c2e0d81fa7deb1328c3be0e560e7a43cddf205f7b91b9d79d414",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/dl_lib_conv_queue.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/dl_lib_conv_queue.h",
+      "sha256": "3e8e080d36413f8ef7502a1daceb382d61133bb3d6f7e7ba76b3c3bd3a8ac31d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/dl_lib_convq8_queue.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/dl_lib_convq8_queue.h",
+      "sha256": "a0b0d7bd343154d9a3974d4ad58c81ada8a5c4cc82d5384d14479f28aaa6809c",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/dl_lib_convq_queue.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/dl_lib_convq_queue.h",
+      "sha256": "ce5c2936ed34faf5d559ff90172d82d356ab5ab41da66c5cc37773c2d9b60285",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/dl_lib_matrix.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/dl_lib_matrix.h",
+      "sha256": "b6153c4a294dc5a903f1e5cabe4df672ec1b67f0f205d0e7cd9f208b917832c1",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/dl_lib_matrixq.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/dl_lib_matrixq.h",
+      "sha256": "6426bbb51eb639b4aede6fa0a16c7808e46a1d6ac1a1f79a08139b56d99bf58c",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/dl_lib_matrixq8.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/dl_lib_matrixq8.h",
+      "sha256": "ff69a2680fb5edcff252d7fbfc34ede7d42f47991b078523427eeb30ed11a57e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_aec.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_aec.h",
+      "sha256": "6330c2e790f6dd76a0f5c984d05e272de6a5635468a488629b5434b7326f4b90",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_afe_aec.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_afe_aec.h",
+      "sha256": "f99214243a95536e20d71dc13d4a7ee9b91c1414e5f54195c7184628ca2d655e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_afe_config.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_afe_config.h",
+      "sha256": "c145ea08a4aaec0785c6cf2da0faf31625bb11f7efeae2a493eff5980128037b",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_afe_doa.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_afe_doa.h",
+      "sha256": "22d1d290d3b40d449ecaad1455ae9bdb845cda47a563ed0f59582482ce319af5",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_afe_sr_iface.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_afe_sr_iface.h",
+      "sha256": "199382dd7bc0da340c0df5dae96474444df5736718d87c284e05c13ade924ebf",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_afe_sr_models.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_afe_sr_models.h",
+      "sha256": "ecec7a7d28458924f2a08769acd391aeda0f3215ff1f3e2dbf27fcc39db48c7f",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_agc.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_agc.h",
+      "sha256": "e013b9b2f21cb2c78557e4a60f5671ea4f81033c4eeba8b12bee2efce8c3d4d6",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_doa.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_doa.h",
+      "sha256": "096958044df9f92a7de235b19ca832110182fee7b994c22967171b38a466f176",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_mase.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_mase.h",
+      "sha256": "21a54855f93da9dbfea0af8491099e6899bcb10ab606d2042190e93f81f601d4",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_mfcc_iface.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_mfcc_iface.h",
+      "sha256": "9e82754f83d1b3002615eaa6fb03fdcc3942ad07d0fa61ec89e7e17cafe927ed",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_mfcc_models.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_mfcc_models.h",
+      "sha256": "d2654a4ca11aed7f496b7c438e2ea9bb504b8574d8f71c154c037d113bae788a",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_mn_iface.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_mn_iface.h",
+      "sha256": "702c12e6709df35957dd87eebb829708a76bf4b061442194a669878c12f57ec7",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_mn_models.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_mn_models.h",
+      "sha256": "87de5c35fce529c735ff93b961bf1643db09647608078fc78a1ac2dfab90d97e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_ns.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_ns.h",
+      "sha256": "c027230ab1145cd5eb025e8e5ebc4ea7495597cbc41de94b133c9cc8d6ae99b2",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_nsn_iface.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_nsn_iface.h",
+      "sha256": "104e5aec56cebf539216e84ebce2b7aa513c869eecf5a9d6f396405b8e34ad02",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_nsn_models.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_nsn_models.h",
+      "sha256": "2efd1759a084c5bd441d30e3e50c8afc760498e441dedb29ad0503668bc22502",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_speech_features.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_speech_features.h",
+      "sha256": "0554a7b568a6e2301ef5563911bcd265e34fe65293327e765698cee719b6c7a6",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_sr_webrtc.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_sr_webrtc.h",
+      "sha256": "1d319609af7904198bc5b4f58d751b5a226897a329dfc0360eba7ea889ebcc7e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_vad.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_vad.h",
+      "sha256": "afa170ef12dac8eab504055ba8b38a9bfc9c4f41d6aec8fe3268f8ac0d46cf4b",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_vadn_iface.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_vadn_iface.h",
+      "sha256": "58743f6ca437ec00cbffc74f82a93c0dc0b094cf515086468fc234a55075eda4",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_vadn_models.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_vadn_models.h",
+      "sha256": "abb2e00fe19d8b283dd21709671301619dfa142d498ce841306aea9900458de3",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_wn_iface.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_wn_iface.h",
+      "sha256": "77b9e4ec604fc26ffb8796d95740aadc5c1b6c544a5c256394052f4275697a48",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/esp_wn_models.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/esp_wn_models.h",
+      "sha256": "72facf857823712a5fbab87394a4f7b605ad14b0eb6364b671c6b1a9ac1c1c4d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/include/flite_g2p.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/include/flite_g2p.h",
+      "sha256": "6b1b018272ee6e3946aec6c0c7c7f45d02cb6885fe71fa8b16c08123f1a8c25e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/model_data/srmodels_data.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/model_data/srmodels_data.h",
+      "sha256": "f27e76fe29ca7c9b1d63bcb0678cb4bc04564da874f758ff3a85257bd0721dc8",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/srmodel_shim.c": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/srmodel_shim.c",
+      "sha256": "b6fc428a882c55a4c4a174bca77bb8d976a4a428365dffa469e9160f80c8238b",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/srmodel_shim.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/srmodel_shim.h",
+      "sha256": "8efe7b4dad4365c14240805dcdcf2074ac61f6d5e6e60a9972d2fded95bc6aeb",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/MIC_RX_BUG_REPORT.md": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/MIC_RX_BUG_REPORT.md",
+      "sha256": "eb4accf54f5ce7185db3a04a9ea2d561cded3596e770047b41fc6f4890a20afe",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/voice_agent.c": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/voice_agent.c",
+      "sha256": "0a2afc4c957e81e757ba25d1492c283129ee568f13f06d49941cab3fdeaac1bf",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/voice_agent.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/voice_agent.h",
+      "sha256": "416b356f04ac06ab58ef52e80667034b712a360464726764803fde9f517dfd0a",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/VOICE_DEBUG.md": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/VOICE_DEBUG.md",
+      "sha256": "0bf4fce742a5f2151637c2ffa4c20d07dce0829d813f8b0ec0627ef8901acafa",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/VOICE_NOTES.md": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/VOICE_NOTES.md",
+      "sha256": "683c320b58eed1b8a57b02643605d8cd68550e96a211b2e4c1c948b79f53555d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/voice_timbre.c": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/voice_timbre.c",
+      "sha256": "08f84b4da4cc44c282fdb9a578d241f1a5a582c990038d1b341919d5fdca7cfc",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/voice_agent/voice_timbre.h": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/voice_timbre.h",
+      "sha256": "ecd1f3daa1ef64bb2bb548290d546983b65476503d20f8ae015e4994a0801be0",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/voice_ns/math_vectors.h": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/math_vectors.h",
+      "sha256": "24fe105b8c2181e874018f81a3b15728a06fa46a18b59893bfe0afebbc1fe3fb",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/ns_libc_bridge.c": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/ns_libc_bridge.c",
+      "sha256": "cacf636aa68d15b0ecebbfa604f87865fd9b7c06e0eadaa9d42095318dca6f29",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/ns_nn_alloc.c": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/ns_nn_alloc.c",
+      "sha256": "7b432e3aaae271bddd500d030a50b396425bd1f35800cf408437183c6eb05603",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/ns_nn_iface.h": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/ns_nn_iface.h",
+      "sha256": "225e409535360a68ee5ae5fbc7855b6b3b49849d004cb997d23aef91e471f139",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/ns_nn_pair.c": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/ns_nn_pair.c",
+      "sha256": "0cb2031b3b002e9d2b93750a6ec6fa17ea793149d171c4f5176e840dcd62428e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/ns_nn_pair.h": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/ns_nn_pair.h",
+      "sha256": "4ae6404d136ac1375c4af59c1db44decd7b1ed11c70d7b5299e541095186677f",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/ns_nn_provider.c": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/ns_nn_provider.c",
+      "sha256": "0cace5ee23d4cec6b974c769b281ca53756514ba910d89b214789c0a03896037",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/vendor/esp_ns.h": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/vendor/esp_ns.h",
+      "sha256": "c027230ab1145cd5eb025e8e5ebc4ea7495597cbc41de94b133c9cc8d6ae99b2",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/vendor/LICENSE": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/vendor/LICENSE",
+      "sha256": "7d916fb00bc0742c47cafb0d0144b67f826d76779730b1cb8796045ea6ba1b9a",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/vendor/LICENSE.newlib": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/vendor/LICENSE.newlib",
+      "sha256": "bc1fbe427c6165ae8d06203f65af8c9f5fd5463788f2e8f56bceb50eeda19449",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/vendor/PROVENANCE.json": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/vendor/PROVENANCE.json",
+      "sha256": "7f188908e22b00a5296475b1d573f254e7655e011da4ab2e6eb7e1cd6aec8ab6",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/voice_endpoint_policy.h": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/voice_endpoint_policy.h",
+      "sha256": "0c3160dfdbaf2dbbd580984429e1908e9aa087dc25612286545bd14d5cef07c1",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/voice_ns.c": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/voice_ns.c",
+      "sha256": "a6c4f47fcd3ec04f207aea65aca646b9a0cacabce9e5a22b4fa28491e2bb4b87",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/voice_ns.h": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/voice_ns.h",
+      "sha256": "8319002a0ec167b2e772ee5938fb74519fa65a8b0a55b02258ac5778326c6f92",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_vad/vendor/esp_vad.h": {
+      "sdk_path": "apps/plant-companion/components/voice_vad/vendor/esp_vad.h",
+      "sha256": "afa170ef12dac8eab504055ba8b38a9bfc9c4f41d6aec8fe3268f8ac0d46cf4b",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_vad/vendor/LICENSE": {
+      "sdk_path": "apps/plant-companion/components/voice_vad/vendor/LICENSE",
+      "sha256": "7d916fb00bc0742c47cafb0d0144b67f826d76779730b1cb8796045ea6ba1b9a",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_vad/vendor/LICENSE-APACHE-2.0.txt": {
+      "sdk_path": "apps/plant-companion/components/voice_vad/vendor/LICENSE-APACHE-2.0.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_vad/vendor/PROVENANCE.json": {
+      "sdk_path": "apps/plant-companion/components/voice_vad/vendor/PROVENANCE.json",
+      "sha256": "9a8e958254bb10a1ee7ab89a54876cd74699f3a41b62c5d20e84fe649e8d9b36",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_vad/voice_onset.h": {
+      "sdk_path": "apps/plant-companion/components/voice_vad/voice_onset.h",
+      "sha256": "eb201b58fb862e217e2062bd753c0db99b995482982c5a3f7e41909595c0ab2c",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_vad/voice_vad.c": {
+      "sdk_path": "apps/plant-companion/components/voice_vad/voice_vad.c",
+      "sha256": "3e1eedba297f2b116daffebb423350a4450d095c71bf85fe6320a2a14e62ae6c",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/voice_vad/voice_vad.h": {
+      "sdk_path": "apps/plant-companion/components/voice_vad/voice_vad.h",
+      "sha256": "6894a874d6c796818774f1a4da7d17d17910bc89169574b162754b460ecc486e",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/components/voice_wake/math_vectors.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/math_vectors.h",
+      "sha256": "ba39dc8f90c063d860bd4278ea2eec8f2d4cb6f54f213fc4f82170c383df32d4",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/c_speech_features_config.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/c_speech_features_config.h",
+      "sha256": "905b0469ccfd4f0f97f66566837c85b4470699e624f5c963bd0b2c6736b95394",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/cJSON.c": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/cJSON.c",
+      "sha256": "607e756460fa0de37d20a7a9181f2de29c97bfb7ce5a0e6c2f548243836cd852",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/cJSON.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/cJSON.h",
+      "sha256": "25b0145150d500498e4d209cec69c18c42cf818bffcc54690be3b895a2a16dee",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dl_lib.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dl_lib.h",
+      "sha256": "8afaa38d0f176eeb53e361bde387669bccacfe08732b1a8a59699ccbdd1c5cfb",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dl_lib_coefgetter_if.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dl_lib_coefgetter_if.h",
+      "sha256": "24bd85c23504c2e0d81fa7deb1328c3be0e560e7a43cddf205f7b91b9d79d414",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dl_lib_conv_queue.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dl_lib_conv_queue.h",
+      "sha256": "3e8e080d36413f8ef7502a1daceb382d61133bb3d6f7e7ba76b3c3bd3a8ac31d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dl_lib_convq8_queue.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dl_lib_convq8_queue.h",
+      "sha256": "a0b0d7bd343154d9a3974d4ad58c81ada8a5c4cc82d5384d14479f28aaa6809c",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dl_lib_convq_queue.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dl_lib_convq_queue.h",
+      "sha256": "ce5c2936ed34faf5d559ff90172d82d356ab5ab41da66c5cc37773c2d9b60285",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dl_lib_matrix.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dl_lib_matrix.h",
+      "sha256": "b6153c4a294dc5a903f1e5cabe4df672ec1b67f0f205d0e7cd9f208b917832c1",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dl_lib_matrixq.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dl_lib_matrixq.h",
+      "sha256": "6426bbb51eb639b4aede6fa0a16c7808e46a1d6ac1a1f79a08139b56d99bf58c",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dl_lib_matrixq8.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dl_lib_matrixq8.h",
+      "sha256": "ff69a2680fb5edcff252d7fbfc34ede7d42f47991b078523427eeb30ed11a57e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsp_common.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsp_common.h",
+      "sha256": "aa132d30aa22aecb6362d7ebcb9022cbc39a28fa04635a8a0b0002ae38dd8b85",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsp_compat.c": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsp_compat.c",
+      "sha256": "6c26d466f23a4252ff50305787d36c427177864d74a27a9f62c5a46c5162a2ec",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsp_err.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsp_err.h",
+      "sha256": "ab5fadb0157ea3eecd72346402d92a6551cad03254afe31b61016c4cd2408167",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsp_err_codes.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsp_err_codes.h",
+      "sha256": "89f728e6733c7392e2a8aff10da8393ce87ee3b0679cb61d0f88b56ae22f7f9f",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsp_platform.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsp_platform.h",
+      "sha256": "37594e49cae1460f237a799fd91d49b126a2a68026f436842a1db290de5f8ccf",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsp_tests.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsp_tests.h",
+      "sha256": "45d83110edc8d1562684856497566ee9bd9b48225f4648e1a218911b193cad3b",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsp_types.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsp_types.h",
+      "sha256": "bc9d58a8f5e6232a7a7cd2d6a4a60403d5405783638eaacd7b5a9b565f8b3988",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsps_fft2r.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsps_fft2r.h",
+      "sha256": "21c293c2dfa191a16be572f75ba075f842f2b2fc0281d7b66b8e8e9d3d604f13",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsps_fft2r_bitrev_tables_fc32.c": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsps_fft2r_bitrev_tables_fc32.c",
+      "sha256": "5aeffab252b3d597e33c51eee072fac51ac1d1e83187c6a4ae1c89f2cedd7386",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsps_fft2r_fc32_ansi.c": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsps_fft2r_fc32_ansi.c",
+      "sha256": "64f61f546ff682ef7ed9ec443bb4dac1376c4fcd78754a310906283645bd9e3e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsps_fft2r_platform.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsps_fft2r_platform.h",
+      "sha256": "b171079ecab8b0a865ee588223af9bb29b2847cf33584cbeb722c4656aa528ca",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsps_fft4r.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsps_fft4r.h",
+      "sha256": "8bc814d14180e5f06b5521fc9980b74a284325ddafa98d2a34332f4edca5dcb0",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsps_fft4r_bitrev_tables_fc32.c": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsps_fft4r_bitrev_tables_fc32.c",
+      "sha256": "b46bc5b5d3d0532fb586734bca2e56c58cc3a4d65169fa8085d1891d93406a63",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsps_fft4r_fc32_ansi.c": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsps_fft4r_fc32_ansi.c",
+      "sha256": "ff3e9b3b908981f7c58c8880e2d9d9f2406586162066cc0d976ef9a8c7adc7e9",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsps_fft4r_platform.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsps_fft4r_platform.h",
+      "sha256": "b171079ecab8b0a865ee588223af9bb29b2847cf33584cbeb722c4656aa528ca",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/dsps_fft_tables.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/dsps_fft_tables.h",
+      "sha256": "e0af3abe3d76aa6ec6728270c7e6a32d4a1ae2fd6b3bbcf8ae03f098ef7b8b1d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_aec.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_aec.h",
+      "sha256": "6330c2e790f6dd76a0f5c984d05e272de6a5635468a488629b5434b7326f4b90",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_afe_aec.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_afe_aec.h",
+      "sha256": "f99214243a95536e20d71dc13d4a7ee9b91c1414e5f54195c7184628ca2d655e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_afe_config.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_afe_config.h",
+      "sha256": "c145ea08a4aaec0785c6cf2da0faf31625bb11f7efeae2a493eff5980128037b",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_afe_doa.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_afe_doa.h",
+      "sha256": "22d1d290d3b40d449ecaad1455ae9bdb845cda47a563ed0f59582482ce319af5",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_afe_sr_iface.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_afe_sr_iface.h",
+      "sha256": "199382dd7bc0da340c0df5dae96474444df5736718d87c284e05c13ade924ebf",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_afe_sr_models.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_afe_sr_models.h",
+      "sha256": "ecec7a7d28458924f2a08769acd391aeda0f3215ff1f3e2dbf27fcc39db48c7f",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_agc.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_agc.h",
+      "sha256": "e013b9b2f21cb2c78557e4a60f5671ea4f81033c4eeba8b12bee2efce8c3d4d6",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_attr.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_attr.h",
+      "sha256": "78a6d1ba084214ac59dab02505be8cbb2fb5fde5979593351d32d6af0acf76d4",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_doa.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_doa.h",
+      "sha256": "096958044df9f92a7de235b19ca832110182fee7b994c22967171b38a466f176",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_dsp.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_dsp.h",
+      "sha256": "219972be390c42e7f9ab09f9f49a7f587620b7256ae0aae3f5b550eab2443aa6",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_err.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_err.h",
+      "sha256": "8756e1cac6de452654a6741d643cea7b8ffcc674fdf04f6c1805fdea07b3038b",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_heap_caps.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_heap_caps.h",
+      "sha256": "8a1bb31854440f3e68dab0ebf19bbcdc84307fe1e88c1ed0a2c49853cb2cb438",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_log.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_log.h",
+      "sha256": "0817ae08063b3f3421ebb0cfb5bdaaf00be20b108797bed369414e585a80fe44",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_mase.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_mase.h",
+      "sha256": "21a54855f93da9dbfea0af8491099e6899bcb10ab606d2042190e93f81f601d4",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_mfcc_iface.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_mfcc_iface.h",
+      "sha256": "9e82754f83d1b3002615eaa6fb03fdcc3942ad07d0fa61ec89e7e17cafe927ed",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_mfcc_models.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_mfcc_models.h",
+      "sha256": "d2654a4ca11aed7f496b7c438e2ea9bb504b8574d8f71c154c037d113bae788a",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_mn_iface.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_mn_iface.h",
+      "sha256": "97aa1e07b14944f845c532f6d7b31705f5371442016556a0528428acdec6c83f",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_mn_models.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_mn_models.h",
+      "sha256": "87de5c35fce529c735ff93b961bf1643db09647608078fc78a1ac2dfab90d97e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_mn_speech_commands.c": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_mn_speech_commands.c",
+      "sha256": "57c14f35dc3107db84d038f9e16d560831106698280895d7bae73a7a3cfd7885",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_mn_speech_commands.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_mn_speech_commands.h",
+      "sha256": "e1c5e84ebf1f88c7b48ef5ba75aacae13ac580abe735908e7c3f1a185dd05fbb",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_ns.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_ns.h",
+      "sha256": "c027230ab1145cd5eb025e8e5ebc4ea7495597cbc41de94b133c9cc8d6ae99b2",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_nsn_iface.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_nsn_iface.h",
+      "sha256": "104e5aec56cebf539216e84ebce2b7aa513c869eecf5a9d6f396405b8e34ad02",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_nsn_models.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_nsn_models.h",
+      "sha256": "2efd1759a084c5bd441d30e3e50c8afc760498e441dedb29ad0503668bc22502",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_speech_features.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_speech_features.h",
+      "sha256": "0554a7b568a6e2301ef5563911bcd265e34fe65293327e765698cee719b6c7a6",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_sr_webrtc.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_sr_webrtc.h",
+      "sha256": "1d319609af7904198bc5b4f58d751b5a226897a329dfc0360eba7ea889ebcc7e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_vad.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_vad.h",
+      "sha256": "afa170ef12dac8eab504055ba8b38a9bfc9c4f41d6aec8fe3268f8ac0d46cf4b",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_vadn_iface.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_vadn_iface.h",
+      "sha256": "58743f6ca437ec00cbffc74f82a93c0dc0b094cf515086468fc234a55075eda4",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_vadn_models.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_vadn_models.h",
+      "sha256": "abb2e00fe19d8b283dd21709671301619dfa142d498ce841306aea9900458de3",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_wn_iface.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_wn_iface.h",
+      "sha256": "a9e8740c2eb857109906e418aeefa066ee0c71787a5785b506c032d4b0fe01f2",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/esp_wn_models.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/esp_wn_models.h",
+      "sha256": "72facf857823712a5fbab87394a4f7b605ad14b0eb6364b671c6b1a9ac1c1c4d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/flite_g2p.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/flite_g2p.h",
+      "sha256": "6b1b018272ee6e3946aec6c0c7c7f45d02cb6885fe71fa8b16c08123f1a8c25e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/LICENSE.newlib": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/LICENSE.newlib",
+      "sha256": "bc1fbe427c6165ae8d06203f65af8c9f5fd5463788f2e8f56bceb50eeda19449",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/model_registry.c": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/model_registry.c",
+      "sha256": "559e39b7f68211b8cc619d78a90f12569a847bf129f0fed4026b4ef12be05ed9",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/NEWLIB_LICENSE": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/NEWLIB_LICENSE",
+      "sha256": "bc1fbe427c6165ae8d06203f65af8c9f5fd5463788f2e8f56bceb50eeda19449",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/puff.c": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/puff.c",
+      "sha256": "5b9d75aeb5baf3575415bc6ade3f2a02e50b6b971b3f8b4fda2b03543bc6e52f",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/puff.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/puff.h",
+      "sha256": "969b7be2a930db0cdcb19b0e5b29ae6741f5a8f663b6dba6d647e12ec60cfa8e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/runtime.c": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/runtime.c",
+      "sha256": "704d2bf9aab1ee3eb291f190e5b8adacd13573bb01f819abbb0e542caca6819f",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/sdkconfig.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/sdkconfig.h",
+      "sha256": "09e1119e72a7eb465406e2b82a200255ea4ba3a32f6965d96c14c2ea3a92595d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/WAKE_MATH_PROVENANCE.json": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/WAKE_MATH_PROVENANCE.json",
+      "sha256": "05664a66a887489e0ab1223bba34c326e548487b1f0a52a535f1f31878af4cf9",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/voice_wake.c": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/voice_wake.c",
+      "sha256": "9b37b1efa60bf4fa31e9c233fbcc7bf378c195b986146280289a867011aa8485",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/voice_wake.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/voice_wake.h",
+      "sha256": "4b7e10ef6c7048a3e51318e834d6dae982413e5acd2ad986be4e6f1d6b26cfec",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/wake_capture.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/wake_capture.h",
+      "sha256": "93a4cfd40d7db9a2a859143d0b6800b0fbefe7aa285d7e35698893fa58c78a2e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/wake_match.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/wake_match.h",
+      "sha256": "adb84cc681aa0f6a5f21f50e1faf8cd82e4a46b896055e849819062ef0a8e2d1",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/wake_math.c": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/wake_math.c",
+      "sha256": "1af8525d655c72c4039df275601c5502e6804836087d61bb5088f8f930e9ecdf",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/wake_math.h": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/wake_math.h",
+      "sha256": "fa546fc0cf65a5a8ba5e13ebc87fe565cf38891512625565f4b4bf777e02df4e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/hal/hal_delay.h": {
+      "sdk_path": "apps/plant-companion/hal/hal_delay.h",
+      "sha256": "a1bb2576eee51009eac1b0dd1b7bcdc7ec04ec6a9a4862657a40086725891780",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/hal/hal_gpio.h": {
+      "sdk_path": "apps/plant-companion/hal/hal_gpio.h",
+      "sha256": "85d347b4f65545d802de082d95a3266074e80803be5261255bbb3b11653ad5fd",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/hal/hal_i2c.h": {
+      "sdk_path": "apps/plant-companion/hal/hal_i2c.h",
+      "sha256": "709d4edf33504e7fda1fab7c9058bed0798c8f4d8730764df94688318a32d1ac",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/hal/hal_i2s.h": {
+      "sdk_path": "apps/plant-companion/hal/hal_i2s.h",
+      "sha256": "235513c7f91d1a5e0d76a9d6564356f70a6503220a7d5fcfa09d9b12a2c163cc",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/hal/hal_log.h": {
+      "sdk_path": "apps/plant-companion/hal/hal_log.h",
+      "sha256": "cb3dfba93eb313c7c5ab383fe93651843693d41a17d25bee47507ee758c7949c",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/hal/hal_spi.h": {
+      "sdk_path": "apps/plant-companion/hal/hal_spi.h",
+      "sha256": "b4b48ae03ead461211d4b4337d0ee00db6ca184286f4521b32cc15bdabbb4336",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/Kconfig": {
+      "sdk_path": "apps/plant-companion/Kconfig",
+      "sha256": "9972498b416d880850bbc605ee4d1800597fe8c61876f42f9fb590c5d4ece31d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/main/app_main.c": {
+      "sdk_path": "apps/plant-companion/main/app_main.c",
+      "sha256": "7235741fb29a74c0a219b1c34f56a10fe326ca7d51cd5334ef0aa06b1e6ff1a0",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/Make.defs": {
+      "sdk_path": "apps/plant-companion/Make.defs",
+      "sha256": "7be4bb3855b44b9a58fe9bd00d8e3c868cdabc5f9d56d3fee077bfd36d05ab24",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/Makefile": {
+      "sdk_path": "apps/plant-companion/Makefile",
+      "sha256": "6db048c7875557bfbceee10eb846682de507fe3c73712e9acaa5e040aa6ea92d",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ota/ota.c": {
+      "sdk_path": "apps/plant-companion/ota/ota.c",
+      "sha256": "ca1fbe91ae525b6282358e21ab44b8eae4dea9db66b1efa6ec3c5afbfdc984f9",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ota/ota.h": {
+      "sdk_path": "apps/plant-companion/ota/ota.h",
+      "sha256": "f0a51db92fb9cd9baafe449720b15dd86deed5c92bbbc9fdcf47cba7a280e499",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ota/OTA_DESIGN.md": {
+      "sdk_path": "apps/plant-companion/ota/OTA_DESIGN.md",
+      "sha256": "e16a3b7dd100d70d67f00b68c12533580b9a4ac9dc010e79379c96f00e221742",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ota/ota_manager.h": {
+      "sdk_path": "apps/plant-companion/ota/ota_manager.h",
+      "sha256": "78bd381e76e40965150e55f936ae6908a5229f8db24a1af2f8ebbd30d2ee032c",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/actuator_service.c": {
+      "sdk_path": "apps/plant-companion/services/actuator_service.c",
+      "sha256": "c3d3cd0721323f538df9122c071869702777e187ef22035d5960236e3588de22",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/actuator_service.h": {
+      "sdk_path": "apps/plant-companion/services/actuator_service.h",
+      "sha256": "3ee496a4b5fed1ca2d61162b8d93fa5126b06416e9be94b9a8182d5ee82db1a0",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/ai_service.c": {
+      "sdk_path": "apps/plant-companion/services/ai_service.c",
+      "sha256": "85db41f0c0d412d2c0ac8971f2a4ccf7e8d0b44e25a26afa66f2aeedb6932f53",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/ai_service.h": {
+      "sdk_path": "apps/plant-companion/services/ai_service.h",
+      "sha256": "47de4b387dbd15738ab37bbd8cfeb9ec92b22182e96fc38242a00e68d4e23252",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/http_chunked.h": {
+      "sdk_path": "apps/plant-companion/services/http_chunked.h",
+      "sha256": "db26e234bfe48203a4c302113cb062c880bf403cc29d80a09f723cfcd546d3e1",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/http_response.h": {
+      "sdk_path": "apps/plant-companion/services/http_response.h",
+      "sha256": "b3f3ae336cf62abe6f8753b7d7e74c05a099a101b91eb8f675abad47e894c209",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/interaction_policy.h": {
+      "sdk_path": "apps/plant-companion/services/interaction_policy.h",
+      "sha256": "94b4de723e5228fa5a89d2358c08458e28c408d11d6ce98b4ff9b7990b4a7d25",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/interaction_service.c": {
+      "sdk_path": "apps/plant-companion/services/interaction_service.c",
+      "sha256": "3613fad8dabb432269eb418b07ab6099d1e2055bd45312ab26d2e302000c3267",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/services/interaction_service.h": {
+      "sdk_path": "apps/plant-companion/services/interaction_service.h",
+      "sha256": "6587798142c9e92b73a1165da66fe397a4aab934fe6a5556a9cc04f612eb2d6c",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/ota_service.c": {
+      "sdk_path": "apps/plant-companion/services/ota_service.c",
+      "sha256": "cbe3867bdc32651ffd818621160dd72ec38233ba77efc284bf2b3a1e8df3010d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/ota_service.h": {
+      "sdk_path": "apps/plant-companion/services/ota_service.h",
+      "sha256": "5db4492ee7807d8b2479e376146b9004b69323a0b528f5dbc5599f0a710bd456",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/plant_state.c": {
+      "sdk_path": "apps/plant-companion/services/plant_state.c",
+      "sha256": "f568bbf88e874a81b601eb6d19a5539cebfa559cc3768f664fd8046c80e7db27",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/plant_state.h": {
+      "sdk_path": "apps/plant-companion/services/plant_state.h",
+      "sha256": "62780729bd8ed4de9dfaefe205c3316a6743d6d51174591e57602af238e69158",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/pokedex_service.c": {
+      "sdk_path": "apps/plant-companion/services/pokedex_service.c",
+      "sha256": "9a41bc184ddf73fdfdbc16e0c2faf2ee5ba354c2cd8f9af3310f15fb85447f60",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/pokedex_service.h": {
+      "sdk_path": "apps/plant-companion/services/pokedex_service.h",
+      "sha256": "05c559e4ff76b5f0fbff4965ba1dcce2937b8d85e65ec0f615e4b612d1a43fd0",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/power_policy.h": {
+      "sdk_path": "apps/plant-companion/services/power_policy.h",
+      "sha256": "9e4f3197ea47aad7037f3c2880c7dd3d708eb6fd3b153ba2746c73373d4b6bd3",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/power_service.c": {
+      "sdk_path": "apps/plant-companion/services/power_service.c",
+      "sha256": "400af61e548ff3f2f0e3dd83a3da34388babcf11fcb637a9537f6e1bb21d5974",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/services/power_service.h": {
+      "sdk_path": "apps/plant-companion/services/power_service.h",
+      "sha256": "a98159044ddf47c1fb5808864383ab967f4d7b615d0e034a0b4130c7a9b45389",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/record_service.c": {
+      "sdk_path": "apps/plant-companion/services/record_service.c",
+      "sha256": "0a05e653ffc54a9d86a0f128781e462b980bd71afe678a0da01f5b2de901d030",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/record_service.h": {
+      "sdk_path": "apps/plant-companion/services/record_service.h",
+      "sha256": "304a5196a4ad881a83f099b697b2003e04d617f5cdc03bf2e0fe82dae84d47d2",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/sd_write.h": {
+      "sdk_path": "apps/plant-companion/services/sd_write.h",
+      "sha256": "85705fa466a11a4dbca4b89681496b2519a1bf5450d0c61e4ab7ac4e3f4d72d3",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/sensor_net_gate.h": {
+      "sdk_path": "apps/plant-companion/services/sensor_net_gate.h",
+      "sha256": "6d9d3cb58c5ecafaad34bb664bad21fb08260d8e874596c15dfb60a6ee2f0f4d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/sensor_service.c": {
+      "sdk_path": "apps/plant-companion/services/sensor_service.c",
+      "sha256": "33a472679fd0a0772e7996ed7dcf1cb8536ecef8d72e330c24ae5ef268590ad6",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/sensor_service.h": {
+      "sdk_path": "apps/plant-companion/services/sensor_service.h",
+      "sha256": "7648ae58f7fc26ddbd1fb70b9180f90a597cc1bd7c05d92214159425a8904fd9",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/server_bridge.c": {
+      "sdk_path": "apps/plant-companion/services/server_bridge.c",
+      "sha256": "f7d1e3e1fffcb4cc016e46283eeb46c568afb943f04494f89c85b4848bc71110",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/services/server_bridge.h": {
+      "sdk_path": "apps/plant-companion/services/server_bridge.h",
+      "sha256": "15caad950c3bface73dd06177d95c4008570d88c66ce69d415351b533cb3d7c8",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/services/voice_jitter.h": {
+      "sdk_path": "apps/plant-companion/services/voice_jitter.h",
+      "sha256": "17704cc3b89b8f5a5aeb3148d2f52681e8561b05acc6ed5147118b32c3d4de9f",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/voice_service.c": {
+      "sdk_path": "apps/plant-companion/services/voice_service.c",
+      "sha256": "cfa5a4f9072d257a238abaea06b6aeed965b506a25fdbb34899d228d5d985e4b",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/services/voice_service.h": {
+      "sdk_path": "apps/plant-companion/services/voice_service.h",
+      "sha256": "310fdd1b08796bde713397d46fb5aee4355589d7ec1d91e36e8cca4967c68b21",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/services/voice_ui_result.h": {
+      "sdk_path": "apps/plant-companion/services/voice_ui_result.h",
+      "sha256": "295813862cfbea857cb16723eab26fa307e36e6128c4e34864c297e7671dbe29",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/services/voice_upload.c": {
+      "sdk_path": "apps/plant-companion/services/voice_upload.c",
+      "sha256": "0bd2b4406df6beb917d1a5086f78043b12b1fe23ae3b9c0cf16abd355603982c",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/services/voice_upload.h": {
+      "sdk_path": "apps/plant-companion/services/voice_upload.h",
+      "sha256": "8a4c6adbf3005172dd26060e82061ca74035aa4031a3513943f5039dd7de72a2",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/tools/check_boot_heap.py": {
+      "sdk_path": "apps/plant-companion/tools/check_boot_heap.py",
+      "sha256": "c9bc538860c47320b2d7db665ff23a73c247740bca4ccbfaf0a003a2ce3b3080",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/tools/check_wav.py": {
+      "sdk_path": "apps/plant-companion/tools/check_wav.py",
+      "sha256": "8a15abf21121660ffade287155287e0ed9db64b866450e70d9db8140c1b402da",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/tools/clean_jpeg_archive.py": {
+      "sdk_path": "apps/plant-companion/tools/clean_jpeg_archive.py",
+      "sha256": "8ee171b05d6b0b8839d672a44fb79c25f98b087233012e4cb9c8c3989d850dc0",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/tools/clean_wake_archive.py": {
+      "sdk_path": "apps/plant-companion/tools/clean_wake_archive.py",
+      "sha256": "610d89a1cf21dfa8fa564c22ae33a52bc0abdd649bb5517c27251299dab25f37",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/tools/fetch_photo_rgb.py": {
+      "sdk_path": "apps/plant-companion/tools/fetch_photo_rgb.py",
+      "sha256": "77ea1705bff4388e9b943e62f57d4840b428093c3f86e7aaa2ed5b837c371552",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/tools/generate_font_bin.py": {
+      "sdk_path": "apps/plant-companion/tools/generate_font_bin.py",
+      "sha256": "c4ecc147e2330e67774e25ff1a954caa47f86b89830abbc43e5c27a518ad6ae4",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/tools/parse_photo_rgb.py": {
+      "sdk_path": "apps/plant-companion/tools/parse_photo_rgb.py",
+      "sha256": "706c59b377c6b4b80bb106f2c9179faf0fd1f851295da3b2493c7fb96c85a7ea",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/lv_font_emoji_16.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/lv_font_emoji_16.c",
+      "sha256": "a8c8cc00c6c398f3f3ea820c22741650712ac93865479d2179c24e5c35726fc6",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/lv_font_emoji_20.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/lv_font_emoji_20.c",
+      "sha256": "bcde5df1e42df3011eee444448baa224923fd0a880547aa21767e6dceafd878e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/lv_font_emoji_24.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/lv_font_emoji_24.c",
+      "sha256": "7333f152d7bbd772e71aadba4da8690e798c16d3a55e279fb5303115b1a2fae2",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/lv_font_emoji_32.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/lv_font_emoji_32.c",
+      "sha256": "1f24b81b7bce518795aa1cd5a628abd69d6d02cfd78eee5f06265d67c2753508",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/lv_font_face_16.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/lv_font_face_16.c",
+      "sha256": "bdd9f0b374de10e9762fc59f3e092a2a154797d9a4ae5c59d100a0c48b8a6c24",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/assets/fonts/lv_font_face_25.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/lv_font_face_25.c",
+      "sha256": "093a954aefd77a25c879ff03faeb2c0405e4efdf388de4e8c020ab15a91abd32",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/assets/fonts/package-lock.json": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/package-lock.json",
+      "sha256": "5aef0539dc7f350977e0a708170ef1c8587a58cd48aa5781c985aeb3922e77a7",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/package.json": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/package.json",
+      "sha256": "0e2600925c9b24d8d75369423a351381f1e2ab0bdcbb3ca6c7af717e4f7cfb5b",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/README.md": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/README.md",
+      "sha256": "aa5593dcba9d74a56b9211d75615d58869079cdd852d7d32ef2d4718d457908a",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/symbols.txt": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/symbols.txt",
+      "sha256": "e5de8046a706861dc1689f0e60737e43e1fce5de9c321894abee6f01b42de58d",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/zh_font.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/zh_font.c",
+      "sha256": "d153d2c719c3916d8d9b23945670c382a2f74282417f5c431daa616e59326884",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/zh_font.h": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/zh_font.h",
+      "sha256": "c9eab64a61003004ded1667074494489b3c261e764e24eb3cab066df6104914a",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/zh_font_builtin.h": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/zh_font_builtin.h",
+      "sha256": "c9748831344bf93cce6f4508b765442e4cd0fb20c9e0eb8591c14680665da74c",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/screens/screen_camera.c": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_camera.c",
+      "sha256": "55600b13ef56052f53942369d0f43148e3e03518dca3be6c241c9a0b7e942fe0",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/screens/screen_camera.h": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_camera.h",
+      "sha256": "f10f0a1d079146bcadd2bd577d8959c824aaf5e5ad22e3a53318f97b6e093e93",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/screens/screen_data.c": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_data.c",
+      "sha256": "d46fa7f998007d80dfee49e7b561d33cb03e89477fc2cb598fd9b5566c62f494",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/screens/screen_data.h": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_data.h",
+      "sha256": "bee80fa122c80e619ffc2a531a5e3e661f0b56d7d65cdf4cd019addb131835d5",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/screens/screen_diagnose.c": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_diagnose.c",
+      "sha256": "57a6ff5f3f514fc555c749344d74183b22ddd58a11040d1e362fbecd6a80a63a",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/screens/screen_diagnose.h": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_diagnose.h",
+      "sha256": "8961d68740498c0d09e4ef02a16537dd418210727e9dca4802cccdc693bf41ce",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/screens/screen_diary.c": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_diary.c",
+      "sha256": "031ea1b84c0578c2a9ab81f94e64d2af807ddb07c1b20ad6d849585c7f6efb54",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/screens/screen_diary.h": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_diary.h",
+      "sha256": "d72f6b56949909db7fc026a2f0c1b0b807839190e02ae102b732ae486b2c25ee",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/screens/screen_home.c": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_home.c",
+      "sha256": "a5c85e6fca6060f3d8d30fba48c96c9d4a5f9b8b7ea9215537533f6204824ba7",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/screens/screen_home.h": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_home.h",
+      "sha256": "dbc2d63ded2054719c88f19ac2cfd157e483fc1563bc1bd6ee7f9a7c4fd97c48",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/screens/screen_ota.c": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_ota.c",
+      "sha256": "b4b32da9fe425824362f8b8e86226d5a25294797bb8687dcdb1050e261749e91",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/screens/screen_ota.h": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_ota.h",
+      "sha256": "4547226dd8ca1d8a5fbcabb296b84ffefcaf25ff8aed60699ae073626a9734a7",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/screens/screen_tasks.c": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_tasks.c",
+      "sha256": "b53e9a6555eca3400236e1be4846c745280495fdbc4b64dc3de617e7354ee58f",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/screens/screen_tasks.h": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_tasks.h",
+      "sha256": "653ce65fc113ff709134aaeab1f53daac3980d3fbfbe2b73df959e5dc595a443",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/screens/screen_voice.c": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_voice.c",
+      "sha256": "c3c06763970cea1cd89802ba8202dfe24b8ab913ba9c1e965151764e988ea212",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/screens/screen_voice.h": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_voice.h",
+      "sha256": "c6937357eb36dae7cd1fbcf0fc969674f8fcd578ba06b2a93eefa67cafa455b1",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/screens/screen_wifi.c": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_wifi.c",
+      "sha256": "5fcd7ac058fc134edf777a540505d43bafcae826a58d3373bf7fa5575ce75c42",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/screens/screen_wifi.h": {
+      "sdk_path": "apps/plant-companion/ui/screens/screen_wifi.h",
+      "sha256": "4aa5c379f626c12095fe7f84b90d902dab1965ff5dd8eba30c6cec991a3327fe",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/screens/voice_face_cache.h": {
+      "sdk_path": "apps/plant-companion/ui/screens/voice_face_cache.h",
+      "sha256": "b46da242146d1935307a20cddb817a5aadcd5b2b7de41513453b6c084ae3d878",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/screens/voice_face_model.h": {
+      "sdk_path": "apps/plant-companion/ui/screens/voice_face_model.h",
+      "sha256": "803746b434eb9fa73eb46f3561bb35b3729b28d60eaca635755089c55abc6c44",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/theme/companion_style.h": {
+      "sdk_path": "apps/plant-companion/ui/theme/companion_style.h",
+      "sha256": "cc9c5c197a9f71a111eeccfcafc4aa754819179514634ab307a7154c02cbb737",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/theme/theme_plant.c": {
+      "sdk_path": "apps/plant-companion/ui/theme/theme_plant.c",
+      "sha256": "48e8be065e9a465248fcdbe17c5c6f99036df6061a5cadd40348b908cdc2e85e",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/theme/theme_plant.h": {
+      "sdk_path": "apps/plant-companion/ui/theme/theme_plant.h",
+      "sha256": "60a422d941628a6ddb8891f7a5bf7a354d79ac11c598f0ec812de3cf79bb5835",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/ui_app.c": {
+      "sdk_path": "apps/plant-companion/ui/ui_app.c",
+      "sha256": "23abb2165f2c15012409cf06d77a3b6317f90dc8fb4fc01d67248c520da8e10d",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/ui_app.h": {
+      "sdk_path": "apps/plant-companion/ui/ui_app.h",
+      "sha256": "371b2c70e1af88de761b8c54fa6d92979b819ade8343b93eff3fa1cf6c79bcbd",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/widgets/widget_bottomnav.c": {
+      "sdk_path": "apps/plant-companion/ui/widgets/widget_bottomnav.c",
+      "sha256": "cb980e5eb4284822612d8d615af52cfcf31e02240407bdb3da524a77ac19705a",
+      "build_archive_verified": true
+    },
+    "app/plant-companion-m5/ui/widgets/widget_bottomnav.h": {
+      "sdk_path": "apps/plant-companion/ui/widgets/widget_bottomnav.h",
+      "sha256": "51a54e4aadaba17ea88d1b94ca010090a10c1783768329c89e3cb0f3a28af9cd",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/widgets/widget_topbar.c": {
+      "sdk_path": "apps/plant-companion/ui/widgets/widget_topbar.c",
+      "sha256": "b3314e09a332bca3c78312d2c108a86f179e093ee6e8a23f18eba9f78d2e1e02",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/widgets/widget_topbar.h": {
+      "sdk_path": "apps/plant-companion/ui/widgets/widget_topbar.h",
+      "sha256": "a3a55cc9a03362012ea914479d1c988266ca0f45ca65b39db71682aaa28c71fa",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/apps/system/libuv/Makefile": {
+      "sdk_path": "apps/system/libuv/Makefile",
+      "sha256": "cbf98ead37c64a2161953b2e6e30def7c9c378c4c7c62d0e6b7518836dbad767",
+      "build_archive_verified": false
+    },
+    "board/m5/configs/contest_v672/defconfig": {
+      "sdk_path": "nuttx/.config",
+      "sha256": "1a8b1b094d43b2219cf410e8749ac58a30fa1ebdacaec3b3c44bca84b7d1cb70",
+      "build_archive_verified": true
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/include/setjmp.h": {
+      "sdk_path": "nuttx/arch/xtensa/include/setjmp.h",
+      "sha256": "0c9d7c9e86e9b95b76d2c4d736edd2463e72800d9d344a4a5ba57cd512c65105",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/common/xtensa_debug.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/common/xtensa_debug.c",
+      "sha256": "126b4f18766993e5b6e11109a08db41a0a09a567d17da9c4f0fdb75b955b6373",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/common/xtensa_irqdispatch.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/common/xtensa_irqdispatch.c",
+      "sha256": "93b9b3422756238fad004f248d95443d6bec954207af95c8bff6dccb6175b42c",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_allocateheap.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_allocateheap.c",
+      "sha256": "ab439fd9c6934b1ece568c14fa0bd5358bb261f0bcdeb530003fa5371ef52976",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_cam_dvp.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_cam_dvp.c",
+      "sha256": "93d80989818620807fa39d2ed28cb060ad9fa176227bb84faf27455139b181c7",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_cam_dvp.h": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_cam_dvp.h",
+      "sha256": "519b8b25e542984c709cff3ec03b8f016ff14842a4eb8f4ff1cafc0506c14039",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_dma.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_dma.c",
+      "sha256": "efdada992d118af25fa461a3ac0687fa75634df101902c675376640899e71f3c",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_i2c.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_i2c.c",
+      "sha256": "a191a73a3a13e4fd81bc03585800440c3e9810d87b43fc1825f0231f092b2db4",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_i2c_stretch.h": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_i2c_stretch.h",
+      "sha256": "8682dd376b5bf0c0a54e3161508b9fe771ff9433f3b1b8dcdadf6b68bd4fc7b7",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_i2s.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_i2s.c",
+      "sha256": "c2073a8105869316eedf2ddd91510602571aa97d58beaefc003ea39af12f12a9",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_lowputc.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_lowputc.c",
+      "sha256": "cb1c81a896bc608e72c4de741c843e61f506a91e21775925ff3003318bea5926",
+      "build_archive_verified": true
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_lowputc.h": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_lowputc.h",
+      "sha256": "61207019ac1de971585ac8fa88e37c315472e8595e112e76ae63f1114a999a26",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_faultpins.h": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_faultpins.h",
+      "sha256": "e533950bc44f2f71c73b76e5d78ab6e3c7b27a823fffb087587d26f8a33e43ed",
+      "build_archive_verified": true
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_halfduplex.h": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_halfduplex.h",
+      "sha256": "c1a88579b3000387a94c3e96f6dff8886bf761ba143c29c9072a57c47abf0b7a",
+      "build_archive_verified": true
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_rx_policy.h": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_rx_policy.h",
+      "sha256": "59315d2405948372ff82d387c58900f401771bb4929d8c6b14a253861f7895cf",
+      "build_archive_verified": true
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_rxflush.h": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_rxflush.h",
+      "sha256": "b57f30743f781875cd6987970feb6fb3d155d9a4ad9d1cd1b884edbfec5e93ed",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_timing.h": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_timing.h",
+      "sha256": "46624ca33cc97d07b75cd257bdcbe286b6bbeab01cbce6cb7391f5f9c953b2e0",
+      "build_archive_verified": true
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_txmirror.h": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_txmirror.h",
+      "sha256": "acde0629ace9307dc23f65ad7cf08dbd1d95f8c6a91c42deb5ab463b461b4de1",
+      "build_archive_verified": true
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_txwait.h": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_txwait.h",
+      "sha256": "f5aebd44128c6bf8c8d613cb59693590d6ba14add8c5a6f6edb59ef7330a9b2c",
+      "build_archive_verified": true
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_wire_counter.h": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_motor_wire_counter.h",
+      "sha256": "a1876e0e93d4136e4aa93ecedeff9cb29f58a3f6b723fa00aa586b6ae33b9bd0",
+      "build_archive_verified": true
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_panic_dump.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_panic_dump.c",
+      "sha256": "309d31fa6e2d29885b72ca174d21c9ad26a65ae679a82ed1d2d33ac3d1b834b0",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_psram_quad.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_psram_quad.c",
+      "sha256": "e4ea1ec2650dff9fe9c33b4fd0550c7edbee1ddec1dfb4829a4f89bfc8ecf944",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_rom_newlib_nuttx_dup.ld": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_rom_newlib_nuttx_dup.ld",
+      "sha256": "7dc93056af3213a93d332444749e01c52930eee7ceb80065bff2aab18edcdacd",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_sdmmc.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_sdmmc.c",
+      "sha256": "a311f9847a52d9b08e18ddeffd65437cb93469ceb79aa438e99869bd2c7b13a2",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_serial.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_serial.c",
+      "sha256": "2e1c705b27a9cad8268295e8af6daf62953ec1b9b1db28082c6badd8aef77108",
+      "build_archive_verified": true
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_spi.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_spi.c",
+      "sha256": "3e2406fd6df10d5749507a4c5b8aade2c566f0d6d944007ba8ee79b9771b601e",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_spiflash.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_spiflash.c",
+      "sha256": "a389ec9a0ca617fc0383d38d4c8af8384d607737ca95a91f39ae66f4941d9f46",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_spiram.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_spiram.c",
+      "sha256": "65e8cd43e25b84b881a8c1405e7d34a89334be327d4add03c0bf77b50006d467",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_spiram.h": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_spiram.h",
+      "sha256": "839ece1824e21073199543095d79b86e5da02e6653c289c261271965a30ee085",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_start.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_start.c",
+      "sha256": "097b75d290bebd1462fd0b4b569ca0bdc087ce4118c4fd17a58b927f64c1340f",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_usbserial.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_usbserial.c",
+      "sha256": "4be90a7fb8186774579496234fc79353f3401d99cf2f87ee2708dafe5ee19353",
+      "build_archive_verified": true
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_wifi_adapter.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_wifi_adapter.c",
+      "sha256": "2145739df082cf9a84d649324cd363231f50b80877960bfe3aa102c8f98d95b9",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_wifi_utils.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_wifi_utils.c",
+      "sha256": "0f9af8b09b39ad06eb9e5667755691fad91d6e7d2be23d40363a2e63ca66d83f",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/esp32s3_wlan.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/esp32s3_wlan.c",
+      "sha256": "b4db5b2c2c864b8235b67bc4a2fc656ff4c7f8a006847d50a6449dc13cc0f1fd",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/hal.mk": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/hal.mk",
+      "sha256": "54141d9f2da2fd8fd766d3b0c31940ee2430f301f15288e7a536c1e258e1372a",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/hal_i2s.c": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/hal_i2s.c",
+      "sha256": "be83906c6268399afb4867754fd0108f5f2e714df514ff0eeb93e2b50d04810b",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/hal_i2s.h": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/hal_i2s.h",
+      "sha256": "8033989665e780d0a83c9e35320e21cc6d6a7668b6cdd5e99a9ccecf1dd1e6a8",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/Make.defs": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/Make.defs",
+      "sha256": "06fb932994abaf3d352759a80c7c08ece1446447c09dadcc2a83c0da488ce81e",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/patch_txfix.py": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/patch_txfix.py",
+      "sha256": "825246ec512ebc41e095dfc786f7d4c2f0cc2384d028055493277497e50716ea",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/arch/xtensa/src/esp32s3/patch_wifidbg.py": {
+      "sdk_path": "nuttx/arch/xtensa/src/esp32s3/patch_wifidbg.py",
+      "sha256": "c205ead89322e07ae2e69859b96dfcb0ed213ed7d9355319c08ca97dc949c2de",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/Kconfig": {
+      "sdk_path": "nuttx/boards/Kconfig",
+      "sha256": "f4051c09c2a043a07298ce39b51b6a951d89c64f34f79d3b04d830e9cfa04543",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/buttons/defconfig": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/buttons/defconfig",
+      "sha256": "929c484c865e00928aebbf4671bf05fe62e1982282f889dd846a8b6fd55c6b4d",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/lvgl/defconfig": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/lvgl/defconfig",
+      "sha256": "34ca3170dfb7fe986383eca92e129ceb533cf32ec21da66befa3913af1c481d1",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/lvgl-3/defconfig": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/lvgl-3/defconfig",
+      "sha256": "d54c888a0addc15ad303da5cec7c2ac57da3e2805221c8bc328bc47c0c78201f",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/nsh/defconfig": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/nsh/defconfig",
+      "sha256": "95e0f1b8185c58289bab941bba58b3766174078afcf7e067c3e81598533c8660",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/openvela/defconfig": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/openvela/defconfig",
+      "sha256": "ddcd7011feaded67a3e37241a472ed35faf042ab7e7b31b85b0e4360180d35b3",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/openvela/partition_table.csv": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/openvela/partition_table.csv",
+      "sha256": "8f885b7fb66eb03fc447211c47abcf36fdccc00f55922647e7d9cf96fc01b753",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/touchscreen/defconfig": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/configs/touchscreen/defconfig",
+      "sha256": "c5bc1ff6fcad2c90320c2421658009d1a8deb0bd62247c13f82eeeb73fd80b84",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/include/board.h": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/include/board.h",
+      "sha256": "7a8ddcc4b6c1dc7dc8f4475280f3fe182b5c9730d9298dcac63f5a1fcaaa60b4",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/include/board_memorymap.h": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/include/board_memorymap.h",
+      "sha256": "e8438617cff2e71e33ac81c35a70c0d79f4d8d5fe796421101eb2051c167525f",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/Kconfig": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/Kconfig",
+      "sha256": "d90f00cf18adf6eb35ef6d2b2eb2190fff720ee6b44b8373ebedf49e54960f79",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/scripts/Make.defs": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/scripts/Make.defs",
+      "sha256": "07977aa492cd2bfbbc912ccde403f2956f3b0e8edf59d2b2544f24f780ec4684",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3-cores3.h": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3-cores3.h",
+      "sha256": "394671e79068c2563553430d2c1e9979665944a176339fb12127118c043213f0",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_appinit.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_appinit.c",
+      "sha256": "f71e6b422e67ae6b7c3a7e563a4a78e8b3ecdfa7d3d0899db6898e806a20a670",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_camera.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_camera.c",
+      "sha256": "214756c43d0337ad2d1c6d551247665ce2fc66acd256f2f63a2e77b1876d9b86",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_cores3.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_cores3.c",
+      "sha256": "ac62fe59c8b364e6b045ab8f63f5e978702b771b282e7ab755242d230983e2cb",
+      "build_archive_verified": true
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_imu.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_imu.c",
+      "sha256": "be4f1c4aac3f0e593bcde322fcfc872eae1e98ee81e4d793847cc956c9cf7f81",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_lcd_ili9342c.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_lcd_ili9342c.c",
+      "sha256": "4cff35932b9a4b5eb134ff3b2a134d496f6d8f9c8f988f475217a8d9666a59bf",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_lcd_ili9342e.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_lcd_ili9342e.c",
+      "sha256": "72cdeac443cc21b2d98f0e3ff94445ed1f3c3a342d0056566c3030d9062c8684",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_lcd_st7789.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_lcd_st7789.c",
+      "sha256": "66f9aaedd0c298de8edc3d6f47899b610a2ae253385c8c74ccd91d9da9516138",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_sdspi.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_sdspi.c",
+      "sha256": "7ce1f7c74ff9c4a6a437337e5325603cc449f67c0ec674beb8442aac3fd4d56a",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_spi.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_spi.c",
+      "sha256": "9ba8928ca64d43f22de604749fc04c5c53968fdb6dfa4222fea87783f05adf32",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_touch_ft6336.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_touch_ft6336.c",
+      "sha256": "17f585858994209fa4161e4b0c6fa5d8c5948793354eb3ed9393495f49f5a34a",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_touchsceen_gt911.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_touchsceen_gt911.c",
+      "sha256": "1871d0e8e2068feb4cc81f92e9a79631a6069b3af065c07c9d24faa0d5a2ace9",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_touchsceen_tt21100.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_board_touchsceen_tt21100.c",
+      "sha256": "62356803b3427f88511a83824e8fb1d1643867ac8f5e239c24a54c26985dfd44",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_boot.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_boot.c",
+      "sha256": "d291b0e87ee84a6ac0e52e9090f6aece7cbc432e90ff6fbfd7c20adf8cff5b84",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_bringup.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_bringup.c",
+      "sha256": "c3d20d7c7f4472f0c1e750c94421e4ef72c071f98fa24d30647928013ae52c38",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_buttons.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_buttons.c",
+      "sha256": "3eccf8bcd097a98d15778cee6e56eedd6271f812eb2adeda051921964b6065a5",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_reset.c": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/esp32s3_reset.c",
+      "sha256": "38a00ec1a7659fc55ebf2297c0d8632de57e30f0ad12705a7568440e3abde0d0",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/hal_cam_ll.h": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/hal_cam_ll.h",
+      "sha256": "20f518657988ebd376875197749d077ae941ec2b4438a9422d63bcacb2fefedb",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/Make.defs": {
+      "sdk_path": "nuttx/boards/xtensa/esp32s3/m5stack-cores3/src/Make.defs",
+      "sha256": "ff733eba7fc70b028f8b59fe3f6490bc1a855d08f6fc412ca33f03108d6e35ba",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/drivers/lcd/ili9341.c": {
+      "sdk_path": "nuttx/drivers/lcd/ili9341.c",
+      "sha256": "9c785fc563fe103091e40b639c7acf246031492c3d1c723993d41cdfd6152a97",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/drivers/lcd/lcd_dev.c": {
+      "sdk_path": "nuttx/drivers/lcd/lcd_dev.c",
+      "sha256": "d1adbff522ae0adff49b0570a20c16e8a237f9b61abb7e5e2dfc0974aee3d5e3",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/drivers/lcd/st7789.c": {
+      "sdk_path": "nuttx/drivers/lcd/st7789.c",
+      "sha256": "56613d7dd9a0aa6685425b8fdb234edb19395177c09dd544e4ca9f57c8c3e2f8",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/drivers/serial/serial.c": {
+      "sdk_path": "nuttx/drivers/serial/serial.c",
+      "sha256": "c711fb2b3a5f19a9369fa9d747006054282b381e59f635c3fc2acc2b94a48d87",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/fs/fat/fs_fat32.c": {
+      "sdk_path": "nuttx/fs/fat/fs_fat32.c",
+      "sha256": "f7b9dbb37657ef50e2c1775d941dd27bac71ab8114f5cc71a04709d0f8560256",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/fs/fat/fs_fat32.h": {
+      "sdk_path": "nuttx/fs/fat/fs_fat32.h",
+      "sha256": "b56cc92939147b66add6d30dc5526213d87aa5efa66235c62589a6d1c728dd4d",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/fs/littlefs/Make.defs": {
+      "sdk_path": "nuttx/fs/littlefs/Make.defs",
+      "sha256": "817012be81b7d719263717bc3c518af7b4873919be285a147383fe882db34296",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/include/nuttx/lcd/ili9341.h": {
+      "sdk_path": "nuttx/include/nuttx/lcd/ili9341.h",
+      "sha256": "775e31f1e3e852fdfd0b300ce83ac10f7bde213a69d79eda40eae6b704e4aa9d",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/include/nuttx/lcd/lcd_dev.h": {
+      "sdk_path": "nuttx/include/nuttx/lcd/lcd_dev.h",
+      "sha256": "d5058a314499a31cb8132feff2770497fe14d77e847bc6735fb26dc7bd3bcf8b",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/mm/mm_heap/mm_malloc.c": {
+      "sdk_path": "nuttx/mm/mm_heap/mm_malloc.c",
+      "sha256": "9fa6ced3c7dad2d0b1601e15664c0809d22ed224a29da9a5e70d1437ac2429ce",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/sched/init/nx_start.c": {
+      "sdk_path": "nuttx/sched/init/nx_start.c",
+      "sha256": "7abdbb181032bac50d2414ae2e7d1f50e76d42c433da340c572fe337d6cd9e76",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/sched/irq/irq_initialize.c": {
+      "sdk_path": "nuttx/sched/irq/irq_initialize.c",
+      "sha256": "9c300807d3c1589659ae2f55a00ef03fa6dc1956ae1ce3a3c98b63be55969b22",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/nuttx/sched/semaphore/sem_wait.c": {
+      "sdk_path": "nuttx/sched/semaphore/sem_wait.c",
+      "sha256": "c95728cea1e40694a66c3e0113427fa8a89d34abeaedde032d3877d7695dec4d",
+      "build_archive_verified": false
+    },
+    "patches/m5/sdk-overlay/apps/graphics/lvgl/lvgl/src/drivers/nuttx/lv_nuttx_image_cache.c": {
+      "sdk_path": "apps/graphics/lvgl/lvgl/src/drivers/nuttx/lv_nuttx_image_cache.c",
+      "sha256": "6a6b16338deb841fb5b49b76227f37ec06bf207cfb5108c169bd8d99514dee3b",
+      "build_archive_verified": false
+    }
+  },
+  "public_configuration_changes": {
+    "apps/plant-companion/main/app_main.c": {
+      "original_sha256": "d4f87fa95c6a706d7183edbafa3abc3fad76c023bf2828747662e0277d871aa0",
+      "review_sha256": "7235741fb29a74c0a219b1c34f56a10fe326ca7d51cd5334ef0aa06b1e6ff1a0"
+    },
+    "apps/plant-companion/ota/ota.h": {
+      "original_sha256": "5f90f075221758f2514bafe0dc94dbb14a4814087aa6c7163d76fd3d66cb4b54",
+      "review_sha256": "f0a51db92fb9cd9baafe449720b15dd86deed5c92bbbc9fdcf47cba7a280e499"
+    },
+    "nuttx/.config": {
+      "original_sha256": "ef67ec1884b84dbb868cc0a995d92947088ef9098d8a3ae0573fdc5cb0568d67",
+      "review_sha256": "1a8b1b094d43b2219cf410e8749ac58a30fa1ebdacaec3b3c44bca84b7d1cb70"
+    },
+    "apps/plant-companion/services/server_bridge.c": {
+      "original_sha256": "f3b9cc0050227b10704223ceaebf6400b7c62bf779140a11619a1557d1666836",
+      "review_sha256": "f7d1e3e1fffcb4cc016e46283eeb46c568afb943f04494f89c85b4848bc71110"
+    },
+    "apps/plant-companion/components/system_monitor/device_cfg.h": {
+      "original_sha256": "aa0f5473bc4b9b8ec12802f63bd0be05a2313c269a82fc3fff57feb198e5b4c8",
+      "review_sha256": "f22ed5875ead271e18d4704685cacd8c9ee17a7f6681aca765f34abf3b074b9e"
+    }
+  },
+  "excluded_workspace_material": [
+    "apps/plant-companion/components/voice_wake/vendor/lib/libnewlib_setjmp.a",
+    "apps/plant-companion/docs/ARCHITECTURE.md",
+    "apps/plant-companion/docs/CAMERA_DEBUG_LOG.md",
+    "apps/plant-companion/docs/CAMERA_HANDOVER.md",
+    "apps/plant-companion/docs/HANDOVER_20260831.md",
+    "apps/plant-companion/docs/HANDOVER_20260903_TOTAL.md",
+    "apps/plant-companion/docs/HANDOVER_BOOT_CRASH.md",
+    "apps/plant-companion/docs/HANDOVER_UI_TOUCH.md",
+    "apps/plant-companion/docs/IMAGE_REQUIREMENTS.md",
+    "apps/plant-companion/docs/MEMORY_BUDGET_WROOM.md",
+    "apps/plant-companion/docs/UI_SPEC.md",
+    "apps/plant-companion/docs/VOICE_REQUIREMENTS.md",
+    "apps/plant-companion/ota/OTA_WORKLOG.md",
+    "apps/plant-companion/tools/test_mimo_audio.py",
+    "apps/plant-companion/tools/test_mimo_audio_speech.py",
+    "apps/plant-companion/tools/test_mimo_image.py",
+    "apps/plant-companion/tools/test_mimo_rgb.py",
+    "apps/plant-companion/tools/test_mimo_tts.py",
+    "apps/plant-companion/tools/test_server_bridge.py",
+    "apps/Kconfig"
+  ],
+  "dependency_archives": {
+    "nuttx/fs/littlefs/v2.5.1.tar.gz": {
+      "url": "https://github.com/littlefs-project/littlefs/archive/refs/tags/v2.5.1.tar.gz",
+      "sha256": "77acdd699fbc8c62efe1467a90de4bde133517fb370b10a538e25d341a11b4e1"
+    },
+    "apps/graphics/lvgl/v9.2.1.zip": {
+      "url": "https://github.com/lvgl/lvgl/archive/refs/tags/v9.2.1.zip",
+      "sha256": "188861504e57632f1d25bea8dce2cac82f8411e8d3897cfe00372ac1688c01e7"
+    },
+    "apps/netutils/cjson/v1.7.12.tar.gz": {
+      "url": "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.12.tar.gz",
+      "sha256": "760687665ab41a5cff9c40b1053c19572bcdaadef1194e5cba1b5e6f824686e7"
+    },
+    "apps/netutils/mqttc/1.1.5.tar.gz": {
+      "sha256": "605badca8b62bf8e751b938f64798b00d270da2a95c4b43f37904060cfd67cdf",
+      "url": "https://github.com/LiamBindle/MQTT-C/archive/1.1.5.tar.gz"
+    },
+    "apps/system/libuv/v1.46.0.zip": {
+      "url": "https://github.com/libuv/libuv/archive/refs/tags/v1.46.0.zip",
+      "sha256": "45953dc9b64db7f4f47561f9e4543b762c52adfe7c9b6f8e9efbc3b4dd7d3081"
+    }
+  },
+  "external_build_inputs": {
+    "app/plant-companion-m5/ui/assets/fonts/lv_font_plant_zh_12.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/lv_font_plant_zh_12.c",
+      "sha256": "0b2510cd558f5da9baa3d040cb1448330bcf86984256f8fe141983fad88d9b45",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/lv_font_plant_zh_16.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/lv_font_plant_zh_16.c",
+      "sha256": "f26d5f51d8a3f8a39398f84a3ecec5a6caabb65215a405f019356e3c75e847bd",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/lv_font_plant_zh_19.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/lv_font_plant_zh_19.c",
+      "sha256": "7a98fb49ca4acabfda9bd89933484d090cf2a5b0f9b60a183f7d00be8ce01655",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/lv_font_plant_zh_25.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/lv_font_plant_zh_25.c",
+      "sha256": "f0e307d6eaa82013bdd2591771c39a4331c4a81c876c89abe454ade0cc117dbe",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/NotoSansSC-Regular.otf": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/NotoSansSC-Regular.otf",
+      "sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/OpenMoji-black-glyf.ttf": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/OpenMoji-black-glyf.ttf",
+      "sha256": "b0c48711651c0502956692beb2e130ae2fc9b0df3b01febf758b3aeb41501dc4",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/zh_font_builtin_12.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/zh_font_builtin_12.c",
+      "sha256": "e5529d529fe55f91a5c96dd3891eb7309730c66fee54eb48e61495a0a0fda0d3",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/zh_font_builtin_16.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/zh_font_builtin_16.c",
+      "sha256": "bb4ffe1180c97d0fd66bc5c6c30cadbb410bb0c77ab845c45da077d6e32dbd3e",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ui/assets/fonts/zh_font_builtin_19.c": {
+      "sdk_path": "apps/plant-companion/ui/assets/fonts/zh_font_builtin_19.c",
+      "sha256": "d0a1979435aeebbd2704c4710ec6889032562985b62da290734ac59593195989",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/tools/fonts/zh_font_builtin_20.c": {
+      "sdk_path": "apps/plant-companion/tools/fonts/zh_font_builtin_20.c",
+      "sha256": "5ee154a6a781674d622ce5fc2c485d920555a9f807dae075c1653732df9ef0b9",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/imgfx_color_convert_s3.elfobj": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/imgfx_color_convert_s3.elfobj",
+      "sha256": "f1dfd5d58dc1e7c1f369793cb3dc3d5a09773bc92c64d67bb3f4b448306634fa",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/ns_nn_data.c": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/ns_nn_data.c",
+      "sha256": "88e4a26668d4930f256da98121523d8d343012a0f18d74582b7e4082619cd5a6",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/lib/libc_speech_features.a": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/lib/libc_speech_features.a",
+      "sha256": "bdeb1a1928c5263ddec97ee7fd62ee82497f87e0f69b64fda74cd1673696828c",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/lib/libdl_lib.a": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/lib/libdl_lib.a",
+      "sha256": "1c0421a45462a6bc0effbccc1b80f53c4242e945220e42db43eb96ff2da6126f",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/lib/libflite_g2p.a": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/lib/libflite_g2p.a",
+      "sha256": "1ad8ae88e0cdbedf5391bd114c9bd0d49507a87196d5fdf7d60b5c7627b74bed",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/lib/libfst.a": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/lib/libfst.a",
+      "sha256": "a9583109191fc56160609e4292e78cd48f8acd2aaa1c95d52210cc15a2a2ef93",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/lib/libhufzip.a": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/lib/libhufzip.a",
+      "sha256": "c359c70690abefabd14ce572e4e3cbdeca7a5f6046b8f7c20774ea95773d8c47",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/lib/libmultinet.a": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/lib/libmultinet.a",
+      "sha256": "c0c4b4c181534db181a2ff97bff5b082d020cebf2c65219d88314266f8161873",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_wake/vendor/lib/libplant_wake_math.a": {
+      "sdk_path": "apps/plant-companion/components/voice_wake/vendor/lib/libplant_wake_math.a",
+      "sha256": "42c00757bbf0e3db89655ed3535bf446d17261dea47e17c0bde7dc77993fba07",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_vad/vendor/libesp_audio_processor.a": {
+      "sdk_path": "apps/plant-companion/components/voice_vad/vendor/libesp_audio_processor.a",
+      "sha256": "f26be3e06817b2971f4d575e0542134acdeb4fb152ff44a18f3ed92b15eec1f8",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_vad/vendor/libplant_vad.a": {
+      "sdk_path": "apps/plant-companion/components/voice_vad/vendor/libplant_vad.a",
+      "sha256": "33abd9eea95ad948fe7e9920aad1df1e0ce8e7d2020a9e69de16e909df8e39c7",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/vendor/libplant_nn.a": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/vendor/libplant_nn.a",
+      "sha256": "79ae330569edf8cf7f66098da2999b08677a04851e3e08f8f28c61eed32589b2",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_ns/vendor/libplant_ns.a": {
+      "sdk_path": "apps/plant-companion/components/voice_ns/vendor/libplant_ns.a",
+      "sha256": "fa606da245de186a6956e16b286944fb65a4716f1bf44010a27731298bf380db",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/voice_agent/esp_sr/model_data/srmodels_data.c": {
+      "sdk_path": "apps/plant-companion/components/voice_agent/esp_sr/model_data/srmodels_data.c",
+      "sha256": "ac8e17b1593d048625d639e618efdfa09727a011ef2aa05196f49be90d2bb524",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/jpeg_vendor/libesp_new_jpeg.a": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/jpeg_vendor/libesp_new_jpeg.a",
+      "sha256": "4205b1258ce0ef9fd9946abfc7cd5f105b08316ea567e1136cec60b3e6330896",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/components/camera_capture/jpeg_vendor/libesp_new_jpeg_flash.a": {
+      "sdk_path": "apps/plant-companion/components/camera_capture/jpeg_vendor/libesp_new_jpeg_flash.a",
+      "sha256": "29c7764e798b5039c79fc96c7e98a40b4c5c60fe3106549912664141001551cf",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_voice/voice_fixture_data.h": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_voice/voice_fixture_data.h",
+      "sha256": "4cd4918d7164cb82c8dfc11994804b8bf7f83fe262fd1bbf36b2da7ea4e880cf",
+      "build_archive_verified": false
+    },
+    "app/plant-companion-m5/ai_module/ai_voice/wake_ack_pcm.h": {
+      "sdk_path": "apps/plant-companion/ai_module/ai_voice/wake_ack_pcm.h",
+      "sha256": "a6491bd3f740f17028db224bedd5c1d7ccee7cc12d6d61e593c2a8196ab3360e",
+      "build_archive_verified": true
+    }
+  },
+  "published_profile": "source-only; exact external build inputs required"
+}

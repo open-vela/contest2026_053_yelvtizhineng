@@ -1,0 +1,23 @@
+{
+  "result": "passed",
+  "isolated_sdk": true,
+  "local_cached_dependencies": true,
+  "firmware_bytes": 4794640,
+  "sha256": "8ebd63fb7911800bf4bc06bd91a20388d58b43c3f3a07dfb310c11f3fe4ec227",
+  "heap_guard": {
+    "pass": true,
+    "combined_internal_arena_bytes": 151344,
+    "imem_reserved_bytes": 131072,
+    "bootstrap_heap_bytes": 20272,
+    "minimum_bootstrap_heap_bytes": 9216,
+    "sheap": "0x3fcc87e0",
+    "heap_top": "0x3fced710"
+  },
+  "elf_symbols_checked": [
+    "setjmp",
+    "longjmp",
+    "stackchan_body_official_frame"
+  ],
+  "linker_rwx_segment_warning": true,
+  "rebuilt_image_flashed": false
+}

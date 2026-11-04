@@ -1,0 +1,6537 @@
+#include "../components/voice_vad/voice_vad.h"
+#include "../services/interaction_service.h"
+#include "../components/voice_wake/voice_wake.h"
+/****************************************************************************
+ * apps/plant-companion/main/app_main.c
+ *
+ * Plant Companion — AI Smart Plant Care System
+ *
+ * Usage:
+ *   nsh> plant wifi <ssid> <password>
+ *   nsh> plant ai test
+ *   nsh> plant ai advise <temp> <moisture> <ec> <salt> <n> <p> <k> <ph>
+ *   nsh> plant soil read
+ *   nsh> plant sd test
+ ****************************************************************************/
+
+#include <nuttx/config.h>
+#include "../services/power_service.h"
+#ifdef CONFIG_ARCH_BOARD_M5STACK_CORES3
+#  include "../components/stackchan_body/stackchan_body.h"
+#endif
+#include <malloc.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <pthread.h>
+#include <sys/ioctl.h>
+#include <sys/statvfs.h>
+#include <nuttx/clock.h>
+#include <nuttx/mm/mm.h>
+#include <nuttx/lcd/lcd_dev.h>
+
+#ifdef CONFIG_PLANT_UI
+#  include <lvgl/lvgl.h>
+#endif
+
+#if defined(CONFIG_PLANT_UI_PANEL) && defined(CONFIG_ARCH_BOARD_M5STACK_CORES3)
+#  include "../components/ui_panel/lcd_st7796.h"
+#endif
+
+#ifdef CONFIG_PLANT_UI
+#  include "../ui/ui_app.h"
+#  include "../ui/screens/screen_voice.h"
+#  include "../ui/assets/fonts/zh_font.h"
+#  include "../ui/theme/theme_plant.h"
+#endif
+
+#ifdef CONFIG_PLANT_WIFI_MANAGER
+#  include "../communication/wifi_manager/wifi_manager.h"
+#endif
+
+#ifdef CONFIG_PLANT_AI_MODULE
+#  include "../ai_module/ai_common.h"
+#  include "../ai_module/ai_engine/ai_engine.h"
+#  include "../services/server_bridge.h"
+#  include "../services/sd_write.h"
+#endif
+
+#ifdef CONFIG_PLANT_AI_VOICE
+#  include "../ai_module/ai_voice/ai_voice.h"
+#  include "../services/voice_service.h"
+#  include "../components/voice_agent/voice_agent.h"
+#  include "../components/voice_agent/voice_timbre.h"
+#  include "../components/voice_ns/voice_ns.h"
+#  include "../hal/hal_i2s.h"
+#  include "../hal/hal_i2c.h"
+#  ifdef CONFIG_PLANT_AUDIO_AW88298
+#    include "../components/voice_agent/aw88298.h"
+#  else
+#    include "../components/voice_agent/es8311.h"
+#  endif
+
+/* I2C 总线初始化（内核符号，链接时解析；寄存器快照用） */
+
+extern FAR struct i2c_master_s *esp32s3_i2cbus_initialize(int bus);
+#endif
+
+#ifdef CONFIG_PLANT_CAMERA_CAPTURE
+#  include "../components/camera_capture/camera_capture.h"
+#  include "../ui/screens/screen_camera.h"
+extern void *esp32s3_psram_static_alloc(size_t size);
+#endif
+
+#ifdef CONFIG_PLANT_GESTURE_SENSOR
+#  include "../components/gesture_sensor/gesture_sensor.h"
+#endif
+
+#ifdef CONFIG_PLANT_SYSTEM_MONITOR
+#  include "../components/system_monitor/battery_monitor.h"
+#endif
+
+#ifdef CONFIG_PLANT_SOIL_SENSOR
+#  include "../components/sensor_driver/soil_sensor.h"
+#  include "../services/sensor_service.h"
+#endif
+
+#ifdef CONFIG_PLANT_SD_CARD
+#  include "../components/system_monitor/sd_card.h"
+#  include "../components/system_monitor/device_cfg.h"
+#endif
+
+#ifdef CONFIG_ESP32S3_WIFI
+#  include "../ota/ota.h"
+#endif
+
+/****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+
+
+/****************************************************************************
+ * Private Data — 本会话“最近一次成功”的运行配置记录
+ * （自动恢复/成功联网后写回 SD 卡 plant.cfg，见 device_cfg.h）
+ ****************************************************************************/
+
+#ifdef CONFIG_PLANT_WIFI_MANAGER
+static char s_wifi_ssid[33];
+static char s_wifi_password[65];
+static bool s_wifi_ok;                 /* 本会话内 WiFi 连接成功过 */
+#endif
+
+#ifdef CONFIG_PLANT_AI_MODULE
+static char s_srv_host[128];
+static uint16_t s_srv_port;
+static bool s_srv_ok;                  /* 本会话内服务器地址配置成功过 */
+#endif
+
+/****************************************************************************
+ * Private Functions — 开机配置持久化/自动恢复
+ ****************************************************************************/
+
+#ifdef CONFIG_PLANT_SD_CARD
+static void cfg_save_runtime(void)
+{
+  char o_ssid[33] = { 0 };
+  char o_pwd[65] = { 0 };
+  char o_host[128] = { 0 };
+  uint16_t o_port = 0;
+  const char *ssid = NULL;
+  const char *password = NULL;
+  const char *host = NULL;
+  uint16_t port = 0;
+  int ret;
+
+  /* ⚠ 2026-09-16：这里原来会**整段**覆盖 SD 配置。
+   * 只改了 WiFi 就调本函数时，服务器地址因为 s_srv_ok 还是 false 而被写成空，
+   * SD 上原来存好的服务器地址就一起丢了 —— 实测：NSH 里
+   *     plant wifi H3C_1209 <密码>
+   * 之后 plant cfg show 变成"服务器="，重启后直接报"还没有配置服务器"，
+   * 管理台也再也看不到设备在线。
+   * 先把 SD 上已有的配置读回来，只有本次真的改过的才覆盖。 */
+
+  (void)device_cfg_load(o_ssid, sizeof(o_ssid), o_pwd, sizeof(o_pwd),
+                        o_host, sizeof(o_host), &o_port);
+
+#ifdef CONFIG_PLANT_WIFI_MANAGER
+  wifi_status_t current_wifi;
+  if (wifi_manager_get_status(&current_wifi) == 0 && current_wifi.connected)
+    {
+      strlcpy(s_wifi_ssid, current_wifi.ssid, sizeof(s_wifi_ssid));
+      strlcpy(s_wifi_password, current_wifi.password, sizeof(s_wifi_password));
+      s_wifi_ok = true;
+      memset(current_wifi.password, 0, sizeof(current_wifi.password));
+    }
+  if (s_wifi_ok)
+    {
+      ssid = s_wifi_ssid;
+      password = s_wifi_password;
+    }
+  else if (o_ssid[0] != '\0')
+    {
+      ssid = o_ssid;
+      password = o_pwd;
+    }
+#endif
+#ifdef CONFIG_PLANT_AI_MODULE
+  if (s_srv_ok)
+    {
+      host = s_srv_host;
+      port = s_srv_port;
+    }
+  else if (o_host[0] != '\0')
+    {
+      host = o_host;
+      port = o_port;
+    }
+#endif
+
+  if (ssid == NULL && host == NULL)
+    {
+      return;
+    }
+
+  ret = device_cfg_save(ssid, password, host, port);
+  if (ret == 0)
+    {
+      printf("[Cfg] saved boot configuration path=%s\n", device_cfg_path());
+    }
+  else
+    {
+      printf("[Cfg] 开机配置保存失败: %d\n", ret);
+    }
+}
+#endif /* CONFIG_PLANT_SD_CARD */
+
+#if defined(CONFIG_PLANT_SD_CARD) && defined(CONFIG_PLANT_WIFI_MANAGER)
+#ifdef CONFIG_ARCH_BOARD_M5STACK_CORES3
+#define CFG_DEFAULT_WIFI_SSID ""
+#define CFG_DEFAULT_WIFI_PASSWORD ""
+#else
+#define CFG_DEFAULT_WIFI_SSID     ""
+#define CFG_DEFAULT_WIFI_PASSWORD ""
+#endif
+#define CFG_DEFAULT_SERVER_HOST   ""
+#define CFG_DEFAULT_SERVER_PORT   8011
+
+/* 读 SD plant.cfg → 自动连 WiFi → 配置服务器（verbose 供 CLI 使用）。
+ * WiFi 已连时跳过重连；服务器注册失败不影响返回值（联网结果更重要）。 */
+
+static int cfg_apply_from_file(bool verbose)
+{
+  char ssid[33] = { 0 };
+  char password[65] = { 0 };
+  char host[128] = { 0 };
+  uint16_t port = 0;
+  int ret;
+
+  ret = device_cfg_load(ssid, sizeof(ssid), password, sizeof(password),
+                        host, sizeof(host), &port);
+  if (ret == 0)
+    {
+      printf("[Cfg] restored boot configuration path=%s\n", device_cfg_path());
+    }
+  if (ret < 0 && verbose)
+    {
+      printf("[Cfg] 读取配置失败: %d，使用固件默认配置\n", ret);
+    }
+
+  if (ssid[0] == '\0')
+    {
+      strlcpy(ssid, CFG_DEFAULT_WIFI_SSID, sizeof(ssid));
+      strlcpy(password, CFG_DEFAULT_WIFI_PASSWORD, sizeof(password));
+    }
+
+  if (host[0] == '\0')
+    {
+      strlcpy(host, CFG_DEFAULT_SERVER_HOST, sizeof(host));
+      port = CFG_DEFAULT_SERVER_PORT;
+    }
+
+#ifdef CONFIG_ARCH_BOARD_M5STACK_CORES3
+  if (ssid[0] == '\0')
+    {
+      printf("[Cfg] no saved WiFi; configure from the home network button\n");
+      return -ENOENT;
+    }
+#endif
+
+  if (ssid[0] != '\0')
+    {
+      if (!wifi_manager_is_connected())
+        {
+          wifi_manager_init();
+          ret = wifi_manager_connect(ssid, password);
+          if (verbose || ret != 0)
+            {
+              printf("[Cfg] 自动连 WiFi %s → %d\n", ssid, ret);
+            }
+        }
+      else
+        {
+          ret = 0;
+        }
+
+      if (ret == 0)
+        {
+          strlcpy(s_wifi_ssid, ssid, sizeof(s_wifi_ssid));
+          strlcpy(s_wifi_password, password, sizeof(s_wifi_password));
+          s_wifi_ok = true;
+        }
+    }
+
+#ifdef CONFIG_PLANT_AI_MODULE
+  if (host[0] != '\0')
+    {
+      uint16_t use_port = (port != 0) ? port : 8000;
+
+      ret = server_bridge_set_server(host, use_port);
+      if (verbose || ret != 0)
+        {
+          printf("[Cfg] 配置服务器 %s:%u → %d\n", host,
+                 (unsigned)use_port, ret);
+        }
+
+      if (ret == 0)
+        {
+          strlcpy(s_srv_host, host, sizeof(s_srv_host));
+          s_srv_port = use_port;
+          s_srv_ok = true;
+        }
+    }
+#endif
+
+  return 0;
+}
+#endif /* SD && WIFI_MANAGER */
+
+#if defined(CONFIG_PLANT_SD_CARD) && defined(CONFIG_PLANT_WIFI_MANAGER)
+/* Restore networking without blocking UI. CoreS3 config is on the board's
+ * already-mounted LittleFS; only boards whose config lives on SD wait for SD.
+ */
+
+static void *boot_cfg_thread(void *arg)
+{
+#ifndef CONFIG_ARCH_BOARD_M5STACK_CORES3
+  int waited = 0;
+#endif
+  int attempt;
+
+  (void)arg;
+
+#ifndef CONFIG_ARCH_BOARD_M5STACK_CORES3
+  while (!sd_card_status() && waited < 40)
+    {
+      usleep(1000 * 1000);
+      waited++;
+    }
+#endif
+
+  /* Do not start the radio while the board is running from the battery
+   * alone.  A WiFi TX burst browns out a nearly flat cell and turns the
+   * whole boot into a reset loop.  Wait up to 60 s for VBUS, then give up
+   * quietly; the UI keeps running and "plant wifi" still works manually.
+   */
+
+  {
+    extern int board_cores3_pmic_read_reg(uint8_t reg, uint8_t *value);
+    uint8_t st0 = 0;
+    int guard = 0;
+
+    while (guard < 30 &&
+           (board_cores3_pmic_read_reg(0x00, &st0) < 0 ||
+            (st0 & 0x20) == 0))
+      {
+        if (guard == 0)
+          {
+            printf("[WIFI] 无外部电源(VBUS_GOOD=0)，暂缓自动联网\n");
+          }
+
+        usleep(2 * 1000 * 1000);
+        guard++;
+      }
+
+    if ((st0 & 0x20) == 0)
+      {
+        printf("[WIFI] 60s 内未检测到外部电源，跳过自动联网\n");
+        return NULL;
+      }
+  }
+
+  /* WiFi driver is not always ready at the exact boot instant.  Retry a few
+   * times; once association succeeds, cfg_apply also configures the server
+   * and registration/heartbeat can start. */
+
+  for (attempt = 0; attempt < 6; attempt++)
+    {
+      if (attempt > 0)
+        {
+          wifi_manager_disconnect();
+          usleep(500 * 1000);
+        }
+
+      int apply_rc = cfg_apply_from_file(false);
+      if (apply_rc == -ENOENT) return NULL;
+      if (wifi_manager_is_connected())
+        {
+          break;
+        }
+
+      usleep(5 * 1000 * 1000);
+    }
+  return NULL;
+}
+
+static void boot_cfg_start(void)
+{
+  pthread_t tid;
+  pthread_attr_t attr;
+
+  pthread_attr_init(&attr);
+  pthread_attr_setstacksize(&attr, 8192);
+  if (pthread_create(&tid, &attr, boot_cfg_thread, NULL) == 0)
+    {
+      pthread_detach(tid);
+    }
+  else
+    {
+      printf("[Cfg] 开机恢复线程创建失败\n");
+    }
+
+  pthread_attr_destroy(&attr);
+}
+#endif /* SD && WIFI_MANAGER */
+
+#ifdef CONFIG_PLANT_WIFI_MANAGER
+static int cmd_wifi(int argc, char *argv[])
+{
+  if (argc < 3)
+    {
+      printf("Usage: plant wifi <ssid> [password]\n");
+      return -1;
+    }
+
+  const char *ssid = argv[2];
+  const char *password = (argc >= 4) ? argv[3] : "";
+
+  printf("[WIFI] Connecting to: %s\n", ssid);
+
+  wifi_manager_init();
+  int ret = wifi_manager_connect(ssid, password);
+
+  if (ret == 0)
+    {
+      strlcpy(s_wifi_ssid, ssid, sizeof(s_wifi_ssid));
+      strlcpy(s_wifi_password, password, sizeof(s_wifi_password));
+      s_wifi_ok = true;
+      printf("[WIFI] Connected!\n");
+#ifdef CONFIG_PLANT_SD_CARD
+      cfg_save_runtime();
+#endif
+    }
+  else
+    {
+      printf("[WIFI] Failed: %d\n", ret);
+    }
+
+  return ret;
+}
+#endif
+
+#ifdef CONFIG_PLANT_AI_VOICE
+/* ⚠ 2026-09-01 rec 命令流式化（用户定案：按 LVGL 说话功能的方式做——
+ * ai_voice_stream_record 静态缓冲零大 malloc，回调块写 SD 文件） */
+
+static FILE *s_rec_fp;
+static uint32_t s_rec_data;
+static int32_t s_rec_peak;      /* 信号峰值（|s| 最大） */
+static uint64_t s_rec_sq;       /* 均方和（RMS 判据） */
+static uint32_t s_rec_nonzero;  /* 非零采样数 */
+
+static void rec_write_cb(FAR const int16_t *pcm, size_t samples, void *arg)
+{
+  size_t i;
+  (void)arg;
+
+  /* ⚠️ 2026-09-16 采样计数移出写盘分支：nowrite 模式（s_rec_fp==NULL）
+   * 下也要统计采集量，用于隔离"写 SD 是否拖累采集"。 */
+
+  s_rec_data += (uint32_t)samples * 2;
+
+  /* Signal statistics must also run in nowrite mode. Keeping them inside the
+   * file-write branch made the diagnostic report a false all-zero capture.
+   */
+
+  for (i = 0; i < samples; i++)
+    {
+      int32_t a = pcm[i] < 0 ? -pcm[i] : pcm[i];
+
+      if (a > s_rec_peak)
+        {
+          s_rec_peak = a;
+        }
+
+      s_rec_sq += (uint64_t)a * (uint64_t)a;
+      if (a != 0)
+        {
+          s_rec_nonzero++;
+        }
+    }
+
+  if (s_rec_fp != NULL)
+    {
+      sd_write_aligned(s_rec_fp, pcm, samples * 2);
+    }
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * plant voice diag：双段判别（前一半安静 / 后一半说话）
+ * 目的：一次录音量化对比两段统计，锁定"录音噪声"根因在哪一层，
+ *       而不是猜参数反复烧录。判据：
+ *   1) 说话段峰值≥30000 或非零≈100% → 削顶（MIC PGA 增益过高）
+ *   2) 安静段峰值已≥10000        → 底噪过大（增益/模拟配置/脉冲）
+ *   3) 说话段峰值<3000           → 未拾到语音（模拟配置/硬件）
+ *   4) 说话段明显强于安静段       → 设备端拾音正常 → 问题在服务器侧
+ * 原始 PCM 同时落 /mnt/sd/rec.wav，可拔卡用 Audacity 看波形/频谱复核。
+ * ───────────────────────────────────────────────────────────── */
+
+static uint32_t s_diag_seg;       /* 已累计采样数（段归属判据） */
+static uint32_t s_diag_split;     /* 段边界（采样数） */
+static int32_t  s_diag_peak[2];   /* 每段 |s| 峰值 */
+static uint64_t s_diag_sq[2];     /* 每段均方和 */
+static uint32_t s_diag_nonzero[2];
+static uint32_t s_diag_spike[2];  /* |s| > 2000（削顶尖峰/脉冲） */
+static uint32_t s_diag_hist[2][256];  /* 128 步进直方图（分位数） */
+static bool     s_diag_announced; /* 是否已提示"开始说话" */
+
+/* ⚠ 2026-09-02 "听不到人声"判别补充：
+ *  - s_diag_zc / s_diag_zc_last：说话段过零率（语音 ~0.05-0.15 低频为主；
+ *    宽带噪声 ~0.3-0.5 高频为主）——数据有能量但过零率高 = 录到的是
+ *    噪声/环境声而非人声；
+ *  - 实际录音耗时（diag 分支记录 ticks）：若实际耗时 ≈ 标称/2 → RX 实际
+ *    帧率 48kHz（非 24k）→ 3:2 降采样拿错样本 → 语音变噪声（历史 §14）。 */
+
+static uint32_t s_diag_zc;        /* 说话段过零计数 */
+static int32_t  s_diag_zc_last;   /* 上一个采样（跨块） */
+static bool     s_diag_zc_init;   /* 过零统计是否已初始化 */
+
+static void diag_write_cb(FAR const int16_t *pcm, size_t samples, void *arg)
+{
+  size_t i;
+  (void)arg;
+
+  if (s_rec_fp != NULL)
+    {
+      sd_write_aligned(s_rec_fp, pcm, samples * 2);
+      s_rec_data += (uint32_t)samples * 2;
+    }
+
+  for (i = 0; i < samples; i++)
+    {
+      int seg = (s_diag_seg + i < s_diag_split) ? 0 : 1;
+      int32_t a = pcm[i] < 0 ? -pcm[i] : pcm[i];
+
+      if (a > s_diag_peak[seg])
+        {
+          s_diag_peak[seg] = a;
+        }
+
+      s_diag_sq[seg] += (uint64_t)a * (uint64_t)a;
+      if (a != 0)
+        {
+          s_diag_nonzero[seg]++;
+        }
+
+      if (a > 2000)
+        {
+          s_diag_spike[seg]++;
+        }
+
+      s_diag_hist[seg][(uint32_t)a >> 7]++;
+
+      /* 说话段过零统计（跨块保持状态） */
+
+      if (seg == 1)
+        {
+          if (s_diag_zc_init)
+            {
+              if ((pcm[i] >= 0 && s_diag_zc_last < 0) ||
+                  (pcm[i] < 0 && s_diag_zc_last >= 0))
+                {
+                  s_diag_zc++;
+                }
+            }
+          else
+            {
+              s_diag_zc_init = true;
+            }
+
+          s_diag_zc_last = pcm[i];
+        }
+    }
+
+  /* 跨过半段边界 → 提示开始说话（一次 printf，输出量小不阻塞） */
+
+  if (!s_diag_announced && s_diag_seg + samples >= s_diag_split)
+    {
+      s_diag_announced = true;
+      printf("▶ 开始说话（直到录音结束）\n");
+    }
+
+  s_diag_seg += (uint32_t)samples;
+}
+
+static void diag_print_seg(int seg, uint32_t nsamp)
+{
+  uint32_t target[4];
+  uint32_t pval[4] = {0, 0, 0, 0};
+  uint32_t cum = 0;
+  uint32_t k;
+  int p;
+
+  if (nsamp == 0)
+    {
+      return;
+    }
+
+  target[0] = nsamp / 2;
+  target[1] = nsamp * 9 / 10;
+  target[2] = nsamp * 99 / 100;
+  target[3] = nsamp * 999 / 1000;
+  p = 0;
+  for (k = 0; k < 256 && p < 4; k++)
+    {
+      cum += s_diag_hist[seg][k];
+      while (p < 4 && cum > target[p])
+        {
+          pval[p] = k * 128 + 63;
+          p++;
+        }
+    }
+
+  printf("[Diag] %s: 峰值=%d 均方MS=%u 非零=%u/%u(%.0f%%) 尖峰>2000=%u"
+         " | P50=%u P90=%u P99=%u P999=%u\n",
+         seg == 0 ? "安静段" : "说话段",
+         (int)s_diag_peak[seg],
+         (unsigned)(s_diag_sq[seg] / nsamp),
+         (unsigned)s_diag_nonzero[seg], (unsigned)nsamp,
+         (double)s_diag_nonzero[seg] * 100.0 / (double)nsamp,
+         (unsigned)s_diag_spike[seg],
+         (unsigned)pval[0], (unsigned)pval[1],
+         (unsigned)pval[2], (unsigned)pval[3]);
+}
+
+static void diag_verdict(uint32_t ns)
+{
+  int32_t qpeak = s_diag_peak[0];
+  int32_t speak = s_diag_peak[1];
+  uint32_t snz  = s_diag_nonzero[1];
+  uint32_t snz_pct = (ns > 0) ? snz * 100 / ns : 0;
+
+  printf("[Diag] 判别: ");
+  if (speak >= 30000)
+    {
+      /* 削顶唯一判据 = 峰值接近满幅 32767；非零率高是数据正常的标志 */
+      printf("说话段满幅削顶（峰值 %d ≈ 满幅）→ 增益仍过高 → "
+             "es7210.c gain 值 9→更低 重测\n", (int)speak);
+    }
+  else if (snz_pct < 90 && speak > 5000)
+    {
+      /* 信号强但非零率低 = 数据稀疏/丢失（修复前的 69% 特征） */
+      printf("数据稀疏：非零仅 %u%% 但峰值 %d → 丢数据/帧错位"
+             "（预读未生效？）\n", (unsigned)snz_pct, (int)speak);
+    }
+  else if (qpeak >= 10000)
+    {
+      printf("安静底噪过大（峰值 %d）→ 增益过高 / 模拟配置(REG40 VMID/MICBIAS)"
+             " / 68.7Hz 周期脉冲\n", (int)qpeak);
+    }
+  else if (speak < 3000)
+    {
+      printf("说话段几乎无信号（峰值 %d）→ ES7210 未拾音"
+             "（restore_analog 后 REG40 仍异常 / MICBIAS≠2.87V / 焊点）\n",
+             (int)speak);
+    }
+  else
+    {
+      printf("设备端拾音正常（安静峰值 %d / 说话峰值 %d，非零 %u%%）"
+             "→ 链路干净，下一步验证服务器侧（[DENOISE] 日志 + MiMo 转写）\n",
+             (int)qpeak, (int)speak, (unsigned)snz_pct);
+    }
+}
+
+
+/* Bounded hardware diagnostic, with no ASR, file IO or speaker path. */
+struct quiet_pcm_stats {size_t samples,nonzero;uint32_t peak;};
+static void quiet_pcm_sink(const int16_t *pcm,size_t samples,void *arg)
+{
+  struct quiet_pcm_stats *stats=arg;
+  for(size_t i=0;i<samples;i++)
+    {int32_t v=pcm[i];uint32_t a=(uint32_t)(v<0?-v:v);
+     if(a>stats->peak)stats->peak=a;if(a)stats->nonzero++;}
+  stats->samples+=samples;
+}
+static int quiet_memory_capture(unsigned seconds)
+{
+  if(seconds<1 || seconds>3)return -EINVAL;
+  if(voice_service_busy() || interaction_active())return -EBUSY;
+  int rc=voice_wake_pause();if(rc<0)return rc;
+  struct quiet_pcm_stats stats={0};
+  unsigned drop0=hal_i2s_rx_drop_count();clock_t begin=clock_systime_ticks();
+  rc=ai_voice_stream_record_memory_wait(quiet_pcm_sink,&stats,(int)seconds,0,0);
+  unsigned elapsed=(unsigned)((clock_systime_ticks()-begin)*1000/CLOCKS_PER_SEC);
+  unsigned drops=hal_i2s_rx_drop_count()-drop0;
+  voice_wake_resume();
+  printf("[QuietCapture] rc=%d samples=%u nonzero=%u peak=%u elapsed_ms=%u drops=%u asr=0 tts=0\n",
+         rc,(unsigned)stats.samples,(unsigned)stats.nonzero,stats.peak,elapsed,drops);
+  return rc<0?rc:0;
+}
+
+static int cmd_voice(int argc, char *argv[])
+{
+  int ret;
+
+  if (argc < 3)
+    {
+      goto usage;
+    }
+
+  if (!strcmp(argv[2],"fixture"))
+    {
+      if(argc!=4)return -EINVAL;
+      if(!strcmp(argv[3],"status")){ai_voice_fixture_status();return 0;}
+      if(!strcmp(argv[3],"stop"))
+        {
+#if defined(CONFIG_ARCH_BOARD_M5STACK_CORES3) && defined(CONFIG_PLANT_UI_SCREEN_VOICE)
+          ui_app_voice_fixture_request(-1);
+#else
+          voice_service_abort();
+#endif
+          ai_voice_fixture_status();return 0;
+        }
+      unsigned id=!strcmp(argv[3],"qa")?1:!strcmp(argv[3],"camera")?2:!strcmp(argv[3],"flow")?3:0;
+      if(!id)return -EINVAL;
+#if defined(CONFIG_ARCH_BOARD_M5STACK_CORES3) && defined(CONFIG_PLANT_UI_SCREEN_VOICE)
+      int rc=ui_app_voice_fixture_request((int)id);
+      printf("[Fixture] queued program=%u rc=%d\n",id,rc);return rc;
+#else
+      return -ENOSYS;
+#endif
+    }
+
+  if (!strcmp(argv[2],"priority"))
+    {
+      char *end=NULL;long value=argc==4?strtol(argv[3],&end,10):-1;
+      if(argc>4 || (argc==4 && (!end || *end || (value!=0 && value!=110))))return -EINVAL;
+      int rc=voice_service_priority_diag((int)value);
+      printf("[VoiceSched] configured=%d rc=%d\n",rc,rc<0?rc:0);return rc<0?rc:0;
+    }
+
+  if (!strcmp(argv[2],"sinktest"))
+    {
+      char *end=NULL;long seconds=argc==4?strtol(argv[3],&end,10):1;
+      if(argc>4 || (argc==4 && (!end || *end)) || seconds<1 || seconds>3)return -EINVAL;
+      return quiet_memory_capture((unsigned)seconds);
+    }
+
+  if (!strcmp(argv[2],"uistate"))
+    {struct voice_ui_snapshot v;voice_service_ui_snapshot(&v);
+     printf("[VoiceUIState] state=%d error=%d busy=%d dialogue=%d cancelling=%d capture_ready=%d playback_active=%d\n",v.state,v.error,v.busy,v.dialogue,v.cancelling,v.capture_ready,v.playback_active);return 0;}
+  if (!strcmp(argv[2],"vadcapture"))
+    {
+      extern int voice_vad_capture_command(int argc,char **argv);
+      if(voice_service_busy())return -EBUSY;
+      return voice_vad_capture_command(argc-3,argv+3);
+    }
+  if (!strcmp(argv[2],"txqueue"))
+    {
+      extern void esp32s3_i2s_tx_diag_trace(bool enabled);
+      extern void esp32s3_i2s_tx_diag_dump(void);
+      if(argc>4)return -EINVAL;
+      if(argc==4)
+        {
+          if(!strcmp(argv[3],"on"))esp32s3_i2s_tx_diag_trace(true);
+          else if(!strcmp(argv[3],"off"))esp32s3_i2s_tx_diag_trace(false);
+          else if(strcmp(argv[3],"status"))return -EINVAL;
+        }
+      esp32s3_i2s_tx_diag_dump();return 0;
+    }
+  if (!strcmp(argv[2],"rxqueue"))
+    {
+      extern void esp32s3_i2s_rx_diag_trace(bool enabled);
+      extern void esp32s3_i2s_rx_diag_dump(void);
+      if(argc>4)return -EINVAL;
+      if(argc==4)
+        {
+          if(!strcmp(argv[3],"on"))esp32s3_i2s_rx_diag_trace(true);
+          else if(!strcmp(argv[3],"off"))esp32s3_i2s_rx_diag_trace(false);
+          else if(strcmp(argv[3],"status"))return -EINVAL;
+        }
+      esp32s3_i2s_rx_diag_dump();return 0;
+    }
+  if (!strcmp(argv[2],"rxpair"))
+    {
+      extern void hal_i2s_rx_pair_trace(bool enabled);
+      extern void hal_i2s_rx_pair_dump(void);
+      if(argc>4)return -EINVAL;
+      if(argc==4)
+        {
+          if(!strcmp(argv[3],"on"))hal_i2s_rx_pair_trace(true);
+          else if(!strcmp(argv[3],"off"))hal_i2s_rx_pair_trace(false);
+          else if(strcmp(argv[3],"status"))return -EINVAL;
+        }
+      hal_i2s_rx_pair_dump();return 0;
+    }
+  if (!strcmp(argv[2],"codecstate"))
+    {
+      if(argc!=3)return -EINVAL;
+      static const uint8_t regs[]={0x01,0x02,0x08,0x11,0x12,0x13,0x14,0x15,0x40,0x43,0x44,0x47,0x48};
+      FAR struct i2c_master_s *bus=esp32s3_i2cbus_initialize(0);
+      if(!bus)return -ENODEV;
+      for(unsigned i=0;i<sizeof(regs);i++)
+        {
+          uint8_t value=0;int rc=hal_i2c_read_reg(bus,0x40,regs[i],&value,100000);
+          printf("[CodecState] reg=%02x value=%02x rc=%d\n",regs[i],value,rc);
+        }
+      return 0;
+    }
+
+  if (!strcmp(argv[2],"nstrace"))
+    {
+      if(argc>4)return -EINVAL;
+      if(argc==4)
+        {
+          if(strcmp(argv[3],"on")&&strcmp(argv[3],"off"))return -EINVAL;
+          voice_ns_trace_set(!strcmp(argv[3],"on"));
+        }
+      printf("[NSProbe] trace=%d production_pcm_unchanged=1\n",voice_ns_trace_enabled());
+      return 0;
+    }
+  if (!strcmp(argv[2],"nsmode"))
+    {
+      if(argc>4)return -EINVAL;
+      if(argc==4)
+        {
+          unsigned mode;
+          if(!strcmp(argv[3],"mild"))mode=0;
+          else if(!strcmp(argv[3],"medium"))mode=1;
+          else if(!strcmp(argv[3],"aggressive"))mode=2;
+           else if(!strcmp(argv[3],"neural"))mode=3;
+          else return -EINVAL;
+          int rc=voice_ns_probe_set_mode(mode);if(rc<0)return rc;
+        }
+      unsigned mode=voice_ns_probe_get_mode();
+      printf("[NSProbe] mode=%u name=%s production_pcm_unchanged=1\n",
+             mode,mode==3?"neural":mode==0?"mild":mode==1?"medium":"aggressive");
+      return 0;
+    }
+
+  if (!strcmp(argv[2],"gmmend"))
+    {
+      if(argc>4 || voice_service_busy())return -EBUSY;
+      if(argc==4)
+        {unsigned mode;if(!strcmp(argv[3],"off"))mode=0;
+         else if(!strcmp(argv[3],"shadow"))mode=1;else if(!strcmp(argv[3],"on"))mode=2;else if(!strcmp(argv[3],"strict"))mode=3;else return -EINVAL;
+         int rc=voice_vad_endpoint_set_mode(mode);if(rc<0)return rc;}
+      printf("[GMMEnd] mode=%u raw_PCM=1 raw_onset=0 strict_onset=1\n",voice_vad_endpoint_get_mode());return 0;
+    }
+  if (!strcmp(argv[2],"nnend"))
+    {
+      if(argc>4 || voice_service_busy())return -EBUSY;
+      if(argc==4)
+        {unsigned mode;if(!strcmp(argv[3],"off"))mode=0;
+         else if(!strcmp(argv[3],"shadow"))mode=1;else if(!strcmp(argv[3],"on"))mode=2;else return -EINVAL;
+         int rc=voice_ns_endpoint_set_mode(mode);if(rc<0)return rc;}
+      printf("[Endpoint] mode=%u raw_PCM=1 raw_onset=0 strict_onset=1\n",voice_ns_endpoint_get_mode());return 0;
+    }
+  if (!strcmp(argv[2],"nnpair"))
+    {
+      extern int plant_nn_pair_command(int argc,char **argv);
+      if(voice_service_busy())return -EBUSY;
+      return plant_nn_pair_command(argc-3,argv+3);
+    }
+  if (!strcmp(argv[2],"nntest"))
+    {
+      if(argc!=3)return -EINVAL;
+      if(voice_service_busy())return -EBUSY;
+      return voice_ns_nn_smoketest();
+    }
+
+  if (!strcmp(argv[2],"nstest"))
+    {
+      if(argc!=3)return -EINVAL;
+      if(voice_service_busy())return -EBUSY;
+      return voice_ns_probe_selftest();
+    }
+
+  if (!strcmp(argv[2], "say"))
+    {
+      if(argc!=4)return -EINVAL;
+      int rc=voice_service_say(argv[3]);
+      if(rc<0)return rc;
+      /* Keep the NSH task group alive for its speech worker. */
+      unsigned waited=0;
+      while(voice_service_busy() && waited++<1200)usleep(100000);
+      if(voice_service_busy()){voice_service_abort();return -ETIMEDOUT;}
+      return 0;
+    }
+
+  if (!strcmp(argv[2], "timbre"))
+    {
+      if(argc>3)
+        {
+          if(strcmp(argv[3],"soft") && strcmp(argv[3],"flat"))return -EINVAL;
+          voice_timbre_set_soft(!strcmp(argv[3],"soft"));
+        }
+      printf("[Voice] timbre=%s\n",voice_timbre_get_soft()?"soft":"flat");
+      return 0;
+    }
+
+  /* plant voice i2ctest                    - I2C link to codecs */
+  if (strcmp(argv[2], "vadtrace") == 0)
+    {
+      int enabled = argc > 3 && !strcmp(argv[3], "on");
+      ai_voice_set_vad_trace(enabled);
+      printf("[VAD] trace=%d energy_only=1\n", enabled);
+      return 0;
+    }
+
+  if (strcmp(argv[2], "dialogue") == 0)
+    {
+      if(argc>3 && !strcmp(argv[3],"start"))
+        {
+          int rc=voice_service_dialogue_start();
+          /* NuttX destroys this task group's pthreads when the shell command
+           * returns. Keep its first worker alive; later UI followups belong
+           * to the persistent UI task. */
+          if(rc==0){unsigned waited=0;while(voice_service_busy() && waited++<3600)usleep(100000);}
+          return rc;
+        }
+      if(argc>3 && !strcmp(argv[3],"stop"))voice_service_abort();
+      printf("[Dialogue] active=%d busy=%d state=%d idle_ms=30000\n",
+             voice_service_dialogue_active(),voice_service_busy(),voice_service_get_state());
+      return 0;
+    }
+
+  if (strcmp(argv[2], "i2ctest") == 0)
+    {
+      return ai_voice_i2c_test();
+    }
+
+  /* plant voice tone <freq>                  - play a test tone */
+
+  if (strcmp(argv[2], "tone") == 0)
+    {
+      uint32_t freq = (argc > 3) ? strtoul(argv[3], NULL, 10) : 1000;
+      uint32_t t0 = clock_systime_ticks();
+      int ret = ai_voice_play_tone(freq, 500);
+      uint32_t elapsed = clock_systime_ticks() - t0;
+
+      /* ⚠ 2026-09-02 无声诊断：tone 是纯 TX 链路（正弦→hal_i2s_write→
+       * ES8311→PA），不经过录音/RX。无声时打印 TX 外设状态 + ES8311
+       * DAC 关键寄存器，一次定位断在哪一段。 */
+
+      /* ⚠ 2026-09-02 耗时判读：500ms@24k = 50 ticks（10ms/tick）。
+       * ≈50 → 数据按 24k 实时流出（正常）；明显更大 → 播放被拖慢/
+       * 块间有等待（听感断续/音调错）；明显更小 → DMA 假完成丢数据。 */
+
+      printf("[Voice] tone ret=%d 耗时=%u ticks (500ms@24k 应≈50), "
+             "无声则看下面寄存器:\n", ret, elapsed);
+      hal_i2s_dump_tx();
+      {
+        extern FAR struct i2c_master_s *esp32s3_i2cbus_initialize(int bus);
+        FAR struct i2c_master_s *i2c = esp32s3_i2cbus_initialize(0);
+
+        if (i2c != NULL)
+          {
+#ifdef CONFIG_PLANT_AUDIO_AW88298
+            aw88298_dump_regs(i2c);
+#else
+            es8311_dump_dac(i2c);
+#endif
+          }
+      }
+
+      return ret;
+    }
+
+  /* plant voice vol [0-255]                - 设置/查看 DAC 输出音量
+   * ES8311 REG32：0x00=-95.5dB .. 0xFF=+32dB，0xBF≈0dB。缺参数=只看。
+   * 初始化后调用立即写寄存器（调音不用重烧）。 */
+
+  if (strcmp(argv[2], "vol") == 0)
+    {
+      if (argc > 3)
+        {
+          long v = strtol(argv[3], NULL, 0);
+
+          if (v < 0 || v > 255)
+            {
+              printf("用法: plant voice vol [0-255]\n");
+              return 0;
+            }
+
+          int rc=voice_agent_set_dac_volume((uint8_t)v);
+          if(rc<0){printf("[Voice] volume write failed rc=%d\n",rc);return rc;}
+        }
+
+#ifdef CONFIG_PLANT_AUDIO_AW88298
+      printf("[Voice] speaker volume=%u/255 codec=AW88298\n",
+             (unsigned)voice_agent_get_dac_volume());
+#else
+      printf("[Voice] DAC 音量 REG32=0x%02X (%u)"
+             "（0xBF≈0dB，0xFF=+32dB）\n",
+             (unsigned)voice_agent_get_dac_volume(),
+             (unsigned)voice_agent_get_dac_volume());
+#endif
+      return 0;
+    }
+
+  /* plant voice regs                        - I2S TX + ES8311 寄存器全览
+   * （无声排查：对比 小智 esp_codec_dev / OpenVela NuttX 参考值） */
+
+  if (strcmp(argv[2], "regs") == 0)
+    {
+      extern FAR struct i2c_master_s *esp32s3_i2cbus_initialize(int bus);
+      FAR struct i2c_master_s *i2c = esp32s3_i2cbus_initialize(0);
+
+      hal_i2s_dump_tx();
+      if (i2c != NULL)
+        {
+#ifdef CONFIG_PLANT_AUDIO_AW88298
+          aw88298_dump_regs(i2c);
+#else
+          es8311_dump_regs(i2c);
+#endif
+        }
+      else
+        {
+          printf("[Voice] I2C 总线初始化失败，跳过 ES8311 dump\n");
+        }
+
+      return 0;
+    }
+
+  /* plant voice rec [seconds]                - record mic -> WAV */
+
+  if (strcmp(argv[2], "rec") == 0)
+    {
+      int sec = (argc > 3) ? atoi(argv[3]) : 3;
+      int ms;
+      /* ⚠️ 2026-09-16 nowrite：只采集不写 SD（隔离"写盘拖累采集"用） */
+      bool nowrite = (argc > 4) && (strcmp(argv[4], "nowrite") == 0);
+
+      /* ⚠ 2026-09-01 流式化（按 LVGL 说话功能方式）：旧实现 malloc
+       * (44+16k×2×sec) 整段 WAV，WiFi 后堆 ~16KB，3s=94KB 必 OOM。
+       * 改用 ai_voice_stream_record（静态缓冲零大 malloc）+ 回调写
+       * /mnt/sd/rec.wav——与说话功能同源、同滤波链。 */
+
+      if (sec <= 0 || sec > AI_VOICE_MAX_SECONDS)
+        {
+          sec = AI_VOICE_MAX_SECONDS;
+        }
+
+      /* ⚠️ 2026-09-16 nowrite 模式：只采集不写 SD。
+       * 隔离"写盘是否拖累录音采集"——有写盘时实测输入率仅 16.4kHz
+       * （24kHz 的 68%，等于丢 1/3 样本=录音被压缩）；无写盘应 ≈24kHz。 */
+
+      if (!nowrite)
+        {
+          s_rec_fp = fopen("/mnt/sd/rec.wav", "wb");
+          if (s_rec_fp == NULL)
+            {
+              printf("[Voice] 打开 /mnt/sd/rec.wav 失败（SD 未挂？）\n");
+              return -1;
+            }
+
+          /* WAV 头占位（44B，数据长度最后回填） */
+
+          {
+            uint8_t hdr[44];
+
+            memset(hdr, 0, sizeof(hdr));
+            sd_write_aligned(s_rec_fp, hdr, sizeof(hdr));
+          }
+        }
+
+      s_rec_data = 0;
+      s_rec_peak = 0;
+      s_rec_sq = 0;
+      s_rec_nonzero = 0;
+      ms = ai_voice_stream_record(rec_write_cb, NULL, sec, 0);
+      if (s_rec_fp != NULL)
+        {
+          fclose(s_rec_fp);
+          s_rec_fp = NULL;
+        }
+
+      if (ms < 0)
+        {
+          printf("[Voice] 流式录音失败: %d\n", ms);
+          return ms;
+        }
+
+      /* 回填 WAV 头（RIFF/fmt/data，16kHz mono 16bit）；nowrite 无文件跳过 */
+
+      if (nowrite)
+        {
+          printf("[Voice] nowrite：未写 SD（隔离测试）采集 %u B / %u 采样\n",
+                 (unsigned)s_rec_data, (unsigned)(s_rec_data / 2));
+        }
+      else
+      {
+        uint8_t hdr[44];
+        uint32_t rate = AI_VOICE_AI_RATE;
+        uint32_t n = s_rec_data;
+
+        memcpy(hdr, "RIFF", 4);
+        hdr[4] = (n + 36) & 0xff;  hdr[5] = ((n + 36) >> 8) & 0xff;
+        hdr[6] = ((n + 36) >> 16) & 0xff;  hdr[7] = ((n + 36) >> 24) & 0xff;
+        memcpy(hdr + 8, "WAVEfmt ", 8);
+        hdr[16] = 16;  hdr[20] = 1;  hdr[21] = 0;
+        hdr[22] = 1;  hdr[23] = 0;              /* mono */
+        hdr[24] = rate & 0xff;  hdr[25] = (rate >> 8) & 0xff;
+        hdr[26] = (rate >> 16) & 0xff;  hdr[27] = (rate >> 24) & 0xff;
+        hdr[28] = (rate * 2) & 0xff;  hdr[29] = ((rate * 2) >> 8) & 0xff;
+        hdr[30] = ((rate * 2) >> 16) & 0xff;  hdr[31] = ((rate * 2) >> 24) & 0xff;
+        hdr[32] = 2;  hdr[33] = 0;              /* block align */
+        hdr[34] = 16;  hdr[35] = 0;             /* bits */
+        memcpy(hdr + 36, "data", 4);
+        hdr[40] = n & 0xff;  hdr[41] = (n >> 8) & 0xff;
+        hdr[42] = (n >> 16) & 0xff;  hdr[43] = (n >> 24) & 0xff;
+
+        s_rec_fp = fopen("/mnt/sd/rec.wav", "r+b");
+        if (s_rec_fp != NULL)
+          {
+            sd_write_aligned(s_rec_fp, hdr, sizeof(hdr));
+            fclose(s_rec_fp);
+          }
+
+        s_rec_fp = NULL;
+      }
+
+      if (!nowrite)
+        {
+          printf("[Voice] 录音 %d ms → /mnt/sd/rec.wav（%u B，16kHz mono）\n",
+                 ms, (unsigned)s_rec_data);
+        }
+      printf("[Voice] 信号统计: 峰值=%d 均方RMS=%u 非零=%u/%u (%.0f%%)\n",
+             (int)s_rec_peak,
+             (unsigned)(s_rec_data ?
+                 (uint32_t)(s_rec_sq / (s_rec_data / 2)) : 0),
+             (unsigned)s_rec_nonzero, (unsigned)(s_rec_data / 2),
+             s_rec_data ?
+                 (double)s_rec_nonzero * 100.0 / (s_rec_data / 2) : 0.0);
+      return 0;
+    }
+
+  /* plant voice diag [seconds]               - 双段判别：前一半安静、后一半说话
+   * （根因锁定工具：一次录音输出两段统计 + 判别结论，不猜参数） */
+
+  if (strcmp(argv[2], "diag") == 0)
+    {
+      int sec = (argc > 3) ? atoi(argv[3]) : 4;
+      uint32_t want;
+      uint32_t nseg[2];
+      int ms;
+
+      if (sec <= 0 || sec > AI_VOICE_MAX_SECONDS)
+        {
+          sec = AI_VOICE_MAX_SECONDS;
+        }
+
+      s_rec_fp = fopen("/mnt/sd/rec.wav", "wb");
+      if (s_rec_fp == NULL)
+        {
+          printf("[Voice] 打开 /mnt/sd/rec.wav 失败（SD 未挂？）\n");
+          return -1;
+        }
+
+      {
+        uint8_t hdr[44];
+
+        memset(hdr, 0, sizeof(hdr));
+        sd_write_aligned(s_rec_fp, hdr, sizeof(hdr));
+      }
+
+      want = (uint32_t)sec * AI_VOICE_AI_RATE;   /* 16k 总采样 */
+      s_rec_data = 0;
+      s_diag_seg = 0;
+      s_diag_split = want / 2;
+      s_diag_announced = false;
+      s_diag_zc = 0;
+      s_diag_zc_last = 0;
+      s_diag_zc_init = false;
+      memset(s_diag_peak, 0, sizeof(s_diag_peak));
+      memset(s_diag_sq, 0, sizeof(s_diag_sq));
+      memset(s_diag_nonzero, 0, sizeof(s_diag_nonzero));
+      memset(s_diag_spike, 0, sizeof(s_diag_spike));
+      memset(s_diag_hist, 0, sizeof(s_diag_hist));
+
+      /* ⚠ ES7210 寄存器快照（automute/帧结构根因判别）：
+       * REG01=时钟开关 REG08=slave+LRCK_RATE_MODE REG12=TDM开关
+       * REG13=ADC automute（官方从不写，复位默认待验证）
+       * REG14/15=mute range（bit[1:0]=0=范围0） REG40=模拟电源 REG43/44=MIC1/2 增益 */
+
+      {
+        FAR struct i2c_master_s *i2c;
+        static const uint8_t  regs[10] = {0x01, 0x08, 0x12, 0x13, 0x14,
+                                          0x15, 0x40, 0x43, 0x44, 0x02};
+        static const char *names[10] = {"REG01", "REG08", "REG12",
+                                        "REG13", "REG14", "REG15",
+                                        "REG40", "REG43", "REG44",
+                                        "REG02"};
+        uint8_t v;
+        int ri;
+
+        i2c = esp32s3_i2cbus_initialize(0);
+        if (i2c != NULL)
+          {
+            printf("[Diag] ES7210 寄存器快照:");
+            for (ri = 0; ri < 10; ri++)
+              {
+                v = 0;
+                if (hal_i2c_read_reg(i2c, 0x40, regs[ri], &v, 100000) == 0)
+                  {
+                    printf(" %s=0x%02x", names[ri], v);
+                  }
+              }
+
+            printf("\n");
+          }
+      }
+
+      printf("[Diag] 录音 %d s：前 %d s 保持安静，听到提示后开始说话\n",
+             sec, sec / 2);
+      {
+        clock_t t0 = clock_systime_ticks();
+
+        ms = ai_voice_stream_record(diag_write_cb, NULL, sec, 0);
+        printf("[Diag] 实际录音耗时 ≈ %lu ms（标称 %d ms）%s\n",
+               (unsigned long)(clock_systime_ticks() - t0) * 1000 /
+               TICK_PER_SEC, sec * 1000,
+               (clock_systime_ticks() - t0) * 1000 / TICK_PER_SEC <
+                   (uint32_t)sec * 1000 / 2 ?
+                   " ← ⚠ 仅为标称一半：RX 实际帧率 48kHz（非 24k）→ 降采样错位！" :
+                   "");
+      }
+
+      fclose(s_rec_fp);
+      s_rec_fp = NULL;
+
+      if (ms < 0)
+        {
+          printf("[Voice] 流式录音失败: %d\n", ms);
+          return ms;
+        }
+
+      /* 回填 WAV 头（16kHz mono 16bit，与 rec 相同） */
+
+      {
+        uint8_t hdr[44];
+        uint32_t rate = AI_VOICE_AI_RATE;
+        uint32_t n = s_rec_data;
+
+        memcpy(hdr, "RIFF", 4);
+        hdr[4] = (n + 36) & 0xff;  hdr[5] = ((n + 36) >> 8) & 0xff;
+        hdr[6] = ((n + 36) >> 16) & 0xff;  hdr[7] = ((n + 36) >> 24) & 0xff;
+        memcpy(hdr + 8, "WAVEfmt ", 8);
+        hdr[16] = 16;  hdr[20] = 1;  hdr[21] = 0;
+        hdr[22] = 1;  hdr[23] = 0;
+        hdr[24] = rate & 0xff;  hdr[25] = (rate >> 8) & 0xff;
+        hdr[26] = (rate >> 16) & 0xff;  hdr[27] = (rate >> 24) & 0xff;
+        hdr[28] = (rate * 2) & 0xff;  hdr[29] = ((rate * 2) >> 8) & 0xff;
+        hdr[30] = ((rate * 2) >> 16) & 0xff;  hdr[31] = ((rate * 2) >> 24) & 0xff;
+        hdr[32] = 2;  hdr[33] = 0;
+        hdr[34] = 16;  hdr[35] = 0;
+        memcpy(hdr + 36, "data", 4);
+        hdr[40] = n & 0xff;  hdr[41] = (n >> 8) & 0xff;
+        hdr[42] = (n >> 16) & 0xff;  hdr[43] = (n >> 24) & 0xff;
+
+        s_rec_fp = fopen("/mnt/sd/rec.wav", "r+b");
+        if (s_rec_fp != NULL)
+          {
+            sd_write_aligned(s_rec_fp, hdr, sizeof(hdr));
+            fclose(s_rec_fp);
+          }
+
+        s_rec_fp = NULL;
+      }
+
+      nseg[0] = s_diag_split;
+      nseg[1] = want - s_diag_split;
+      printf("[Diag] 录音 %d ms（%u 采样）\n", ms, (unsigned)want);
+      diag_print_seg(0, nseg[0]);
+      diag_print_seg(1, nseg[1]);
+
+      /* 说话段过零率（语音 ~0.05-0.2 低频；宽带噪声 ~0.3-0.5） */
+
+      if (nseg[1] > 0)
+        {
+          uint32_t zc_rate = s_diag_zc * 1000 / nseg[1];
+
+          printf("[Diag] 说话段过零率=%u.%u%% %s\n",
+                 (unsigned)(zc_rate / 10), (unsigned)(zc_rate % 10),
+                 zc_rate > 300 ?
+                     "← 偏高（噪声/环境声特征）" :
+                     (zc_rate < 200 ? "← 正常（语音/低频特征）" : ""));
+        }
+
+      diag_verdict(nseg[1]);
+      printf("[Diag] 原始 PCM 已存 /mnt/sd/rec.wav（可拔卡 Audacity 复核）\n");
+      return 0;
+    }
+
+  /* plant voice raw [seconds] - 原始 24k RX 单声道流诊断（根因锁定）
+   * 直接 hal_i2s_read_slot 收原始数据（无滤波/降采样），输出：
+   *   1) 首 64 采样 hex：位偏移（0x1000 倍数）/ 削顶（0x7fff）/ 零分布
+   *   2) 收到总数 vs 期望：实际 RX 数据率（≠24k 说明帧结构错位）
+   *   3) 峰值/RMS/非零率/尖峰>2000
+   *   4) 零值相位 idx%8：结构性零（说话段 31% 零值 → 帧/槽错位）
+   * 用法：安静跑一次、说话跑一次对比（1s 足够判结构）。 */
+
+  if (strcmp(argv[2], "raw") == 0)
+    {
+      static int16_t s_raw[1024];
+      static int16_t s_first[64];
+      uint32_t want_samp;
+      uint32_t got = 0;
+      uint32_t ph_zero[8] = {0};
+      uint32_t ph_cnt[8] = {0};
+      uint32_t nonzero = 0;
+      uint32_t spike = 0;
+      uint32_t i;
+      uint64_t sq = 0;
+      int32_t peak = 0;
+      int sec;
+      int r;
+
+      sec = (argc > 3) ? atoi(argv[3]) : 1;
+      if (sec <= 0)
+        {
+          sec = 1;
+        }
+
+      if (sec > 3)
+        {
+          sec = 3;
+        }
+
+      /* ⚠ 2026-09-02 槽位 A/B：第 4 参 = 槽号（0=MIC1 左，1=MIC2 右）。
+       * 录音"有数据但无人声"时分别跑 slot 0 / slot 1 对比峰值——
+       * 若说话时 1 号槽峰值远大于 0 号 → 实际麦克风在右声道，读错槽。 */
+
+      {
+        int slot = (argc > 4) ? atoi(argv[4]) : 0;
+
+        printf("[Raw] 槽位=%d（0=MIC1 左 / 1=MIC2 右）\n", slot);
+
+        want_samp = (uint32_t)sec * 24000;
+
+        ret = ai_voice_init();
+        if (ret < 0)
+          {
+            return ret;
+          }
+
+        memset(s_first, 0, sizeof(s_first));
+
+        {
+          clock_t t0 = clock_systime_ticks();
+
+          while (got < want_samp)
+            {
+              uint32_t chunk = want_samp - got;
+
+              if (chunk > 1024)
+                {
+                  chunk = 1024;
+                }
+
+              r = hal_i2s_read_slot(s_raw, chunk * 2, slot);
+              if (r <= 0)
+                {
+                  printf("[Raw] RX error: %d (got=%u/%u)\n", r,
+                         (unsigned)got, (unsigned)want_samp);
+                  break;
+                }
+
+              for (i = 0; i < (uint32_t)r / 2; i++)
+                {
+                  uint32_t idx = got + i;
+                  int32_t a = s_raw[i] < 0 ? -s_raw[i] : s_raw[i];
+
+                  if (idx < 64)
+                    {
+                      s_first[idx] = s_raw[i];
+                    }
+
+                  if (a > peak)
+                    {
+                      peak = a;
+                    }
+
+                  sq += (uint64_t)a * (uint64_t)a;
+                  if (a != 0)
+                    {
+                      nonzero++;
+                    }
+
+                  if (a > 2000)
+                    {
+                      spike++;
+                    }
+
+                  ph_zero[idx & 7] += (a == 0) ? 1 : 0;
+                  ph_cnt[idx & 7]++;
+                }
+
+              got += (uint32_t)r / 2;
+            }
+
+          /* ⚠ 帧率判别：1s 请求 24000 采样 @24k 应耗时 ~1000ms；
+           * 若 ~500ms → RX 实际 48kHz → 24k 名义降采样错位 → 语音变噪声 */
+
+          printf("[Raw] 实际采集耗时 ≈ %lu ms（标称 %d ms）%s\n",
+                 (unsigned long)(clock_systime_ticks() - t0) * 1000 /
+                 TICK_PER_SEC, sec * 1000,
+                 (clock_systime_ticks() - t0) * 1000 / TICK_PER_SEC <
+                     (uint32_t)sec * 1000 / 2 ?
+                     " ← ⚠ 仅为标称一半：RX 实际 48kHz，非 24k！" : "");
+        }
+      }
+
+      printf("[Raw] 首64采样(hex):\n");
+      for (i = 0; i < 64; i += 8)
+        {
+          printf("[Raw]   %04x %04x %04x %04x %04x %04x %04x %04x\n",
+                 (uint16_t)s_first[i], (uint16_t)s_first[i + 1],
+                 (uint16_t)s_first[i + 2], (uint16_t)s_first[i + 3],
+                 (uint16_t)s_first[i + 4], (uint16_t)s_first[i + 5],
+                 (uint16_t)s_first[i + 6], (uint16_t)s_first[i + 7]);
+        }
+
+      printf("[Raw] 收到 %u/%u 采样 峰值=%d RMS=%u 非零=%u%% 尖峰>2000=%u\n",
+             (unsigned)got, (unsigned)want_samp, (int)peak,
+             (unsigned)(got ? (uint32_t)(sq / got) : 0),
+             (unsigned)(got ? nonzero * 100 / got : 0),
+             (unsigned)spike);
+      printf("[Raw] 零值相位 idx%%8: ");
+      for (i = 0; i < 8; i++)
+        {
+          printf("p%u=%u%% ", (unsigned)i,
+                 (unsigned)(ph_cnt[i] ? ph_zero[i] * 100 / ph_cnt[i] : 0));
+        }
+
+      printf("\n");
+      return 0;
+    }
+
+  /* plant voice loop [seconds]               - record then play back
+   * (validates the full ADC -> I2S -> DAC path in one call) */
+
+  if (strcmp(argv[2], "loop") == 0)
+    {
+      int sec = (argc > 3) ? atoi(argv[3]) : 2;
+      int ms;
+
+      /* ⚠ 2026-09-01 流式化（同 rec）：录到 /mnt/sd/rec.wav（静态缓冲
+       * 零大 malloc）→ ai_voice_play_file 流式回放（喇叭听，验证
+       * ADC→I2S→DAC 全链路，器件测试标准流程）。 */
+
+      if (sec <= 0 || sec > AI_VOICE_MAX_SECONDS)
+        {
+          sec = AI_VOICE_MAX_SECONDS;
+        }
+
+      s_rec_fp = fopen("/mnt/sd/rec.wav", "wb");
+      if (s_rec_fp == NULL)
+        {
+          printf("[Voice] 打开 /mnt/sd/rec.wav 失败（SD 未挂？）\n");
+          return -1;
+        }
+
+      {
+        uint8_t hdr[44];
+
+        memset(hdr, 0, sizeof(hdr));
+        sd_write_aligned(s_rec_fp, hdr, sizeof(hdr));
+      }
+
+      s_rec_data = 0;
+      s_rec_peak = 0;
+      s_rec_sq = 0;
+      s_rec_nonzero = 0;
+      ms = ai_voice_stream_record(rec_write_cb, NULL, sec, 0);
+      fclose(s_rec_fp);
+      s_rec_fp = NULL;
+
+      if (ms < 0)
+        {
+          printf("[Voice] 流式录音失败: %d\n", ms);
+          return ms;
+        }
+
+      /* 回填 WAV 头（16kHz mono 16bit） */
+
+      {
+        uint8_t hdr[44];
+        uint32_t rate = AI_VOICE_AI_RATE;
+        uint32_t n = s_rec_data;
+
+        memcpy(hdr, "RIFF", 4);
+        hdr[4] = (n + 36) & 0xff;  hdr[5] = ((n + 36) >> 8) & 0xff;
+        hdr[6] = ((n + 36) >> 16) & 0xff;  hdr[7] = ((n + 36) >> 24) & 0xff;
+        memcpy(hdr + 8, "WAVEfmt ", 8);
+        hdr[16] = 16;  hdr[20] = 1;  hdr[21] = 0;
+        hdr[22] = 1;  hdr[23] = 0;
+        hdr[24] = rate & 0xff;  hdr[25] = (rate >> 8) & 0xff;
+        hdr[26] = (rate >> 16) & 0xff;  hdr[27] = (rate >> 24) & 0xff;
+        hdr[28] = (rate * 2) & 0xff;  hdr[29] = ((rate * 2) >> 8) & 0xff;
+        hdr[30] = ((rate * 2) >> 16) & 0xff;  hdr[31] = ((rate * 2) >> 24) & 0xff;
+        hdr[32] = 2;  hdr[33] = 0;
+        hdr[34] = 16;  hdr[35] = 0;
+        memcpy(hdr + 36, "data", 4);
+        hdr[40] = n & 0xff;  hdr[41] = (n >> 8) & 0xff;
+        hdr[42] = (n >> 16) & 0xff;  hdr[43] = (n >> 24) & 0xff;
+
+        s_rec_fp = fopen("/mnt/sd/rec.wav", "r+b");
+        if (s_rec_fp != NULL)
+          {
+            sd_write_aligned(s_rec_fp, hdr, sizeof(hdr));
+            fclose(s_rec_fp);
+          }
+
+        s_rec_fp = NULL;
+      }
+
+      printf("[Voice] Loopback: 播放 %u B 录音...\n", (unsigned)s_rec_data);
+      ret = ai_voice_play_file("/mnt/sd/rec.wav");
+
+      /* ⚠ 2026-09-02 无声诊断：播放"完成"却无声时，打印 TX 外设状态
+       * + ES8311 DAC 关键寄存器：
+       *  - I2S TX_START=1 / TX_IDLE（播放后应为 1=已串行化完）/ STOP_EN=0
+       *  - ES8311 REG09 bit6=0(未静音) bit7=0(I2S输入) REG31/32(音量)
+       *    REG0D/0E/12(电源) */
+
+      printf("[Voice] 无声则看下面寄存器:\n");
+      hal_i2s_dump_tx();
+      {
+        extern FAR struct i2c_master_s *esp32s3_i2cbus_initialize(int bus);
+        FAR struct i2c_master_s *i2c = esp32s3_i2cbus_initialize(0);
+
+        if (i2c != NULL)
+          {
+#ifdef CONFIG_PLANT_AUDIO_AW88298
+            aw88298_dump_regs(i2c);
+#else
+            es8311_dump_dac(i2c);
+#endif
+          }
+      }
+
+      return ret;
+    }
+
+  /* plant voice get <server_path> <file>   - 按服务器路径下载到 SD 文件
+   *   （验证"下载→落盘→播放"链路，例如把上一轮 TTS 音频抓下来回放） */
+
+  if (strcmp(argv[2], "get") == 0)
+    {
+      int n;
+
+      if (argc < 5)
+        {
+          printf("Usage: plant voice get <server_path> <local_file>\n");
+          printf("  e.g. plant voice get /api/v1/media/md_xxx/file "
+                 "/mnt/sd/tts_test.wav\n");
+          return -1;
+        }
+
+      n = server_bridge_fetch_path(argv[3], argv[4]);
+      printf("[Voice] GET %s -> %s : %d B\n", argv[3], argv[4], n);
+
+      if (n > 0)
+        {
+          printf("[Voice] 现在可以: plant voice play %s\n", argv[4]);
+          return 0;
+        }
+
+      return -1;
+    }
+
+  /* plant voice play <wav路径>              - 播放任意 SD WAV（排查用：
+   *   PC 生成 3s 440Hz 16k mono WAV 放 SD → 若纯音也卡 = 播放路径问题；
+   *   配合播放耗时打印（实时连续/有停顿）判读） */
+
+  if (strcmp(argv[2], "play") == 0)
+    {
+      if (argc < 4)
+        {
+          printf("Usage: plant voice play <wav path>\n");
+          return -1;
+        }
+
+      return ai_voice_play_file(argv[3]);
+    }
+
+  /* plant voice talk [seconds]             - 跑一轮完整语音会话回归
+   *   （录音 → 服务器理解 → 边下边播），打印各阶段耗时。聊天功能不走
+   *   控制台，这条命令是为了在板卡上做端到端计时验证。 */
+
+  if (strcmp(argv[2], "talk") == 0)
+    {
+      int sec = (argc > 3) ? atoi(argv[3]) : 5;
+      uint32_t t0;
+      int ret;
+
+      if (sec < 1 || sec > 5)
+        {
+          sec = 5;
+        }
+
+      t0 = clock_systime_ticks();
+      ret = voice_service_talk(sec);
+      if (ret < 0)
+        {
+          printf("[Voice] talk 启动失败: %d\n", ret);
+          return ret;
+        }
+
+      /* 会话在 worker 线程异步跑：先给它 300ms 起跑，再等回 IDLE。
+       * 超时 120s 兜底（finalize 最多 90s + 播放几十秒）。 */
+
+      usleep(300 * 1000);
+      while (voice_service_busy())
+        {
+          if (clock_systime_ticks() - t0 > 12000)
+            {
+              printf("[Voice] talk 超时（>120s），放弃等待\n");
+              return -1;
+            }
+
+          usleep(100 * 1000);
+        }
+
+      printf("[Voice] talk 完成，端到端 %u ticks (10ms/tick)\n",
+             (unsigned)(clock_systime_ticks() - t0));
+      return 0;
+    }
+
+  /* plant voice talkhold [seconds] - fixed-duration voice test (VAD off). */
+
+  if (strcmp(argv[2], "talkhold") == 0)
+    {
+      int sec = (argc > 3) ? atoi(argv[3]) : 5;
+      uint32_t t0;
+      int ret;
+
+      if (sec < 1 || sec > AI_VOICE_MAX_SECONDS)
+        {
+          sec = AI_VOICE_MAX_SECONDS;
+        }
+
+      t0 = clock_systime_ticks();
+      ret = voice_service_talk_ex(sec, 0);
+      if (ret < 0)
+        {
+          printf("[Voice] talkhold 启动失败: %d\n", ret);
+          return ret;
+        }
+
+      usleep(300 * 1000);
+      while (voice_service_busy())
+        {
+          if (clock_systime_ticks() - t0 > 12000)
+            {
+              printf("[Voice] talkhold 超时（>120s），放弃等待\n");
+              return -1;
+            }
+
+          usleep(100 * 1000);
+        }
+
+      printf("[Voice] talkhold 完成，端到端 %u ticks (10ms/tick)\n",
+             (unsigned)(clock_systime_ticks() - t0));
+      return 0;
+    }
+
+  /* Acoustic STT regression: record from the real microphones while the
+   * on-board speaker plays a known phrase.  The final reply text proves the
+   * complete ES7210/I2S/filter/upload/transcription chain without requiring
+   * a human to time a sentence against the recorder. */
+
+  if (strcmp(argv[2], "sttloop") == 0)
+    {
+      const char *path;
+      int sec;
+      uint32_t t0;
+      int ret;
+
+      if (argc < 5)
+        {
+          printf("Usage: plant voice sttloop <wav path> <seconds>\n");
+          return -EINVAL;
+        }
+
+      path = argv[3];
+      sec = atoi(argv[4]);
+      if (sec < 1 || sec > AI_VOICE_MAX_SECONDS)
+        {
+          sec = AI_VOICE_MAX_SECONDS;
+        }
+
+      t0 = clock_systime_ticks();
+      ret = voice_service_talk_ex(sec, 0);
+      if (ret < 0)
+        {
+          printf("[Voice] sttloop record start failed: %d\n", ret);
+          return ret;
+        }
+
+      usleep(500 * 1000);
+      printf("[Voice] sttloop playback: %s\n", path);
+      ret = ai_voice_play_file(path);
+      printf("[Voice] sttloop playback ret=%d\n", ret);
+
+      while (voice_service_busy())
+        {
+          if (clock_systime_ticks() - t0 > 12000)
+            {
+              printf("[Voice] sttloop timeout (>120s)\n");
+              return -ETIMEDOUT;
+            }
+
+          usleep(100 * 1000);
+        }
+
+      printf("[Voice] sttloop done, %u ticks (10ms/tick)\n",
+             (unsigned)(clock_systime_ticks() - t0));
+      return 0;
+    }
+
+  if (strcmp(argv[2], "server") == 0)
+    {
+      /* 配置服务器辅助手地址（语音链路：分段上传 + finalize） */
+
+      extern int server_bridge_set_server(const char *host, uint16_t port);
+      uint16_t port = (argc > 4) ? (uint16_t)atoi(argv[4]) : 8000;
+
+      if (argc < 4)
+        {
+          printf("Usage: plant voice server <ip> [port]\n");
+          return -1;
+        }
+
+      {
+        int cfg_ret = server_bridge_set_server(argv[3], port);
+
+#if defined(CONFIG_PLANT_AI_MODULE) && defined(CONFIG_PLANT_SD_CARD)
+        if (cfg_ret == 0)
+          {
+            strlcpy(s_srv_host, argv[3], sizeof(s_srv_host));
+            s_srv_port = port;
+            s_srv_ok = true;
+            cfg_save_runtime();
+          }
+#endif
+        return cfg_ret;
+      }
+    }
+
+usage:
+  printf("Usage:\n");
+  printf("  plant voice tone <freq>      Play a %d ms test tone\n", 500);
+  printf("  plant voice rec [seconds]    Record mic -> WAV (16 kHz)\n");
+  printf("  plant voice diag [seconds]   A/B: quiet vs speech stats (root-cause)\n");
+  printf("  plant voice raw [seconds] [slot]  Raw 24k RX dump (0=MIC1/1=MIC2)\n");
+  printf("  plant voice loop [seconds]   Record then play back\n");
+  printf("  plant voice i2ctest          I2C link test (codecs)\n");
+  printf("  plant voice regs             I2S TX + ES8311 register dump\n");
+  printf("  plant voice server <ip>      Set AI server bridge address\n");
+  printf("  plant voice get <path> <file>  GET server path -> SD file\n");
+  printf("  plant voice play <wav path>    Play a SD WAV file\n");
+  return -1;
+}
+#endif
+
+#ifdef CONFIG_PLANT_AI_MODULE
+static const char *plant_ai_key(void)
+{
+  static char key[128];
+  const char *env = getenv("PLANT_AI_API_KEY");
+  const char *paths[] =
+  {
+    "/data/plant_ai_key", "/mnt/sd/plant_ai_key"
+  };
+  size_t i;
+
+  if (env != NULL && env[0] != '\0')
+    {
+      return env;
+    }
+
+  for (i = 0; i < sizeof(paths) / sizeof(paths[0]); i++)
+    {
+      FILE *fp = fopen(paths[i], "r");
+      size_t len;
+
+      if (fp == NULL)
+        {
+          continue;
+        }
+
+      if (fgets(key, sizeof(key), fp) != NULL)
+        {
+          len = strlen(key);
+          while (len > 0 && (key[len - 1] == '\n' || key[len - 1] == '\r' ||
+                             key[len - 1] == ' ' || key[len - 1] == '\t'))
+            {
+              key[--len] = '\0';
+            }
+        }
+
+      fclose(fp);
+      if (key[0] != '\0')
+        {
+          return key;
+        }
+    }
+
+  return CONFIG_PLANT_AI_API_KEY;
+}
+
+static int cmd_ai(int argc, char *argv[])
+{
+  if (argc < 3)
+    {
+      goto usage;
+    }
+  if (strcmp(argv[2], "test") == 0)
+    {
+      if (ai_common_init(plant_ai_key()) < 0 ||
+          ai_engine_init() < 0)
+        {
+          return -1;
+        }
+
+      printf("[AI] OK, key=configured\n");
+      printf("[AI] Host: %s\n", AI_MIMO_HOST);
+      printf("[AI] Model: %s\n", AI_MIMO_MODEL);
+
+      ai_engine_deinit();
+      ai_common_deinit();
+      return 0;
+    }
+
+  if (strcmp(argv[2], "advise") == 0)
+    {
+      if (argc < 11)
+        {
+          printf("Usage: plant ai advise <temp> <moisture> <ec> "
+                 "<salt> <n> <p> <k> <ph>\n");
+          return -1;
+        }
+
+      if (ai_common_init(plant_ai_key()) < 0 ||
+          ai_engine_init() < 0)
+        {
+          return -1;
+        }
+
+      struct soil_data_s data;
+      data.temp       = atof(argv[3]);
+      data.moisture   = atof(argv[4]);
+      data.ec         = atof(argv[5]);
+      data.salt       = atof(argv[6]);
+      data.nitrogen   = atof(argv[7]);
+      data.phosphorus = atof(argv[8]);
+      data.potassium  = atof(argv[9]);
+      data.ph         = atof(argv[10]);
+
+      struct ai_engine_result_s result;
+      if (ai_engine_run(&data, NULL, 0, &result) < 0)
+        {
+          printf("[AI] Engine failed\n");
+          ai_engine_deinit();
+          ai_common_deinit();
+          return -1;
+        }
+
+      ai_engine_print_result(&result);
+
+      ai_engine_deinit();
+      ai_common_deinit();
+      return 0;
+    }
+
+usage:
+  printf("Usage:\n");
+  printf("  plant ai test\n");
+  printf("  plant ai advise <temp> <moisture> <ec> <salt> <n> <p> <k> <ph>\n");
+  return -1;
+}
+
+/* plant srv — 服务器大脑冒烟/运维（协议 v2，对应 services/server_bridge）：
+ *   plant srv status           显示服务器地址/设备凭证状态
+ *   plant srv login            重新注册取 token（一般 set server 时已自动）
+ *   plant srv time             拉取服务器北京时间
+ *   plant srv report <m> <t> <ec> [ph] [salt] [n] [p] [k]  传感器单条上报
+ *   plant srv diag            单帧拍照 → 服务器结构化诊断（冒烟）
+ */
+
+static int cmd_srv(int argc, char *argv[])
+{
+  if(argc>=3 && !strcmp(argv[2],"uploadka"))
+    {
+      if(argc==3)return server_bridge_upload_keepalive(-1);
+      if(argc!=4)return -EINVAL;
+      int mode=!strcmp(argv[3],"on")?1:!strcmp(argv[3],"off")?0:-1;
+      if(mode<0)return -EINVAL;
+      if(voice_service_busy())return -EBUSY;
+      return server_bridge_upload_keepalive(mode);
+    }
+
+  if(argc>=3 && !strcmp(argv[2],"txbuf"))
+    {
+      char *end=NULL;long value=argc==4?strtol(argv[3],&end,10):0;
+      if(argc>4 || (argc==4 && (!end || *end || value<=0 || value>16384)))return -EINVAL;
+      return server_bridge_upload_txbuf((int)value);
+    }
+
+  if (argc < 3)
+    {
+      goto usage;
+    }
+
+  if (strcmp(argv[2], "status") == 0)
+    {
+      const char *host = server_bridge_host();
+      const char *tok = server_bridge_device_token();
+
+      printf("[Srv] host=%s\n", (host != NULL && host[0]) ? host : "(未配置)");
+      printf("[Srv] device_token=%s\n",
+             (tok != NULL && tok[0]) ? tok : "(未注册)");
+      printf("[Srv] config_epoch=%d\n", server_bridge_config_epoch());
+      return 0;
+    }
+
+  if (strcmp(argv[2], "login") == 0)
+    {
+      return server_bridge_device_login();
+    }
+
+  if (strcmp(argv[2], "time") == 0)
+    {
+      int64_t unix_bj = 0;
+      char date[16];
+      char tm_buf[8];
+      int ret = server_bridge_get_time(&unix_bj, date, sizeof(date),
+                                       tm_buf, sizeof(tm_buf));
+
+      if (ret < 0)
+        {
+          printf("[Srv] time 获取失败: %d\n", ret);
+          return ret;
+        }
+
+      printf("[Srv] time unix=%lld date=%s time=%s\n",
+             (long long)unix_bj, date, tm_buf);
+      return 0;
+    }
+
+  if (strcmp(argv[2], "report") == 0)
+    {
+      float m;
+      float t;
+      float ec;
+      float ph = 0.0f;
+      float salt = 0.0f;
+      float n = 0.0f;
+      float p = 0.0f;
+      float k = 0.0f;
+
+      if (argc < 6)
+        {
+          goto usage;
+        }
+
+      m = (float)atof(argv[3]);
+      t = (float)atof(argv[4]);
+      ec = (float)atof(argv[5]);
+      if (argc > 6)
+        {
+          ph = (float)atof(argv[6]);
+        }
+
+      if (argc > 7)
+        {
+          salt = (float)atof(argv[7]);
+        }
+
+      if (argc > 8)
+        {
+          n = (float)atof(argv[8]);
+        }
+
+      if (argc > 9)
+        {
+          p = (float)atof(argv[9]);
+        }
+
+      if (argc > 10)
+        {
+          k = (float)atof(argv[10]);
+        }
+
+      return server_bridge_report_telemetry(m, t, ec, ph, salt, n, p, k);
+    }
+
+  if (strcmp(argv[2], "diag") == 0)
+    {
+#if defined(CONFIG_PLANT_AI_MODULE) && defined(CONFIG_PLANT_CAMERA_CAPTURE)
+      extern void esp32s3_cam_dvp_set_swap(bool on);
+      struct sb_diag_result_s diag;
+      const uint8_t *fb = NULL;
+      size_t flen = 0;
+      clock_t t0;
+      int ms;
+      int ret;
+
+      esp32s3_cam_dvp_set_swap(true);
+      ret = camera_init();
+      if (ret < 0)
+        {
+          printf("[Srv] camera_init failed: %d\n", ret);
+          return ret;
+        }
+
+      /* 2026-09-10：上传识别的图要够清楚 —— 预览 160×120 只有 38400B，
+       * 服务器交给大模型后只能猜。与 UI「拍一拍」共用同一条拍照路径：
+       * 切 320×240（camera_mode_photo）→ 抓一帧（camera_photo_capture，
+       * 帧留在驱动 rxbuf，零拷贝；驱动内部负责 init/start/stop，所以
+       * 不会出现 2026-09-09 那个"get_frame 还是 NULL"的时序坑）。 */
+
+      ret = camera_mode_photo();
+      if (ret < 0)
+        {
+          printf("[Srv] photo mode failed: %d\n", ret);
+          return ret;
+        }
+
+      ret = camera_photo_capture(&fb, &flen);
+      if (ret < 0 || fb == NULL || flen == 0)
+        {
+          printf("[Srv] capture failed: %d\n", (ret < 0) ? ret : -ENODATA);
+          return (ret < 0) ? ret : -ENODATA;
+        }
+
+      printf("[Srv] 已拍照高清帧（%u 字节），开始服务器诊断...\n",
+             (unsigned)flen);
+      t0 = clock_systime_ticks();
+      ret = server_bridge_image_diagnose(fb, flen, &diag);
+      ms = (int)((clock_systime_ticks() - t0) * 1000 / TICK_PER_SEC);
+
+      if (ret < 0)
+        {
+          printf("[Srv] 诊断失败: %d（%.1f s）\n", ret, ms / 1000.0);
+          return ret;
+        }
+
+      printf("[Srv] 诊断完成 %.1f s：\n", ms / 1000.0);
+      printf("  植物: %s / %s\n", diag.name, diag.latin);
+      printf("  匹配: %d%%  健康分: %d\n", diag.match, diag.health_score);
+      printf("  问题:\n%s", diag.issue);
+      printf("  建议:\n%s", diag.advice);
+      printf("  总结: %s\n", diag.summary);
+      return 0;
+#else
+      printf("[Srv] diag 需要 AI_MODULE + CAMERA_CAPTURE\n");
+      return -1;
+#endif
+    }
+
+usage:
+  printf("Usage:\n");
+  printf("  plant srv status\n");
+  printf("  plant srv login\n");
+  printf("  plant srv time\n");
+  printf("  plant srv report <moisture%%> <temp> <ec> [light]\n");
+  printf("  plant srv diag\n");
+  return -1;
+}
+#endif
+
+#ifdef CONFIG_PLANT_SOIL_SENSOR
+static int cmd_soil(int argc,char *argv[])
+{
+  if(argc>=3 && !strcmp(argv[2],"scan"))
+    {printf("[SOIL] source=cloud local_scan=disabled\n");return -ENOTSUP;}
+  if(argc<3 || (strcmp(argv[2],"read") && strcmp(argv[2],"status")))
+    {printf("Usage: plant soil read|status (cloud source)\n");return -EINVAL;}
+  /* Wakes the shared, rate-limited producer; this command never fetches directly. */
+  sensor_service_read_now();
+  struct soil_data_s data;int rc=soil_sensor_read(&data,1);
+  if(rc<0){printf("[SOIL] source=cloud fresh_cache=0 rc=%d\n",rc);return rc;}
+  soil_sensor_print_data(&data);return 0;
+}
+#endif
+
+#ifdef CONFIG_PLANT_SD_CARD
+static int cmd_sd(int argc, char *argv[])
+{
+  if (argc < 3)
+    {
+      goto usage;
+    }
+
+  if (strcmp(argv[2], "test") == 0)
+    {
+      return sd_card_test();
+    }
+
+  if (strcmp(argv[2], "mount") == 0)
+    {
+      return sd_card_mount();
+    }
+
+  if (strcmp(argv[2], "umount") == 0)
+    {
+      return sd_card_umount();
+    }
+
+  if (strcmp(argv[2], "status") == 0)
+    {
+      printf("[SD] %s at %s\n",
+             sd_card_status() ? "Mounted" : "Not mounted", SD_MOUNTPOINT);
+      return 0;
+    }
+
+usage:
+  printf("Usage:\n");
+  printf("  plant sd status   Show mount status\n");
+  printf("  plant sd mount    Mount SD card to %s\n", SD_MOUNTPOINT);
+  printf("  plant sd test     Mount + write + read + verify\n");
+  printf("  plant sd umount   Unmount SD card\n");
+  return -1;
+}
+
+/* plant cfg：开机配置（SD plant.cfg）查看/保存/清空/立即恢复 */
+
+/* plant sn [<新序列号>]：查看 / 设置设备序列号（写 SD 卡 plant.cfg 的 sn=）。
+ * 设备号决定云端身份，多块板卡必须各不相同；改完重启生效。 */
+
+static int cmd_sn(int argc, char *argv[])
+{
+  const char *sn;
+  int i;
+  int rc;
+
+  if (argc < 3)
+    {
+      printf("[SN] 当前设备序列号: %s\n", server_bridge_device_sn());
+      printf("     用法: plant sn <新序列号>   （写入 SD 配置，重启后生效）\n");
+      return 0;
+    }
+
+  sn = argv[2];
+  if (strlen(sn) < 3 || strlen(sn) > 31)
+    {
+      printf("[SN] 序列号长度需 3~31 个字符\n");
+      return -EINVAL;
+    }
+
+  for (i = 0; sn[i] != '\0'; i++)
+    {
+      char c = sn[i];
+
+      if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+            (c >= '0' && c <= '9') || c == '-' || c == '_'))
+        {
+          printf("[SN] 只能用字母、数字、'-' 和 '_'\n");
+          return -EINVAL;
+        }
+    }
+
+  rc = device_cfg_save_sn(sn);
+  if (rc < 0)
+    {
+      printf("[SN] 写入失败: %d（SD 卡挂载了吗？）\n", rc);
+      return rc;
+    }
+
+  printf("[SN] 已写入 %s 到 /mnt/sd/plant.cfg；重启后生效"
+         "（重启前仍按旧编号上云）\n", sn);
+  return 0;
+}
+
+static int cmd_cfg(int argc, char *argv[])
+{
+  if (argc < 3)
+    {
+      goto usage;
+    }
+
+  if (strcmp(argv[2], "audit") == 0)
+    {
+      char ssid[33], password[65], host[128]; uint16_t port;
+      int rc = device_cfg_load(ssid, sizeof(ssid), password, sizeof(password),
+                               host, sizeof(host), &port);
+      printf("[CfgAudit] rc=%d wifi=%d password_set=%d server=%d path=%s\n",
+             rc, rc==0 && *ssid!=0, rc==0 && *password!=0,
+             rc==0 && *host!=0 && port!=0, device_cfg_path());
+      memset(password, 0, sizeof(password));
+      return rc;
+    }
+
+#ifdef CONFIG_PLANT_WIFI_MANAGER
+  if (strcmp(argv[2], "forgetwifi") == 0)
+    {
+      int rc = device_cfg_forget_wifi();
+      if (rc == 0)
+        {
+          s_wifi_ok = false;
+          memset(s_wifi_ssid, 0, sizeof(s_wifi_ssid));
+          memset(s_wifi_password, 0, sizeof(s_wifi_password));
+          wifi_manager_forget();
+        }
+      printf("[Cfg] forget WiFi rc=%d server_and_identity_preserved=1\n", rc);
+      return rc;
+    }
+#endif
+
+  if (strcmp(argv[2], "save") == 0)
+    {
+      cfg_save_runtime();
+      return 0;
+    }
+
+  if (strcmp(argv[2], "clear") == 0)
+    {
+      int cfg_ret = device_cfg_clear();
+
+      printf("[Cfg] plant.cfg %s\n",
+             cfg_ret == 0 ? "已删除（下次重启不再自动联网）" : "删除失败");
+      return (cfg_ret == 0) ? 0 : -1;
+    }
+
+#ifdef CONFIG_PLANT_WIFI_MANAGER
+  if (strcmp(argv[2], "connect") == 0)
+    {
+      int cfg_ret = cfg_apply_from_file(true);
+
+      return (cfg_ret == 0) ? 0 : 1;
+    }
+#endif
+
+  if (strcmp(argv[2], "show") == 0)
+    {
+      char ssid[33] = { 0 };
+      char password[65] = { 0 };
+      char host[128] = { 0 };
+      uint16_t port = 0;
+      int cfg_ret;
+
+      printf("[Cfg] 会话内记录:\n");
+#ifdef CONFIG_PLANT_WIFI_MANAGER
+      printf("  WiFi: %s%s\n", s_wifi_ok ? "已连接 " : "无记录",
+             s_wifi_ok ? s_wifi_ssid : "");
+#else
+      printf("  WiFi: 未编译\n");
+#endif
+#ifdef CONFIG_PLANT_AI_MODULE
+      printf("  服务器: %s%s:%u\n", s_srv_ok ? "" : "无记录",
+             s_srv_ok ? s_srv_host : "", (unsigned)s_srv_port);
+#else
+      printf("  服务器: 未编译\n");
+#endif
+
+      cfg_ret = device_cfg_load(ssid, sizeof(ssid), password,
+                                sizeof(password), host, sizeof(host), &port);
+      if (cfg_ret == 0)
+        {
+          printf("[Cfg] plant.cfg: WiFi=%s 服务器=%s:%u\n",
+                 ssid[0] != '\0' ? ssid : "(无)", host,
+                 (unsigned)port);
+        }
+      else
+        {
+          printf("[Cfg] plant.cfg 不存在或读取失败: %d\n", cfg_ret);
+        }
+
+      return 0;
+    }
+
+usage:
+  printf("Usage:\n");
+  printf("  plant cfg save      把最近成功的 WiFi/服务器配置存入 SD\n");
+  printf("  plant cfg show      查看会话内记录与 SD 配置\n");
+#ifdef CONFIG_PLANT_WIFI_MANAGER
+  printf("  plant cfg connect   按 SD 配置立即恢复联网+服务器\n");
+#endif
+  printf("  plant cfg clear     删除开机配置\n");
+  return -1;
+}
+#endif
+
+#ifdef CONFIG_ESP32S3_WIFI
+static int cmd_ota(int argc, char *argv[])
+{
+  int ret;
+
+  if (argc < 3)
+    {
+      goto usage;
+    }
+
+  if (strcmp(argv[2], "check") == 0)
+    {
+      ret = ota_init();
+      if (ret < 0)
+        {
+          printf("[OTA] Init failed: %d\n", ret);
+          return ret;
+        }
+
+      return ota_check_update();
+    }
+
+  if (strcmp(argv[2], "stage") == 0)
+    {
+      ret = ota_init();
+      if (ret < 0)
+        {
+          printf("[OTA] Init failed: %d\n", ret);
+          return ret;
+        }
+
+      /* Stage-only: download + SHA256 verify, no otadata write/reboot */
+
+      return ota_stage_update();
+    }
+
+  if (strcmp(argv[2], "status") == 0)
+    {
+      struct ota_status_s status;
+      int major;
+      int minor;
+      int patch;
+
+      ota_get_current_version(&major, &minor, &patch);
+      printf("[OTA] Current version: %d.%d.%d\n", major, minor, patch);
+
+      ret = ota_get_status(&status);
+      if (ret == 0)
+        {
+          printf("[OTA] State: %d\n", status.state);
+          printf("[OTA] Downloaded: %u / %u\n",
+                 status.downloaded, status.total);
+          printf("[OTA] Error: %d\n", status.last_error);
+        }
+
+      /* 两套状态对照：otadata（实际启动） vs KVDB（记账） */
+
+      ota_print_boot_status();
+
+      return 0;
+    }
+
+  if (strcmp(argv[2], "confirm") == 0)
+    {
+      return ota_confirm();
+    }
+
+usage:
+  printf("Usage:\n");
+  printf("  plant ota check      Check for firmware update (full A/B switch)\n");
+  printf("  plant ota stage      Download + verify only, no switch (safe test)\n");
+  printf("  plant ota status     Show OTA status (otadata)\n");
+  printf("  plant ota confirm    Mark current slot VALID (cancel rollback)\n");
+  return -1;
+}
+#endif
+
+/****************************************************************************
+ * cmd_cam — 摄像头调试：探测 + OV3660 JPEG 配置 + 拍照落盘
+ ****************************************************************************/
+
+#ifdef CONFIG_PLANT_CAMERA_CAPTURE
+
+static void cam_cli_pins_take(void)
+{
+#ifdef CONFIG_PLANT_SOIL_SENSOR
+  sensor_service_stop();
+  soil_sensor_set_paused(true);
+#endif
+}
+
+static void cam_cli_pins_release(void)
+{
+  (void)camera_shutdown();
+
+#ifdef CONFIG_PLANT_SOIL_SENSOR
+  soil_sensor_set_paused(false);
+  sensor_service_start(3000, NULL, NULL);
+#endif
+}
+
+
+/* Same snapshot + authenticated vision transport as inspect, without body/TTS. */
+static int quiet_camera_inspect(bool save_photo)
+{
+  int voice_busy=voice_service_busy();bool action_busy=interaction_active();
+  bool camera_active=screen_camera_is_active();
+  if(voice_busy || action_busy || !camera_active)
+    {printf("[QuietVision] phase=precondition rc=%d voice_busy=%d action_busy=%d camera_active=%d\n",
+            -EBUSY,voice_busy,action_busy,camera_active);return -EBUSY;}
+  const uint8_t *image=NULL;size_t bytes=0;char run[48];
+  clock_t begin=clock_systime_ticks();
+  int before_frame=camera_preview_get_frame_index();int rc=-EAGAIN;
+  /* Same bounded startup handoff retries as the production inspect worker. */
+  for(int attempt=0;attempt<4;attempt++)
+    {
+      rc=camera_preview_snapshot(&image,&bytes,1800);
+      if(rc==0)break;
+      if(rc!=-EAGAIN && rc!=-EBUSY && rc!=-ETIMEDOUT)break;
+      printf("[QuietVision] phase=capture_retry attempt=%d rc=%d\n",attempt+1,rc);
+      if(attempt<3)usleep(100000);
+    }
+  unsigned capture_ms=(unsigned)((clock_systime_ticks()-begin)*1000/CLOCKS_PER_SEC);
+  if(rc<0){printf("[QuietVision] phase=capture rc=%d capture_ms=%u\n",rc,capture_ms);return rc;}
+  struct plant_vision_result *v=calloc(1,sizeof(*v));
+  if(!v){printf("[QuietVision] phase=result_alloc rc=%d\n",-ENOMEM);return -ENOMEM;}
+  printf("[QuietVision] phase=fresh bytes=%u frame_before=%d frame_after=%d save_photo=%d\n",
+         (unsigned)bytes,before_frame,camera_preview_get_frame_index(),save_photo);
+  snprintf(run,sizeof(run),"quiet_%lu",(unsigned long)begin);
+  clock_t net=clock_systime_ticks();
+  rc=server_bridge_vision("inspect",image,bytes,320,240,0,0,1,run,save_photo?"photo":"",v);
+  unsigned net_ms=(unsigned)((clock_systime_ticks()-net)*1000/CLOCKS_PER_SEC);
+  if(rc==0 && v->frame_id!=1)rc=-ESTALE;
+  printf("[QuietVision] rc=%d bytes=%u capture_ms=%u network_ms=%u total_ms=%u tts=0\n",
+         rc,(unsigned)bytes,capture_ms,net_ms,
+         (unsigned)((clock_systime_ticks()-begin)*1000/CLOCKS_PER_SEC));
+  if(rc==0)printf("[QuietVision] message=%s\n",v->message);
+  free(v);return rc;
+}
+
+static int cmd_cam(int argc, char *argv[])
+{
+#ifdef CONFIG_PLANT_CAMERA_GC0308
+  if(camera_boot_prepare_busy())
+    {printf("[CamBoot] preparation in progress; retry camera command shortly\n");return -EBUSY;}
+#endif
+  /* 传感器是否已配置为 RGB565（capture 不再每次软复位重配，
+   * 避免 AEC 每次重启导致画面反复偏暗/偏色；切 JPEG(cfg) 后置回 false） */
+
+  static bool s_cam_rgb565_ready;
+
+  if (argc < 3)
+    {
+      printf("Usage: plant cam probe | cfg | rgb565 | reg | describe | capture | "
+             "stats | jpeg [w h] | jpegdiag [w h] | jpegq w h [qs] [mode] [pclk] | satlevel [-4..4] | ae [-5..5] | explos [lines] | rd <hex> | wr <hex> <val> | gamma default|local | "
+             "jpgupload | "
+             "sde on|off | desat on|off | swap [on|off] | diag | off\n");
+      return -1;
+    }
+
+  if (strcmp(argv[2], "diag") == 0)
+    {
+#ifdef CONFIG_ESP32S3_CAM_DVP
+      extern void esp32s3_cam_dvp_diag(void);
+      esp32s3_cam_dvp_diag();
+      return 0;
+#else
+      printf("[Cam] diag not compiled (CONFIG_ESP32S3_CAM_DVP)\n");
+      return -1;
+#endif
+    }
+
+  if (strcmp(argv[2], "off") == 0)
+    {
+      /* 2026-09-09 M2（土壤↔拍照引脚互斥）：等效"离开拍照页"的关停序列——
+       *   停 CAM/DMA + SCCB 软复位 OV3660（传感器不再驱动 DVP 输出）
+       *   → IO42/40 从 DVP 输入态切回 UART0
+       *   → 解除土壤挂起 → 恢复 3s 轮询（含 30s 上云节流）。
+       * 顺序与 screen_camera 的 cam_on_delete 完全一致；
+       * 串口可直接验证，也可作为 UI 流程失效时的兜底恢复手段。 */
+
+#ifdef CONFIG_PLANT_CAMERA_CAPTURE
+      int rc = camera_shutdown();
+      printf("[Cam] shutdown rc=%d\n", rc);
+#endif
+
+#ifdef CONFIG_PLANT_SOIL_SENSOR
+
+      soil_sensor_set_paused(false);
+      sensor_service_start(3000, NULL, NULL);
+      printf("[Cam] 云端土壤轮询恢复，本地传感器串口禁用\n");
+#endif
+      return 0;
+    }
+
+  if (strcmp(argv[2], "bar") == 0)
+    {
+      /* 传感器彩条测试图案：判定字节序 / R/B 分量序（见 2.48）。
+       * 与场景无关、一拍定案，打印 8 条标准色 × 4 种解码。 */
+
+      int ret = camera_init();
+
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      if (!s_cam_rgb565_ready)
+        {
+          ret = camera_config_rgb565_qvga();
+          if (ret < 0)
+            {
+              printf("[Cam] rgb565 config failed: %d\n", ret);
+              return ret;
+            }
+
+          s_cam_rgb565_ready = true;
+        }
+
+      return camera_colorbar_test();
+    }
+
+  if (strcmp(argv[2], "probe") == 0)
+    {
+      return camera_init();
+    }
+
+  if (strcmp(argv[2], "txn") == 0 && argc >= 4)
+    {
+      extern void camera_preview_set_transaction(bool on);
+
+      camera_preview_set_transaction(strcmp(argv[3], "on") == 0);
+      ui_app_request_camera_mode(true);
+      printf("[Cam] transaction mode queued: %s\n", argv[3]);
+      return 0;
+    }
+
+  if (strcmp(argv[2], "captureonly") == 0 && argc >= 4)
+    {
+      extern void camera_preview_set_capture_only(bool on);
+
+      camera_preview_set_capture_only(strcmp(argv[3], "on") == 0);
+      printf("[Cam] capture only: %s\n", argv[3]);
+      return 0;
+    }
+
+  if (strcmp(argv[2], "swap") == 0)
+    {
+#ifdef CONFIG_ESP32S3_CAM_DVP
+      extern void esp32s3_cam_dvp_set_swap(bool on);
+      extern bool esp32s3_cam_dvp_get_swap(void);
+
+      if (argc >= 4)
+        {
+          if (strcmp(argv[3], "on") == 0)
+            {
+              esp32s3_cam_dvp_set_swap(true);
+            }
+          else if (strcmp(argv[3], "off") == 0)
+            {
+              esp32s3_cam_dvp_set_swap(false);
+            }
+          else
+            {
+              printf("Usage: plant cam swap [on|off]\n");
+              return -1;
+            }
+        }
+
+      printf("[Cam] rgb565 byte swap = %s\n",
+             esp32s3_cam_dvp_get_swap() ? "on" : "off");
+      return 0;
+#else
+      printf("[Cam] swap not compiled (CONFIG_ESP32S3_CAM_DVP)\n");
+      return -1;
+#endif
+    }
+
+  if (strcmp(argv[2], "cfg") == 0)
+    {
+      int ret = camera_init();
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      ret = camera_config_jpeg_qvga();
+      if (ret == 0)
+        {
+          s_cam_rgb565_ready = false;
+        }
+
+      return ret;
+    }
+
+  if (strcmp(argv[2], "rgb565") == 0)
+    {
+      int ret = camera_init();
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      ret = camera_config_rgb565_qvga();
+      if (ret == 0)
+        {
+          s_cam_rgb565_ready = true;
+        }
+
+      return ret;
+    }
+
+  if (strcmp(argv[2], "reg") == 0)
+    {
+      return camera_dump_regs();
+    }
+
+  if (strcmp(argv[2], "describe") == 0)
+    {
+      static uint8_t *s_desc_frame;
+      extern int camera_preview_take(void);
+      extern int camera_preview_resume(void);
+      extern const uint8_t *camera_preview_get_frame(void);
+      extern FAR void *esp32s3_psram_static_alloc(size_t size);
+      const uint8_t *src;
+      char text[1024];
+      int x;
+      int y;
+      int ret;
+
+      if (camera_preview_take() < 0)
+        {
+          printf("[Cam] describe: preview freeze timeout\n");
+          return -ETIMEDOUT;
+        }
+
+      if (s_desc_frame == NULL)
+        {
+          s_desc_frame = esp32s3_psram_static_alloc(160 * 120 * 2);
+          if (s_desc_frame == NULL)
+            {
+              camera_preview_resume();
+              printf("[Cam] describe: PSRAM buffer alloc failed\n");
+              return -ENOMEM;
+            }
+        }
+
+      src = camera_preview_get_frame();
+      if (src == NULL)
+        {
+          camera_preview_resume();
+          printf("[Cam] describe: no preview frame\n");
+          return -ENODATA;
+        }
+
+      /* The production viewport path keeps pixels in panel byte order
+       * (RGB565_BE). Convert to the media API's little-endian raw565 here. */
+
+      for (y = 0; y < 120; y++)
+        {
+          const uint8_t *srow = src + (size_t)(y * 2) * 320u * 2u;
+          uint8_t *drow = s_desc_frame + (size_t)y * 160u * 2u;
+
+          for (x = 0; x < 160; x++)
+            {
+              const uint8_t *p = srow + (size_t)(x * 2) * 2u;
+
+              drow[x * 2] = p[1];
+              drow[x * 2 + 1] = p[0];
+            }
+        }
+
+      camera_preview_resume();
+      printf("[Cam] describe: captured 160x120 from live preview\n");
+      ret = server_bridge_image_analyze(s_desc_frame, 160u * 120u * 2u,
+                                        text, sizeof(text));
+      if (ret < 0)
+        {
+          printf("[Cam] describe failed: %d\n", ret);
+          return ret;
+        }
+
+      printf("[Cam] describe result:\n%s\n", text);
+      return 0;
+    }
+
+  if (strcmp(argv[2], "sat") == 0)
+    {
+      /* SDE 手动饱和度：0x5580[1]=1, 0x5588[6]=1,
+       * 0x5583=U, 0x5584=V。用于实时扫参数，找到正确值后再固化。 */
+
+      int u = (argc >= 4) ? (int)strtol(argv[3], NULL, 0) : 0x30;
+      int v = (argc >= 5) ? (int)strtol(argv[4], NULL, 0) : u;
+      int ret;
+      uint8_t rb;
+
+      if (u < 0 || u > 0xff || v < 0 || v > 0xff)
+        {
+          printf("Usage: plant cam sat [U V]  (hex or dec, 0..255)\n");
+          return -1;
+        }
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      /* SDE may be register-latched while enabled.  Drop SDE first, latch
+       * manual saturation, set fixed U/V, then re-enable SDE+scale. */
+
+      board_camera_sccb_write(0x5001, 0x23);  /* SDE off, scale+CMX+AWB on */
+      usleep(1000);
+      board_camera_sccb_write(0x5588, 0x40);  /* manual saturation adjust */
+      usleep(1000);
+      board_camera_sccb_read(0x5588, &rb);
+      printf("[Cam] 0x5588 with SDE off=0x%02x\n", rb);
+
+      board_camera_sccb_write(0x5583, (uint8_t)u);
+      board_camera_sccb_write(0x5584, (uint8_t)v);
+      board_camera_sccb_write(0x5580, 0x06);  /* saturation+contrast enable */
+      usleep(1000);
+      board_camera_sccb_read(0x5588, &rb);
+      printf("[Cam] 0x5588 before SDE on=0x%02x\n", rb);
+
+      board_camera_sccb_write(0x5001, 0xa3);  /* SDE+scale+CMX+AWB */
+
+      printf("[Cam] saturation -> U=0x%02x V=0x%02x\n", u, v);
+
+      board_camera_sccb_read(0x5580, &rb);
+      printf("[Cam] 0x5580=0x%02x\n", rb);
+      board_camera_sccb_read(0x5588, &rb);
+      printf("[Cam] 0x5588=0x%02x\n", rb);
+      board_camera_sccb_read(0x5583, &rb);
+      printf("[Cam] 0x5583=0x%02x\n", rb);
+      board_camera_sccb_read(0x5584, &rb);
+      printf("[Cam] 0x5584=0x%02x\n", rb);
+      return 0;
+    }
+
+  if (strcmp(argv[2], "explos") == 0)
+    {
+      int lines = (argc >= 4) ? atoi(argv[3]) : -1;
+      int now = camera_set_preview_ae_max_lines(lines);
+
+      printf("[Cam] preview AE max lines = %d (下次配置取景时生效)",
+             now);
+      printf("\n");
+      return 0;
+    }
+
+  if (strcmp(argv[2], "rd") == 0 && argc >= 4)
+    {
+      uint8_t v = 0;
+      int r = (int)strtoul(argv[3], NULL, 16);
+
+      if (camera_peek_reg(r, &v) < 0)
+        {
+          printf("[Cam] rd 0x%04x failed\n", r);
+          return -1;
+        }
+
+      printf("[Cam] 0x%04x = 0x%02x\n", r, v);
+      return 0;
+    }
+
+#ifdef CONFIG_PLANT_CAMERA_GC0308
+  if (strcmp(argv[2], "jpegtest") == 0)
+    {
+      extern int camera_jpeg_selftest(void);
+      return camera_jpeg_selftest();
+    }
+#endif
+
+  if (strcmp(argv[2], "wr") == 0 && argc >= 5)
+    {
+      int r = (int)strtoul(argv[3], NULL, 16);
+      int v = (int)strtoul(argv[4], NULL, 16);
+      uint8_t rb = 0;
+
+      if (camera_poke_reg(r, v) < 0)
+        {
+          printf("[Cam] wr 0x%04x failed\n", r);
+          return -1;
+        }
+
+      usleep(1000);
+      camera_peek_reg(r, &rb);
+      printf("[Cam] 0x%04x <- 0x%02x (readback 0x%02x)\n", r, v, rb);
+      return 0;
+    }
+
+  if (strcmp(argv[2], "satlevel") == 0)
+    {
+      int level = (argc >= 4) ? atoi(argv[3]) : 0;
+      int ret = camera_init();
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      ret = camera_set_saturation(level);
+      if (ret == 0)
+        {
+          uint8_t rb;
+          board_camera_sccb_read(0x5381, &rb);
+          printf("[Cam] 0x5381=0x%02x\n", rb);
+          board_camera_sccb_read(0x5385, &rb);
+          printf("[Cam] 0x5385=0x%02x\n", rb);
+          board_camera_sccb_read(0x5388, &rb);
+          printf("[Cam] 0x5388=0x%02x\n", rb);
+        }
+
+      return ret;
+    }
+
+  if (strcmp(argv[2], "ae") == 0)
+    {
+      int level = (argc >= 4) ? atoi(argv[3]) : 0;
+      int ret = camera_init();
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      return camera_set_ae_level(level);
+    }
+
+  if (strcmp(argv[2], "stats") == 0)
+    {
+      const uint8_t *fb = NULL;
+      size_t flen = 0;
+      int ret;
+
+      cam_cli_pins_take();
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          goto out_stats;
+        }
+
+      if (!s_cam_rgb565_ready)
+        {
+          ret = camera_config_rgb565_qvga();
+          if (ret < 0)
+            {
+              goto out_stats;
+            }
+
+          s_cam_rgb565_ready = true;
+        }
+
+      ret = camera_mode_photo();
+      if (ret < 0)
+        {
+          goto out_stats;
+        }
+
+      ret = camera_photo_capture(&fb, &flen);
+      if (ret < 0)
+        {
+          goto out_stats;
+        }
+
+      printf("[Cam] stats done: %u bytes (%p)\n",
+             (unsigned)flen, (void *)fb);
+      ret = 0;
+
+out_stats:
+      s_cam_rgb565_ready = false;
+      cam_cli_pins_release();
+      return ret;
+    }
+
+  if (strcmp(argv[2], "jpeg") == 0)
+    {
+      int w = (argc >= 4) ? atoi(argv[3]) : 1024;
+      int h = (argc >= 5) ? atoi(argv[4]) : 768;
+      size_t len = 0;
+      int ret;
+
+      if (w <= 0 || h <= 0 || w > 2048 || h > 1536)
+        {
+          printf("Usage: plant cam jpeg [w h]  (max 2048x1536)\n");
+          return -1;
+        }
+
+      cam_cli_pins_take();
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          goto out_jpeg;
+        }
+
+      ret = camera_config_jpeg_wh((uint16_t)w, (uint16_t)h);
+      if (ret < 0)
+        {
+          goto out_jpeg;
+        }
+
+      ret = camera_jpeg_capture_to_sd("/mnt/sd/photo.jpg", &len);
+      if (ret < 0)
+        {
+          goto out_jpeg;
+        }
+
+      printf("[Cam] JPEG POC done: %dx%d %u bytes\n",
+             w, h, (unsigned)len);
+      ret = 0;
+
+out_jpeg:
+      s_cam_rgb565_ready = false;
+      cam_cli_pins_release();
+      return ret;
+    }
+
+  if (strcmp(argv[2], "jpegdiag") == 0)
+    {
+#ifdef CONFIG_PLANT_AI_MODULE
+      int w = (argc >= 4) ? atoi(argv[3]) : 1024;
+      int h = (argc >= 5) ? atoi(argv[4]) : 768;
+      const uint8_t *fb = NULL;
+      size_t len = 0;
+      struct sb_diag_result_s diag;
+      int ret;
+
+      if (w <= 0 || h <= 0 || w > 2048 || h > 1536)
+        {
+          printf("Usage: plant cam jpegdiag [w h]  (max 2048x1536)\n");
+          return -1;
+        }
+
+      cam_cli_pins_take();
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          goto out_jpegdiag;
+        }
+
+      ret = camera_config_jpeg_wh((uint16_t)w, (uint16_t)h);
+      if (ret < 0)
+        {
+          goto out_jpegdiag;
+        }
+
+      ret = camera_jpeg_capture(&fb, &len);
+      if (ret < 0 || fb == NULL || len == 0)
+        {
+          ret = (ret < 0) ? ret : -ENODATA;
+          goto out_jpegdiag;
+        }
+
+      printf("[Cam] JPEG diag: upload %ux%u %u bytes...\n",
+             w, h, (unsigned)len);
+      ret = server_bridge_image_diagnose(fb, len, &diag);
+      if (ret == 0)
+        {
+          printf("[Cam] JPEG diag result: %s / %s match=%d health=%d\n",
+                 diag.name, diag.latin, diag.match, diag.health_score);
+        }
+
+out_jpegdiag:
+      s_cam_rgb565_ready = false;
+      cam_cli_pins_release();
+      return ret;
+#else
+      printf("jpegdiag requires CONFIG_PLANT_AI_MODULE\n");
+      return -1;
+#endif
+    }
+
+  if (strcmp(argv[2], "jpegq") == 0)
+    {
+#ifdef CONFIG_PLANT_AI_MODULE
+      /* 参数扫描：camera_config_jpeg_wh 之后覆盖压缩相关寄存器再抓帧上传。
+       * 用于定位 2048x1536 末段 MCU 截断的敏感参数。
+       *   plant cam jpegq <w> <h> [qs] [mode] [pclk] [c4400] [c4401]
+       * qs: 0x4407 量化系数; mode: 0x4713 压缩模式; pclk: 0x3824 PCLK 分频;
+       * c4400: 0x4400 整字节 (bit7=0 YUV420 / 1 YUV422, bit[6:0] JFIFO 读速);
+       * c4401: 0x4401 整字节 (SFIFO 速度)。抓帧后回读 0x4417 JFIFO overflow
+       * 与 0x4414-16 压缩长度，并打印帧字节 FNV 哈希用于上传完整性比对。 */
+
+      int w = (argc >= 4) ? atoi(argv[3]) : 2048;
+      int h = (argc >= 5) ? atoi(argv[4]) : 1536;
+      int qs = (argc >= 6) ? (int)strtol(argv[5], NULL, 0) : -1;
+      int mode = (argc >= 7) ? (int)strtol(argv[6], NULL, 0) : -1;
+      int pclk = (argc >= 8) ? (int)strtol(argv[7], NULL, 0) : -1;
+      int c4400 = (argc >= 9) ? (int)strtol(argv[8], NULL, 0) : -1;
+      int c4401 = (argc >= 10) ? (int)strtol(argv[9], NULL, 0) : -1;
+      uint32_t xreg1 = (argc >= 11) ? strtoul(argv[10], NULL, 0) : 0;
+      uint32_t xreg2 = (argc >= 12) ? strtoul(argv[11], NULL, 0) : 0;
+      const uint8_t *fb = NULL;
+      size_t len = 0;
+      struct sb_diag_result_s diag;
+      int ret;
+
+      if (w <= 0 || h <= 0 || w > 2048 || h > 1536)
+        {
+          printf("Usage: plant cam jpegq <w> <h> [qs] [mode] [pclk] [c4400] [c4401] [xreg1] [xreg2]\n");
+          return -1;
+        }
+
+      cam_cli_pins_take();
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          goto out_jpegq;
+        }
+
+      ret = camera_config_jpeg_wh((uint16_t)w, (uint16_t)h);
+      if (ret < 0)
+        {
+          goto out_jpegq;
+        }
+
+      if (qs >= 0)
+        {
+          board_camera_sccb_write(0x4407, (uint8_t)qs);
+        }
+
+      if (mode >= 0)
+        {
+          board_camera_sccb_write(0x4713, (uint8_t)mode);
+        }
+
+      if (pclk > 0)
+        {
+          board_camera_sccb_write(0x3824, (uint8_t)pclk);
+        }
+
+      if (c4400 >= 0)
+        {
+          board_camera_sccb_write(0x4400, (uint8_t)c4400);
+        }
+
+      if (c4401 >= 0)
+        {
+          board_camera_sccb_write(0x4401, (uint8_t)c4401);
+        }
+
+      /* 打包寄存器直写：xreg = (reg << 16) | val，0 表示跳过。
+       * 覆盖数据手册里有、固定参数没有的寄存器（0x4722 垂直结束偏移、
+       * 0x4600 bit5 固定高度、0x460C dummy pad 速度等）。
+       * NSH argv 上限 12：plant cam jpegq + 9 参数刚好打满。 */
+
+      if (xreg1 != 0)
+        {
+          board_camera_sccb_write((uint16_t)(xreg1 >> 16),
+                                  (uint8_t)(xreg1 & 0xff));
+        }
+
+      if (xreg2 != 0)
+        {
+          board_camera_sccb_write((uint16_t)(xreg2 >> 16),
+                                  (uint8_t)(xreg2 & 0xff));
+        }
+
+      if (qs >= 0 || mode >= 0 || pclk > 0 || c4400 >= 0 || c4401 >= 0 ||
+          xreg1 != 0 || xreg2 != 0)
+        {
+          printf("[Cam] jpegq overrides: qs=0x%02x mode=0x%02x pclk=0x%02x "
+                 "c4400=0x%02x c4401=0x%02x xreg=%08lx/%08lx\n",
+                 qs, mode, pclk, c4400, c4401,
+                 (unsigned long)xreg1, (unsigned long)xreg2);
+          usleep(300 * 1000);
+        }
+
+      ret = camera_jpeg_capture(&fb, &len);
+      if (ret < 0 || fb == NULL || len == 0)
+        {
+          ret = (ret < 0) ? ret : -ENODATA;
+          goto out_jpegq;
+        }
+
+      /* 同一份字节先落盘 SD：上传链路或服务器判失败时，仍可取回
+       * 传感器原始字节做 MCU 审计。 */
+
+      {
+        FILE *fp = fopen("/mnt/sd/photo.jpg", "wb");
+
+        if (fp != NULL)
+          {
+            extern void esp32s3_cam_dvp_invalidate(const void *addr,
+                                                   size_t len);
+            esp32s3_cam_dvp_invalidate(fb, len);
+            if (fwrite(fb, 1, len, fp) == len)
+              {
+                printf("[Cam] jpegq: saved /mnt/sd/photo.jpg (%u bytes)\n",
+                       (unsigned)len);
+              }
+
+            fclose(fp);
+          }
+      }
+
+      {
+        uint32_t hash = 2166136261u;
+        size_t i;
+        uint8_t v;
+        uint32_t clen;
+
+        for (i = 0; i < len; i++)
+          {
+            hash ^= fb[i];
+            hash *= 16777619u;
+          }
+
+        board_camera_sccb_read(0x4417, &v);
+        clen = 0;
+        board_camera_sccb_read(0x4414, &v);
+        clen = (uint32_t)v << 16;
+        board_camera_sccb_read(0x4415, &v);
+        clen |= (uint32_t)v << 8;
+        board_camera_sccb_read(0x4416, &v);
+        clen |= v;
+        board_camera_sccb_read(0x4417, &v);
+        printf("[Cam] jpegq: fnv=%08x len=%u complen=%u jfifo_ovf=%d\n",
+               (unsigned)hash, (unsigned)len, (unsigned)clen, v & 1);
+      }
+
+      printf("[Cam] jpegq: upload %ux%u %u bytes...\n", w, h, (unsigned)len);
+      ret = server_bridge_image_diagnose(fb, len, &diag);
+      if (ret == 0)
+        {
+          printf("[Cam] jpegq result: %s / %s match=%d health=%d\n",
+                 diag.name, diag.latin, diag.match, diag.health_score);
+        }
+
+out_jpegq:
+      s_cam_rgb565_ready = false;
+      cam_cli_pins_release();
+      return ret;
+#else
+      printf("jpegq requires CONFIG_PLANT_AI_MODULE\n");
+      return -1;
+#endif
+    }
+
+  if (strcmp(argv[2], "jpgupload") == 0)
+    {
+#ifdef CONFIG_PLANT_AI_MODULE
+      const char *path = "/mnt/sd/photo.jpg";
+      struct sb_diag_result_s diag;
+      uint8_t *buf;
+      long sz;
+      FILE *fp;
+      int ret;
+
+      fp = fopen(path, "rb");
+      if (fp == NULL)
+        {
+          printf("[Cam] jpgupload: fopen %s failed\n", path);
+          return -errno;
+        }
+
+      if (fseek(fp, 0, SEEK_END) != 0 ||
+          (sz = ftell(fp)) <= 0 ||
+          sz > (1024 * 1024) ||
+          fseek(fp, 0, SEEK_SET) != 0)
+        {
+          fclose(fp);
+          printf("[Cam] jpgupload: bad file size\n");
+          return -EINVAL;
+        }
+
+      buf = malloc((size_t)sz);
+      if (buf == NULL)
+        {
+          fclose(fp);
+          return -ENOMEM;
+        }
+
+      if (fread(buf, 1, (size_t)sz, fp) != (size_t)sz)
+        {
+          fclose(fp);
+          free(buf);
+          printf("[Cam] jpgupload: short read\n");
+          return -EIO;
+        }
+
+      fclose(fp);
+
+      {
+        size_t off;
+
+        for (off = 0; off + 1 < (size_t)sz; off++)
+          {
+            if (buf[off] == 0xff && buf[off + 1] == 0xd8)
+              {
+                break;
+              }
+          }
+
+        if (off + 1 >= (size_t)sz)
+          {
+            printf("[Cam] jpgupload: SOI not found\n");
+            free(buf);
+            return -EINVAL;
+          }
+
+        printf("[Cam] jpgupload: %s %ld bytes SOI=%u -> server\n",
+               path, sz, (unsigned)off);
+        ret = server_bridge_image_diagnose(buf + off, (size_t)sz - off,
+                                           &diag);
+      }
+
+      if (ret == 0)
+        {
+          printf("[Cam] jpgupload result: %s / %s match=%d health=%d\n",
+                 diag.name, diag.latin, diag.match, diag.health_score);
+        }
+
+      free(buf);
+      return ret;
+#else
+      printf("jpgupload requires CONFIG_PLANT_AI_MODULE\n");
+      return -1;
+#endif
+    }
+
+  if (strcmp(argv[2], "gamma") == 0)
+    {
+      int ret;
+
+      if (argc < 4)
+        {
+          printf("Usage: plant cam gamma default|local\n");
+          return -1;
+        }
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      if (strcmp(argv[3], "default") == 0)
+        {
+          return camera_set_gamma_default();
+        }
+      else if (strcmp(argv[3], "local") == 0)
+        {
+          return camera_set_gamma_local();
+        }
+
+      printf("Usage: plant cam gamma default|local\n");
+      return -1;
+    }
+
+  if (strcmp(argv[2], "sde") == 0)
+    {
+      int ret;
+
+      if (argc < 4)
+        {
+          printf("Usage: plant cam sde on|off\n");
+          return -1;
+        }
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      if (strcmp(argv[3], "on") == 0)
+        {
+          return camera_set_sde(true);
+        }
+      else if (strcmp(argv[3], "off") == 0)
+        {
+          return camera_set_sde(false);
+        }
+
+      printf("Usage: plant cam sde on|off\n");
+      return -1;
+    }
+
+  if (strcmp(argv[2], "desat") == 0)
+    {
+      if (argc < 4)
+        {
+          printf("Usage: plant cam desat on|off\n");
+          return -1;
+        }
+
+      if (strcmp(argv[3], "on") == 0)
+        {
+          camera_set_highlight_desat(true);
+          return 0;
+        }
+      else if (strcmp(argv[3], "off") == 0)
+        {
+          camera_set_highlight_desat(false);
+          return 0;
+        }
+
+      printf("Usage: plant cam desat on|off\n");
+      return -1;
+    }
+
+  if (strcmp(argv[2], "capture") == 0)
+    {
+      size_t jpeg_len = 0;
+      int ret;
+
+      /* OV3660 RGB565 是大端输出（2.49 彩条实锤）：强制字节交换（防残留/误设） */
+
+      {
+        extern void esp32s3_cam_dvp_set_swap(bool on);
+
+        esp32s3_cam_dvp_set_swap(true);
+      }
+
+      cam_cli_pins_take();
+      ret = camera_init();
+      if (ret < 0)
+        {
+          printf("[Cam] camera_init failed: %d\n", ret);
+          cam_cli_pins_release();
+          return ret;
+        }
+
+      /* 统一走模式管理：这条命令要的是 160×120 单帧（预览几何）。若上次
+       * 拍照把传感器留在 320×240，必须先切回来 —— 否则会按 160 宽解析
+       * 320 宽的帧（花屏），还会把 153600B 写进 SD。只配一次：重复
+       * capture 不再软复位传感器（AEC/曝光保持收敛）。 */
+
+      ret = camera_mode_preview();
+      if (ret < 0)
+        {
+          printf("[Cam] preview mode failed: %d\n", ret);
+          cam_cli_pins_release();
+          return ret;
+        }
+
+      s_cam_rgb565_ready = true;
+
+      /* RGB565 frame: use the DMA driver's static rxbuf as sink target,
+       * frame appears in LCD image (LVGL zero-copy via get_frame). */
+
+      {
+        extern uint8_t *esp32s3_cam_dvp_get_frame(void);
+        uint8_t *fb = esp32s3_cam_dvp_get_frame();
+
+        printf("[Cam] capturing -> LCD preview ...\n");
+        ret = camera_capture_frame(fb, CAM_PREVIEW_SIZE, &jpeg_len);
+
+        if (ret == 0)
+          {
+            printf("[Cam] OK: %u bytes frame\n", jpeg_len);
+
+            /* 单帧"capture→直写 LCD"验证（与 preview 同链路）：
+             * 出画面 = capture+写屏链路通；黑屏 = 链路断（看上面诊断） */
+
+            if (lcd_put_rgb565(fb, CAM_PREVIEW_W, CAM_PREVIEW_H,
+                               33, 63, 414, 184) < 0)
+              {
+                printf("[Cam] LCD write FAILED\n");
+                ret = -1;
+              }
+            else
+              {
+                printf("[Cam] frame drawn to viewport (33,63,414,184)\n");
+              }
+          }
+        else
+          {
+            printf("[Cam] FAILED: %d\n", ret);
+          }
+      }
+
+      cam_cli_pins_release();
+      return ret;
+    }
+
+  if (strcmp(argv[2], "inspectquiet") == 0)
+    {
+      if(argc!=3 && !(argc==4 && !strcmp(argv[3],"photo")))return -EINVAL;
+      return quiet_camera_inspect(argc==4);
+    }
+
+  if (strcmp(argv[2], "uipage") == 0)
+    {
+      extern void ui_app_request_camera_page(void);
+
+      ui_app_request_camera_page();
+      printf("[Cam] camera page requested (ui task)\n");
+      return 0;
+    }
+
+  if (strcmp(argv[2], "fmt") == 0)
+    {
+      extern void ui_app_request_camera_page(void);
+      bool yuv;
+
+      if (argc < 4 ||
+          (strcmp(argv[3], "yuv") != 0 && strcmp(argv[3], "rgb") != 0))
+        {
+          printf("Usage: plant cam fmt yuv|rgb\n");
+          return -EINVAL;
+        }
+
+      yuv = strcmp(argv[3], "yuv") == 0;
+      /* Preview threads must be created from the UI task on this NuttX
+       * target.  Leave the page through its normal teardown path, then let
+       * the UI task recreate it with the new sensor format. */
+      screen_camera_leave_if_active();
+      camera_preview_set_sensor_format(yuv);
+      ui_app_request_camera_page();
+      printf("[Cam] sensor format -> %s; camera page restart queued\n",
+             yuv ? "official YUYV + LCD_CAM hardware RGB565" :
+                   "native RGB565 BE");
+      return 0;
+    }
+
+  if (strcmp(argv[2], "rates") == 0)
+    {
+      extern uint32_t esp32s3_cam_dvp_get_vsync(void);
+      extern uint32_t esp32s3_cam_dvp_get_blockdone(void);
+      uint32_t v0 = esp32s3_cam_dvp_get_vsync();
+      uint32_t b0 = esp32s3_cam_dvp_get_blockdone();
+      uint32_t p0 = camera_preview_get_total_frames();
+
+      sleep(2);
+      {
+        uint32_t v1 = esp32s3_cam_dvp_get_vsync();
+        uint32_t b1 = esp32s3_cam_dvp_get_blockdone();
+        uint32_t p1 = camera_preview_get_total_frames();
+
+        if (v1 < v0 || b1 < b0)
+          {
+            printf("[Rates] invalid=1 reason=camera-counter-reset retry=1\n");
+            return 0;
+          }
+
+        printf("[Rates] vsync=%u gdma_eof=%u preview=%u in 2s\n",
+               (unsigned)(v1 - v0), (unsigned)(b1 - b0),
+               (unsigned)(p1 - p0));
+      }
+      return 0;
+    }
+
+  if (strcmp(argv[2], "vsync") == 0)
+    {
+      extern uint32_t esp32s3_cam_dvp_get_vsync(void);
+      uint32_t a = esp32s3_cam_dvp_get_vsync();
+
+      sleep(2);
+      {
+        uint32_t b = esp32s3_cam_dvp_get_vsync();
+
+        printf("[Vsync] %u -> %u in 2s (%.1f fps)\n",
+               (unsigned)a, (unsigned)b, (double)(b - a) / 2.0);
+      }
+      return 0;
+    }
+
+  if (strcmp(argv[2], "lcdskip") == 0)
+    {
+      extern void camera_preview_set_lcd_skip(int on);
+
+      camera_preview_set_lcd_skip(argc >= 4 && strcmp(argv[3], "on") == 0);
+      printf("[Cam] lcd skip = %d\n",
+             argc >= 4 && strcmp(argv[3], "on") == 0);
+      return 0;
+    }
+
+  if (strcmp(argv[2], "cmode") == 0)
+    {
+      int mode;
+
+      if (argc < 4)
+        {
+          printf("[Cam] color mode = %d\n", camera_preview_get_color_mode());
+          printf("Usage: plant cam cmode <0..5> (0=100%%,1=80%%,"
+                 "2=60%%,3=40%% chroma,4/5=LVGL bars)\n");
+          return 0;
+        }
+
+      mode = atoi(argv[3]);
+      if (mode < 0 || mode > 5)
+        {
+          printf("Usage: plant cam cmode <0..5>\n");
+          return -EINVAL;
+        }
+
+      camera_preview_set_color_mode(mode);
+      printf("[Cam] color mode -> %d\n", mode);
+      return 0;
+    }
+
+  if (strcmp(argv[2], "yuvhw") == 0)
+    {
+      extern void ui_app_request_camera_page(void);
+      bool on = argc >= 4 && strcmp(argv[3], "on") == 0;
+
+      screen_camera_leave_if_active();
+      camera_preview_set_yuv_hardware(on);
+      camera_preview_set_sensor_format(true);
+      ui_app_request_camera_page();
+      printf("[Cam] YUV conversion -> %s; camera page restart queued\n",
+             on ? "LCD_CAM hardware" : "BT601 software");
+      return 0;
+    }
+
+  if (strcmp(argv[2], "pvdiag") == 0)
+    {
+      extern void camera_preview_set_diag(bool on);
+      extern bool camera_preview_get_diag(void);
+      bool on = (argc >= 4) && strcmp(argv[3], "on") == 0;
+
+      camera_preview_set_diag(on);
+      printf("[Cam] preview diagnostics = %s\n",
+             camera_preview_get_diag() ? "on" : "off");
+      return 0;
+    }
+
+  if (strcmp(argv[2], "pvseq") == 0)
+    {
+      int i;
+
+      for (i = 0; i < 5; i++)
+        {
+          printf("[PvSeq] t=%d seq=%u\n", i,
+                 (unsigned)camera_preview_get_frame_index());
+          sleep(1);
+        }
+
+      return 0;
+    }
+
+  if (strcmp(argv[2], "pvstat") == 0)
+    {
+      extern uint8_t *camera_preview_get_last(void);
+      extern uint8_t *esp32s3_cam_dvp_get_frame(void);
+      uint8_t *fb = camera_preview_get_last();
+
+      if (fb == NULL)
+        {
+          fb = esp32s3_cam_dvp_get_frame();
+        }
+      const uint16_t *px;
+      const int cols = 64;
+      const int rows = 24;
+      const int cw = CAM_PREVIEW_W / cols;
+      const int ch = CAM_PREVIEW_H / rows;
+      int y;
+      int x;
+      double sum = 0;
+      double sum2 = 0;
+
+      if (fb == NULL)
+        {
+          printf("[PvStat] no preview frame yet\n");
+          return -ENODATA;
+        }
+
+      px = (const uint16_t *)fb;
+      printf("[PvStat] preview frame %dx%d\n", CAM_PREVIEW_W,
+             CAM_PREVIEW_H);
+
+      for (y = 0; y < rows; y++)
+        {
+          static const char *ramp = " .:-=+*#%@";
+          char line[cols + 1];
+
+          for (x = 0; x < cols; x++)
+            {
+              unsigned long acc = 0;
+              int yy;
+              int xx;
+
+              for (yy = 0; yy < ch; yy++)
+                for (xx = 0; xx < cw; xx++)
+                  {
+                    uint16_t v = px[(size_t)(y * ch + yy) * CAM_PREVIEW_W +
+                                    (x * cw + xx)];
+                    acc += ((v >> 11) & 31) * 8 + ((v >> 5) & 63) * 4 +
+                           (v & 31) * 8;
+                  }
+
+              {
+                int lum = (int)(acc / (unsigned long)(cw * ch));
+
+                line[x] = ramp[lum * 9 / 255];
+                sum += lum;
+                sum2 += (double)lum * lum;
+              }
+            }
+
+          line[cols] = 0;
+          printf("[PvStat] %s\n", line);
+        }
+
+      {
+        double n = (double)cols * rows;
+        double mean = sum / n;
+        double var = sum2 / n - mean * mean;
+
+        printf("[PvStat] mean=%.1f std=%.1f\n", mean,
+               var > 0 ? sqrt(var) : 0.0);
+      }
+      return 0;
+    }
+
+  if (strcmp(argv[2], "yuvthumb") == 0)
+    {
+      extern uint8_t *esp32s3_cam_dvp_get_frame(void);
+      uint8_t *fb = esp32s3_cam_dvp_get_frame();
+      int by;
+      int bx;
+
+      if (fb == NULL)
+        {
+          printf("[Yuv] no frame\n");
+          return -ENODATA;
+        }
+
+      for (by = 0; by < 24; by++)
+        {
+          printf("[Yuv] ");
+          for (bx = 0; bx < 32; bx++)
+            {
+              uint32_t ys = 0;
+              uint32_t us = 0;
+              uint32_t vs = 0;
+              int npix = 0;
+              int y;
+              int x;
+
+              for (y = by * 10; y < by * 10 + 10; y++)
+                {
+                  for (x = bx * 10; x < bx * 10 + 10; x += 2)
+                    {
+                      const uint8_t *p =
+                        fb + ((size_t)y * CAM_PREVIEW_W + x) * 2;
+                      ys += p[0] + p[2];
+                      us += p[1];
+                      vs += p[3];
+                      npix += 2;
+                    }
+                }
+
+              printf("%02x%02x%02x", (unsigned)(ys / npix),
+                     (unsigned)(us / (npix / 2)),
+                     (unsigned)(vs / (npix / 2)));
+            }
+
+          printf("\n");
+        }
+
+      return 0;
+    }
+
+  if (strcmp(argv[2], "stride") == 0)
+    {
+      extern uint8_t *esp32s3_cam_dvp_get_frame(void);
+      uint8_t *fb = esp32s3_cam_dvp_get_frame();
+      uint32_t fw = 0;
+      uint32_t fh = 0;
+      int best_stride[5] = {0};
+      uint32_t best_score[5] = {UINT32_MAX, UINT32_MAX, UINT32_MAX,
+                                UINT32_MAX, UINT32_MAX};
+      int stride;
+
+      esp32s3_cam_dvp_get_framesize(&fw, &fh);
+      if (fb == NULL)
+        {
+          printf("[Stride] no frame\n");
+          return -ENODATA;
+        }
+
+      camera_preview_take();
+      for (stride = 400; stride <= 1400; stride++)
+        {
+          uint32_t score = 0;
+          int row;
+
+          for (row = 0; row < 16; row++)
+            {
+              const uint8_t *a = fb + (size_t)row * stride + 64;
+              const uint8_t *b = fb + (size_t)(row + 1) * stride + 64;
+              int i;
+
+              for (i = 0; i < 256; i += 4)
+                {
+                  int d = (int)a[i] - (int)b[i];
+                  score += (uint32_t)(d < 0 ? -d : d);
+                }
+            }
+
+          if (score < best_score[4])
+            {
+              int p;
+              for (p = 4; p > 0 && score < best_score[p - 1]; p--)
+                {
+                  best_score[p] = best_score[p - 1];
+                  best_stride[p] = best_stride[p - 1];
+                }
+              best_score[p] = score;
+              best_stride[p] = stride;
+            }
+        }
+
+      printf("[Stride] frame=%ux%u expected=%u\n", (unsigned)fw,
+             (unsigned)fh, (unsigned)fw * 2u);
+      for (stride = 0; stride < 5; stride++)
+        {
+          if (best_stride[stride] > 0)
+            {
+              printf("[Stride] #%d bytes/line=%d score=%u\n", stride + 1,
+                     best_stride[stride], (unsigned)best_score[stride]);
+            }
+        }
+
+      return 0;
+    }
+
+  if (strcmp(argv[2], "rgbthumb") == 0)
+    {
+      extern uint8_t *camera_preview_get_last(void);
+      uint8_t *fb = camera_preview_get_last();
+      int by;
+      int bx;
+
+      if (fb == NULL)
+        {
+          printf("[Rgb] no converted frame\n");
+          return -ENODATA;
+        }
+
+      for (by = 0; by < 24; by++)
+        {
+          printf("[Rgb] ");
+          for (bx = 0; bx < 32; bx++)
+            {
+              uint32_t rs = 0;
+              uint32_t gs = 0;
+              uint32_t bs = 0;
+              int npix = 0;
+              int y;
+              int x;
+
+              for (y = by * 10; y < by * 10 + 10; y++)
+                {
+                  for (x = bx * 10; x < bx * 10 + 10; x++)
+                    {
+                      const uint8_t *p =
+                        fb + ((size_t)y * CAM_PREVIEW_W + x) * 2;
+                      uint16_t v = (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
+
+                      rs += (v >> 11) & 31;
+                      gs += (v >> 5) & 63;
+                      bs += v & 31;
+                      npix++;
+                    }
+                }
+
+              printf("%02x%02x%02x",
+                     (unsigned)((rs / npix) << 3),
+                     (unsigned)((gs / npix) << 2),
+                     (unsigned)((bs / npix) << 3));
+            }
+
+          printf("\n");
+        }
+
+      return 0;
+    }
+
+  if (strcmp(argv[2], "rgbhex") == 0)
+    {
+      extern uint8_t *camera_preview_get_last(void);
+      uint8_t *fb;
+      int y;
+      int x;
+
+      /* Freeze the worker first so the exported frame cannot be overwritten
+       * while it is being read over the console. */
+
+      camera_preview_take();
+      camera_preview_stop();
+      usleep(100 * 1000);
+      fb = camera_preview_get_last();
+      if (fb == NULL)
+        {
+          printf("[RgbHex] no converted frame\n");
+          return -ENODATA;
+        }
+
+      /* 100x75 keeps the 4:3 image and is small enough for a reliable
+       * 115200-baud dump.  Source rows 0..199 are the visible viewport. */
+
+      for (y = 0; y < 75; y++)
+        {
+          printf("[RgbHex] ");
+          for (x = 0; x < 100; x++)
+            {
+              int sx = x * CAM_PREVIEW_W / 100;
+              int sy = y * 200 / 75;
+              const uint8_t *p =
+                fb + ((size_t)sy * CAM_PREVIEW_W + sx) * 2;
+              uint16_t v = (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
+
+              printf("%04x", v);
+            }
+
+          printf("\n");
+        }
+
+      printf("[RgbHex] frame exported; re-enter camera page to resume\n");
+      return 0;
+    }
+
+  if (strcmp(argv[2], "lcdpattern") == 0)
+    {
+      extern int lcd_put_rgb565_raw(const uint8_t *fb, int sw, int rows,
+                                    int dx, int dy);
+      static uint8_t *pattern;
+      static const uint16_t colors[8] =
+      {
+        0xffff, 0xffe0, 0x07ff, 0x07e0,
+        0xf81f, 0xf800, 0x001f, 0x0000
+      };
+      int x;
+      int y;
+
+      if (pattern == NULL)
+        {
+          pattern = esp32s3_psram_static_alloc(320u * 200u * 2u);
+          if (pattern == NULL)
+            {
+              printf("[LcdPattern] PSRAM alloc failed\n");
+              return -ENOMEM;
+            }
+        }
+
+      for (y = 0; y < 200; y++)
+        {
+          for (x = 0; x < 320; x++)
+            {
+              uint16_t color = colors[x / 40];
+
+              pattern[(y * 320 + x) * 2] = color & 0xff;
+              pattern[(y * 320 + x) * 2 + 1] = color >> 8;
+            }
+        }
+
+      camera_preview_stop();
+
+      printf("[LcdPattern] vertical bars via PRESWAPPED path\n");
+      return lcd_put_rgb565_raw(pattern, 320, 200, 0, 0);
+    }
+
+  if (strcmp(argv[2], "ascii1") == 0)
+    {
+      extern uint8_t *esp32s3_cam_dvp_get_frame(void);
+      static uint8_t *buf;
+      uint8_t *fb;
+      size_t len = 0;
+      int r;
+
+      if (buf == NULL)
+        {
+          buf = malloc(CAM_PREVIEW_SIZE);
+        }
+
+      cam_cli_pins_take();
+      r = camera_init();
+      if (r == 0)
+        {
+          r = camera_mode_preview();
+        }
+
+      if (r == 0 && buf != NULL)
+        {
+          uint8_t *tmp = esp32s3_cam_dvp_get_frame();
+
+          r = camera_capture_frame(tmp, CAM_PREVIEW_SIZE, &len);
+          fb = esp32s3_cam_dvp_get_frame();
+          if (r == 0 && fb != NULL)
+            {
+              memcpy(buf, fb, CAM_PREVIEW_SIZE);
+            }
+          else
+            {
+              r = -ENODATA;
+            }
+        }
+
+      if (r == 0 && buf != NULL)
+        {
+          const uint16_t *px = (const uint16_t *)buf;
+          const int cols = 64;
+          const int rows = 24;
+          const int cw = CAM_PREVIEW_W / cols;
+          const int ch = CAM_PREVIEW_H / rows;
+          int y;
+          int x;
+          double sum = 0;
+          double sum2 = 0;
+
+          printf("[CamAscii1] %dx%d %u bytes\n", CAM_PREVIEW_W,
+                 CAM_PREVIEW_H, (unsigned)len);
+
+          for (y = 0; y < rows; y++)
+            {
+              static const char *ramp = " .:-=+*#%@";
+              char line[cols + 1];
+
+              for (x = 0; x < cols; x++)
+                {
+                  unsigned long acc = 0;
+                  int yy;
+                  int xx;
+
+                  for (yy = 0; yy < ch; yy++)
+                    for (xx = 0; xx < cw; xx++)
+                      {
+                        uint16_t v =
+                          px[(size_t)(y * ch + yy) * CAM_PREVIEW_W +
+                             (x * cw + xx)];
+                        acc += ((v >> 11) & 31) * 8 + ((v >> 5) & 63) * 4 +
+                               (v & 31) * 8;
+                      }
+
+                  {
+                    int lum = (int)(acc / (unsigned long)(cw * ch));
+
+                    line[x] = ramp[lum * 9 / 255];
+                    sum += lum;
+                    sum2 += (double)lum * lum;
+                  }
+                }
+
+              line[cols] = 0;
+              printf("[CamAscii1] %s\n", line);
+            }
+
+          {
+            double n = (double)cols * rows;
+            double mean = sum / n;
+            double var = sum2 / n - mean * mean;
+
+            printf("[CamAscii1] mean=%.1f std=%.1f\n", mean,
+                   var > 0 ? sqrt(var) : 0.0);
+          }
+        }
+      else
+        {
+          printf("[CamAscii1] capture failed %d\n", r);
+        }
+
+      cam_cli_pins_release();
+      return r;
+    }
+
+  if (strcmp(argv[2], "previewascii") == 0)
+    {
+      extern uint8_t *esp32s3_cam_dvp_get_frame(void);
+      uint8_t *fb;
+      int r;
+
+      r = camera_preview_start_rgb(0, 0, 320, 240);
+      if (r < 0)
+        {
+          printf("[CamAscii] preview start failed: %d\n", r);
+          return r;
+        }
+
+      sleep(3);
+
+      fb = esp32s3_cam_dvp_get_frame();
+
+      if (fb != NULL)
+        {
+          const uint16_t *px = (const uint16_t *)fb;
+          const int cols = 64;
+          const int rows = 24;
+          const int cw = CAM_PREVIEW_W / cols;
+          const int ch = CAM_PREVIEW_H / rows;
+          double sum = 0.0;
+          double sum2 = 0.0;
+          int y;
+          int x;
+
+          printf("[CamAscii] %dx%d frame (YUV422->RGB565 hw)\n",
+                 CAM_PREVIEW_W, CAM_PREVIEW_H);
+
+          for (y = 0; y < rows; y++)
+            {
+              static const char *ramp = " .:-=+*#%@";
+              char line[cols + 1];
+
+              for (x = 0; x < cols; x++)
+                {
+                  unsigned long acc = 0;
+                  int yy;
+                  int xx;
+
+                  for (yy = 0; yy < ch; yy++)
+                    {
+                      for (xx = 0; xx < cw; xx++)
+                        {
+                          uint16_t v =
+                            px[(size_t)(y * ch + yy) * CAM_PREVIEW_W +
+                               (x * cw + xx)];
+                          acc += ((v >> 11) & 31) * 8 +
+                                 ((v >> 5) & 63) * 4 + (v & 31) * 8;
+                        }
+                    }
+
+                  int lum = (int)(acc / (unsigned long)(cw * ch));
+                  line[x] = ramp[lum * 9 / 255];
+                  sum += lum;
+                  sum2 += (double)lum * (double)lum;
+                }
+
+              line[cols] = 0;
+              printf("[CamAscii] %s\n", line);
+            }
+
+          {
+            double n = (double)cols * rows;
+            double mean = sum / n;
+            double var = (sum2 / n) - mean * mean;
+            printf("[CamAscii] mean=%.1f std=%.1f\n", mean,
+                   var > 0 ? sqrt(var) : 0.0);
+          }
+        }
+      else
+        {
+          printf("[CamAscii] no frame buffer\n");
+        }
+
+      camera_preview_stop();
+      return 0;
+    }
+
+  if (strcmp(argv[2], "lcdshow") == 0)
+    {
+      extern uint8_t *esp32s3_cam_dvp_get_frame(void);
+      uint8_t *fb;
+      size_t len = 0;
+      int r;
+
+      cam_cli_pins_take();
+      r = camera_init();
+      if (r == 0)
+        {
+          r = camera_mode_preview();
+        }
+
+      if (r == 0)
+        {
+          fb = esp32s3_cam_dvp_get_frame();
+          r = camera_capture_frame(fb, CAM_PREVIEW_SIZE, &len);
+          fb = esp32s3_cam_dvp_get_frame();
+          if (r == 0 && fb == NULL)
+            {
+              printf("[Cam] lcdshow: no frame buffer\n");
+              r = -ENODATA;
+            }
+
+          if (r == 0)
+            {
+              int band;
+              extern void lcd_put_rgb565_set_sharpen(bool on);
+
+              lcd_put_rgb565_set_sharpen(false);
+              r = 0;
+              for (band = 0; band < CAM_PREVIEW_H; band += 30)
+                {
+                  int rows = CAM_PREVIEW_H - band;
+                  if (rows > 30)
+                    {
+                      rows = 30;
+                    }
+
+                  r |= lcd_put_rgb565(fb + (size_t)band * CAM_PREVIEW_W * 2,
+                                      CAM_PREVIEW_W, rows, 0, band,
+                                      CAM_PREVIEW_W, rows);
+                }
+
+              printf("[Cam] lcdshow frame=%u write=%d\n",
+                     (unsigned)len, r);
+            }
+        }
+
+      cam_cli_pins_release();
+      return r;
+    }
+
+  if (strcmp(argv[2], "uipreview") == 0)
+    {
+      int r = camera_preview_start_rgb(0, 0, 320, 240);
+      printf("[Cam] uipreview start ret=%d\n", r);
+      return r;
+    }
+
+  if (strcmp(argv[2], "uistop") == 0)
+    {
+      extern int esp32s3_cam_dvp_stop(void);
+
+      camera_preview_stop();
+      esp32s3_cam_dvp_stop();
+      printf("[Cam] uipreview stopped\n");
+      return 0;
+    }
+
+  if (strcmp(argv[2], "lvgl") == 0)
+    {
+      bool on = argc >= 4 && strcmp(argv[3], "on") == 0;
+
+      ui_app_request_camera_mode(on);
+      printf("[Cam] display -> %s; queued on UI task\n",
+             on ? "official LVGL image" : "direct strip write");
+      return 0;
+    }
+
+#ifdef CONFIG_ARCH_BOARD_M5STACK_CORES3
+  if (strcmp(argv[2], "convcompare") == 0)
+    {
+      extern int esp32s3_cam_dvp_stop(void);
+      uint32_t mismatches = 0;
+      uint32_t pixels = 0;
+      int ret;
+
+      camera_preview_stop();
+      esp32s3_cam_dvp_stop();
+      ret = camera_verify_official_convert(&mismatches, &pixels);
+      if (ret < 0)
+        {
+          printf("[CamVerify] failed: %d\n", ret);
+          return ret;
+        }
+
+      printf("[CamVerify] official_vs_q14 pixels=%u mismatches=%u %s\n",
+             (unsigned)pixels, (unsigned)mismatches,
+             mismatches == 0 ? "PASS" : "FAIL");
+      return mismatches == 0 ? 0 : -EIO;
+    }
+#endif
+
+  if (strcmp(argv[2], "preview") == 0)
+    {
+      /* 动态视频预览（参考官方 dvp_spi_lcd 每帧 draw_bitmap 模式）：
+       * 连续 capture → 软件缩放 → LCDDEVIO_PUTAREA 直接写取景框区域。
+       * 不经过 LVGL lv_image 渲染（本版本有 bug）。
+       * 取景框区域：screen_camera viewport(30,60,420,190) 内部。 */
+
+      int n = (argc >= 4) ? atoi(argv[3]) : 30;
+      int i;
+      int ret;
+      volatile bool eoi = false;
+      extern void esp32s3_cam_dvp_set_swap(bool on);
+      extern void esp32s3_cam_dvp_set_stream(bool on);
+      extern int esp32s3_cam_dvp_init(void);
+      extern int esp32s3_cam_dvp_start(void);
+      extern int esp32s3_cam_dvp_stop(void);
+      extern int esp32s3_cam_dvp_capture(void (*sink)(const uint8_t *,
+                                                      size_t, void *),
+                                         void *, volatile bool *);
+      extern uint8_t *esp32s3_cam_dvp_get_frame(void);
+
+      /* OV3660 RGB565 是大端输出（2.49 彩条实锤）：强制字节交换（防残留/误设） */
+
+      esp32s3_cam_dvp_set_swap(true);
+
+      cam_cli_pins_take();
+      ret = camera_init();
+      if (ret < 0)
+        {
+          cam_cli_pins_release();
+          return ret;
+        }
+
+      if (!s_cam_rgb565_ready)
+        {
+          ret = camera_config_rgb565_qvga();
+          if (ret < 0)
+            {
+              printf("[Cam] rgb565 config failed: %d\n", ret);
+              cam_cli_pins_release();
+              return ret;
+            }
+
+          s_cam_rgb565_ready = true;
+        }
+
+      esp32s3_cam_dvp_init();
+      esp32s3_cam_dvp_start();
+      esp32s3_cam_dvp_set_stream(true);   /* 滚动采集：每帧只等一个帧周期 */
+      lcd_put_rgb565_set_sharpen(false);   /* 预览快路径（无逐像素锐化） */
+
+      /* 首帧预期 ~3s：配置 1s AEC 收敛 + capture 首次 40 帧预热
+       * （~1.4s@28FPS）。不是黑屏故障，等首帧出现再判断。 */
+
+      printf("[Cam] preview %d frames: first frame ~3s (warmup), "
+             "then per-frame ms shown\n", n);
+
+      for (i = 0; i < n; i++)
+        {
+          clock_t t0 = clock_systime_ticks();
+
+          ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+          if (ret < 0)
+            {
+              printf("[Cam] preview frame %d failed: %d\n", i, ret);
+              break;
+            }
+
+          clock_t t_cap = clock_systime_ticks();
+
+          /* sink=NULL 时 capture 不打印帧头诊断，这里每 5 帧补一次：
+           * 全 00 = DMA 无数据；结构乱 = 帧对齐/时序问题 */
+
+          if ((i % 5) == 0)
+            {
+              const uint8_t *fp = esp32s3_cam_dvp_get_frame();
+
+              printf("[Cam] preview frame %d head: %02x %02x %02x %02x "
+                     "%02x %02x %02x %02x\n",
+                     i, fp[0], fp[1], fp[2], fp[3], fp[4], fp[5], fp[6],
+                     fp[7]);
+            }
+
+          if (lcd_put_rgb565(esp32s3_cam_dvp_get_frame(), 160, 120,
+                             33, 63, 414, 184) < 0)
+            {
+              printf("[Cam] preview frame %d: LCD write FAILED\n", i);
+              break;
+            }
+
+          clock_t t_end = clock_systime_ticks();
+
+          printf("[Cam] preview frame %d: total %lu ms (cap %lu + lcd %lu)\n",
+                 i,
+                 (unsigned long)(t_end - t0) * 1000 / TICK_PER_SEC,
+                 (unsigned long)(t_cap - t0) * 1000 / TICK_PER_SEC,
+                 (unsigned long)(t_end - t_cap) * 1000 / TICK_PER_SEC);
+        }
+
+      esp32s3_cam_dvp_stop();
+      esp32s3_cam_dvp_set_stream(false);
+      lcd_put_rgb565_set_sharpen(true);
+      printf("[Cam] preview done: %d frames\n", i);
+      cam_cli_pins_release();
+      return 0;
+    }
+
+  if (strcmp(argv[2], "rgbshot") == 0)
+    {
+      /* RGB565 任意尺寸单帧 raw 落盘：config -> capture -> /mnt/sd/photo.rgb
+       * 用于离线分析接缝/饱和度/帧完整性（预览不上屏）。 */
+
+      int w = (argc >= 4) ? atoi(argv[3]) : 640;
+      int h = (argc >= 5) ? atoi(argv[4]) : 480;
+      volatile bool eoi = false;
+      const char *path = "/mnt/sd/photo.rgb";
+      uint8_t *fb;
+      FILE *fp;
+      int ret;
+
+      extern void esp32s3_cam_dvp_set_swap(bool on);
+      extern int esp32s3_cam_dvp_init(void);
+      extern int esp32s3_cam_dvp_start(void);
+      extern int esp32s3_cam_dvp_stop(void);
+      extern int esp32s3_cam_dvp_capture(void (*sink)(const uint8_t *,
+                                                      size_t, void *),
+                                         void *, volatile bool *);
+      extern uint8_t *esp32s3_cam_dvp_get_frame(void);
+      extern void esp32s3_cam_dvp_invalidate(const void *buf, size_t len);
+
+      if (w <= 0 || h <= 0 || w > 640 || h > 480)
+        {
+          printf("Usage: plant cam rgbshot [w h] (max 640x480)\n");
+          return -1;
+        }
+
+      esp32s3_cam_dvp_set_swap(true);
+      cam_cli_pins_take();
+
+      ret = camera_init();
+      if (ret == 0)
+        {
+          ret = camera_config_rgb565_wh((uint16_t)w, (uint16_t)h);
+        }
+
+      if (ret == 0)
+        {
+          s_cam_rgb565_ready = true;
+          esp32s3_cam_dvp_init();
+          esp32s3_cam_dvp_start();
+          ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+          esp32s3_cam_dvp_stop();
+        }
+
+      if (ret <= 0)
+        {
+          printf("[Cam] rgbshot capture failed: %d\n", ret);
+          cam_cli_pins_release();
+          return ret < 0 ? ret : -ENODATA;
+        }
+
+      fb = esp32s3_cam_dvp_get_frame();
+      printf("[Cam] rgbshot: %d bytes, head %02x %02x %02x %02x "
+             "%02x %02x %02x %02x\n",
+             ret, fb[0], fb[1], fb[2], fb[3], fb[4], fb[5], fb[6], fb[7]);
+
+      /* get_frame 在 RGB 模式返回 shadow（CPU memcpy 产物，只在 cache
+       * 里）。invalidate 会把脏行直接丢弃 → SD 落盘全零（v60 实测）。
+       * 经 4KB DRAM bounce 拷贝再写：CPU 读命中 cache 拿到真数据。 */
+
+      fp = fopen(path, "wb");
+      if (fp == NULL)
+        {
+          printf("[Cam] rgbshot: fopen failed\n");
+          cam_cli_pins_release();
+          return -errno;
+        }
+
+      {
+        static uint8_t s_bounce[4096];
+        int off;
+
+        for (off = 0; off < ret; off += (int)sizeof(s_bounce))
+          {
+            int n = ret - off;
+
+            if (n > (int)sizeof(s_bounce))
+              {
+                n = (int)sizeof(s_bounce);
+              }
+
+            memcpy(s_bounce, fb + off, (size_t)n);
+            fwrite(s_bounce, 1, (size_t)n, fp);
+          }
+      }
+
+      fclose(fp);
+      printf("[Cam] rgbshot: saved %s (%d bytes)\n", path, ret);
+      cam_cli_pins_release();
+      return 0;
+    }
+
+  if (strcmp(argv[2], "shadowshot") == 0)
+    {
+      /* 把流式预览当前显示的 shadow 帧原样落盘（v62b 排障：
+       * 用户报预览"油膜花纹"，需要看消费端真实像素而不是 freeze 单帧）。 */
+
+      extern uint8_t *esp32s3_cam_dvp_get_shadow(void);
+      extern size_t esp32s3_cam_dvp_get_shadow_size(void);
+      const char *path = "/mnt/sd/shadow.rgb";
+      uint8_t *sh;
+      size_t n;
+      FILE *fp;
+
+      /* 必须停线程（join），不能只冻结：相机 DMA 活着时 SD 多块写
+       * 实测会把 NSH 卡死在 fwrite 里（v63 踩坑），整机拖到 3Hz。 */
+
+      camera_preview_take();
+      camera_preview_stop();
+      usleep(150 * 1000);
+
+      sh = esp32s3_cam_dvp_get_shadow();
+      n = esp32s3_cam_dvp_get_shadow_size();
+      if (sh == NULL || n == 0)
+        {
+          printf("[Cam] shadowshot: no shadow frame\n");
+          return -ENODATA;
+        }
+
+      if (n > 640ul * 480ul * 2ul)
+        {
+          n = 640ul * 480ul * 2ul;
+        }
+
+      printf("[Cam] shadowshot: %u bytes, head %02x %02x %02x %02x\n",
+             (unsigned)n, sh[0], sh[1], sh[2], sh[3]);
+
+      fp = fopen(path, "wb");
+      if (fp == NULL)
+        {
+          return -errno;
+        }
+
+        {
+          static uint8_t s_bounce[4096];
+          size_t off;
+
+          for (off = 0; off < n; off += sizeof(s_bounce))
+            {
+              size_t c = n - off;
+
+              if (c > sizeof(s_bounce))
+                {
+                  c = sizeof(s_bounce);
+                }
+
+              memcpy(s_bounce, sh + off, c);
+              fwrite(s_bounce, 1, c, fp);
+            }
+        }
+
+      fclose(fp);
+      printf("[Cam] shadowshot: saved %s (%u bytes)\n", path,
+             (unsigned)n);
+      printf("[Cam] shadowshot: 预览已停，重进相机页恢复\n");
+      return 0;
+    }
+
+
+
+  if (strcmp(argv[2], "aligncheck") == 0)
+    {
+      /* 真实数据：在与取景相同的采集路径上连抓 N 帧 640x480 RGB565，
+       * 逐对做全帧 2D 配准（±16 像素 / 1024 采样点）并统计逐行差异。
+       * 输出：每对的 best(dx,dy)、SAD(0,0)/SAD(best)、异常行数。 */
+
+      extern int camera_config_rgb565_wh(uint16_t w, uint16_t h);
+      extern void esp32s3_cam_dvp_set_swap(bool on);
+      extern void esp32s3_cam_dvp_set_stream(bool on);
+      extern int esp32s3_cam_dvp_init(void);
+      extern int esp32s3_cam_dvp_start(void);
+      extern int esp32s3_cam_dvp_stop(void);
+      extern int esp32s3_cam_dvp_capture(void (*sink)(const uint8_t *,
+                                                     size_t, void *),
+                                         void *, volatile bool *);
+      extern uint8_t *esp32s3_cam_dvp_get_frame(void);
+
+      int n = (argc >= 4) ? atoi(argv[3]) : 6;
+      int W = (argc >= 6) ? atoi(argv[4]) : 640;
+      int H = (argc >= 6) ? atoi(argv[5]) : 480;
+      const size_t FS = (size_t)W * (size_t)H * 2u;
+      uint8_t *prev = (uint8_t *)esp32s3_psram_static_alloc(FS);
+      uint8_t *cur = NULL;
+      volatile bool eoi = false;
+      int k;
+      int ret;
+
+      if (prev == NULL)
+        {
+          printf("[Align] psram alloc failed");
+          printf("\n");
+          return -ENOMEM;
+        }
+
+      cam_cli_pins_take();
+      if (camera_init() < 0)
+        {
+          printf("[Align] camera_init failed");
+          printf("\n");
+          cam_cli_pins_release();
+          return -EIO;
+        }
+
+      if (camera_config_rgb565_wh(W, H) < 0)
+        {
+          printf("[Align] config failed");
+          printf("\n");
+          cam_cli_pins_release();
+          return -EIO;
+        }
+
+      int use_freeze = (argc >= 7 && strcmp(argv[6], "freeze") == 0);
+
+      esp32s3_cam_dvp_set_swap(true);
+      esp32s3_cam_dvp_set_stream(!use_freeze);
+      esp32s3_cam_dvp_init();
+      if (!use_freeze)
+        {
+          esp32s3_cam_dvp_start();
+        }
+
+      for (k = 0; k < n; k++)
+        {
+          if (use_freeze)
+            {
+              ret = esp32s3_cam_dvp_start();
+              if (ret == 0)
+                {
+                  ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+                }
+
+              esp32s3_cam_dvp_stop();
+            }
+          else
+            {
+              ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+            }
+          if (ret <= 0)
+            {
+              printf("[Align] frame %d capture failed: %d", k, ret);
+              printf("\n");
+              continue;
+            }
+
+          cur = esp32s3_cam_dvp_get_frame();
+          if (cur == NULL)
+            {
+              continue;
+            }
+
+          if (k > 0)
+            {
+              int dx;
+              int dy;
+              int bdx = 0;
+              int bdy = 0;
+              uint32_t bsad = 0xffffffffu;
+              uint32_t sad0 = 0;
+              uint32_t badrows = 0;
+              int y;
+
+              for (dy = -16; dy <= 16; dy++)
+                {
+                  for (dx = -16; dx <= 16; dx++)
+                    {
+                      uint32_t sad = 0;
+                      int si;
+
+                      for (si = 0; si < 1024; si++)
+                        {
+                          int px = ((si * 61) % (W - 64)) + 32;
+                          int py = ((si * 149) % (H - 64)) + 32;
+                          const uint8_t *a =
+                            cur + ((size_t)(py + dy) * W + (px + dx)) * 2u;
+                          const uint8_t *b =
+                            prev + ((size_t)py * W + px) * 2u;
+                          int d0 = (int)a[0] - (int)b[0];
+                          int d1 = (int)a[1] - (int)b[1];
+                          uint16_t va = (uint16_t)(a[0] | (a[1] << 8));
+                          uint16_t vb = (uint16_t)(b[0] | (b[1] << 8));
+                          int l0 = (int)(((va >> 11) & 31) * 8) -
+                                   (int)(((vb >> 11) & 31) * 8);
+                          int l1 = (int)(((va >> 5) & 63) * 4) -
+                                   (int)(((vb >> 5) & 63) * 4);
+                          int l2 = (int)((va & 31) * 8) -
+                                   (int)((vb & 31) * 8);
+
+                          sad += (uint32_t)((l0 < 0 ? -l0 : l0) +
+                                            (l1 < 0 ? -l1 : l1) +
+                                            (l2 < 0 ? -l2 : l2));
+                          (void)d0;
+                          (void)d1;
+                        }
+
+                      if (dx == 0 && dy == 0)
+                        {
+                          sad0 = sad;
+                        }
+
+                      if (sad < bsad)
+                        {
+                          bsad = sad;
+                          bdx = dx;
+                          bdy = dy;
+                        }
+                    }
+                }
+
+              for (y = 0; y < H; y++)
+                {
+                  uint32_t rsum = 0;
+                  int x;
+
+                  for (x = 0; x < W; x += 16)
+                    {
+                      const uint8_t *a = cur + ((size_t)y * W + x) * 2u;
+                      const uint8_t *b = prev + ((size_t)y * W + x) * 2u;
+                      uint16_t va = (uint16_t)(a[0] | (a[1] << 8));
+                      uint16_t vb = (uint16_t)(b[0] | (b[1] << 8));
+                      int l0 = (int)(((va >> 11) & 31) * 8) -
+                               (int)(((vb >> 11) & 31) * 8);
+                      int l1 = (int)(((va >> 5) & 63) * 4) -
+                               (int)(((vb >> 5) & 63) * 4);
+                      int l2 = (int)((va & 31) * 8) - (int)((vb & 31) * 8);
+
+                      rsum += (uint32_t)((l0 < 0 ? -l0 : l0) +
+                                         (l1 < 0 ? -l1 : l1) +
+                                         (l2 < 0 ? -l2 : l2));
+                    }
+
+                  if (rsum / (W / 16u) > 120u)
+                    {
+                      badrows++;
+                    }
+                }
+
+              printf("[Align] %s %dx%d %d->%d: best=(%d,%d) sad0=%lu sadbest=%lu "
+                     "badrows=%lu/%d", use_freeze ? "freeze" : "stream", W, H,
+                     k - 1, k, bdx, bdy, (unsigned long)(sad0 / 1024u),
+                     (unsigned long)(bsad / 1024u),
+                     (unsigned long)badrows, H);
+              printf("\n");
+            }
+
+          memcpy(prev, cur, FS);
+        }
+
+      esp32s3_cam_dvp_stop();
+      esp32s3_cam_dvp_set_stream(false);
+      cam_cli_pins_release();
+      return 0;
+    }
+
+  if (strcmp(argv[2], "rgbdiag") == 0)
+    {
+      /* v67 数据采集：连抓 N 帧流式 RGB565，逐帧统计
+       *   - clip%   : 任一通道顶满(R=31/G=63/B=31)的像素占比（"超量程"）
+       *   - banddiff: 与上一帧逐 32 行带平均绝对差的最大值（瞬态花斑定位）
+       *   - short   : 驱动层丢字节短帧计数（v66 拦截到的）
+       * 最差帧（banddiff 最大）落盘 /mnt/sd/rgbworst.rgb 供离线分析。 */
+
+      int n = (argc >= 4) ? atoi(argv[3]) : 30;
+      volatile bool eoi = false;
+      extern void esp32s3_cam_dvp_set_swap(bool on);
+      extern void esp32s3_cam_dvp_set_stream(bool on);
+      extern int esp32s3_cam_dvp_init(void);
+      extern int esp32s3_cam_dvp_start(void);
+      extern int esp32s3_cam_dvp_stop(void);
+      extern int esp32s3_cam_dvp_capture(void (*sink)(const uint8_t *,
+                                                      size_t, void *),
+                                         void *, volatile bool *);
+      extern uint8_t *esp32s3_cam_dvp_get_shadow(void);
+      extern uint32_t esp32s3_cam_dvp_get_short_frames(void);
+      static uint8_t *s_prev;
+      static uint8_t *s_worst;
+      uint8_t *sh;
+      int ret;
+      int i;
+
+      if (n <= 0 || n > 200)
+        {
+          printf("Usage: plant cam rgbdiag [N<=200]\n");
+          return -1;
+        }
+
+      if (s_prev == NULL)
+        {
+          s_prev = (uint8_t *)esp32s3_psram_static_alloc(640ul * 480ul * 2ul);
+          s_worst = (uint8_t *)esp32s3_psram_static_alloc(640ul * 480ul * 2ul);
+        }
+
+      if (s_prev == NULL || s_worst == NULL)
+        {
+          printf("[Cam] rgbdiag: psram alloc failed\n");
+          return -ENOMEM;
+        }
+
+      esp32s3_cam_dvp_set_swap(true);
+      cam_cli_pins_take();
+
+      ret = camera_init();
+      if (ret == 0)
+        {
+          ret = camera_config_rgb565_wh(640, 480);
+        }
+
+      if (ret < 0)
+        {
+          cam_cli_pins_release();
+          return ret;
+        }
+
+      s_cam_rgb565_ready = true;
+      esp32s3_cam_dvp_init();
+      esp32s3_cam_dvp_start();
+      esp32s3_cam_dvp_set_stream(true);
+
+        {
+          int worst_diff = -1;
+          int worst_idx = -1;
+          int captured = 0;
+          uint32_t short0 = esp32s3_cam_dvp_get_short_frames();
+
+          for (i = 0; i < n; i++)
+            {
+              ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+              if (ret <= 0)
+                {
+                  printf("[Cam] rgbdiag frame %d failed: %d\n", i, ret);
+                  continue;
+                }
+
+              sh = esp32s3_cam_dvp_get_shadow();
+
+                {
+                  const uint16_t *px = (const uint16_t *)sh;
+                  const uint16_t *pv = (const uint16_t *)s_prev;
+                  uint32_t clip = 0;
+                  uint32_t sum = 0;
+                  int band;
+                  int maxdiff = 0;
+                  int maxband = -1;
+                  int y;
+                  int x;
+
+                  for (band = 0; band < 480 / 32; band++)
+                    {
+                      uint32_t bclip = 0;
+                      uint32_t bsum = 0;
+                      uint64_t bdiff = 0;
+
+                      for (y = band * 32; y < band * 32 + 32; y++)
+                        {
+                          const uint16_t *row = px + y * 640;
+                          const uint16_t *prow = pv + y * 640;
+
+                          for (x = 0; x < 640; x++)
+                            {
+                              uint16_t v = row[x];
+                              int rr = (v >> 11) & 31;
+                              int gg = (v >> 5) & 63;
+                              int bb = v & 31;
+
+                              if (rr == 31 || gg == 63 || bb == 31)
+                                {
+                                  bclip++;
+                                }
+
+                              bsum += (rr + gg + bb) / 3;
+                              if (captured > 0)
+                                {
+                                  int d0 = (int)row[x] - (int)prow[x];
+
+                                  if (d0 < 0)
+                                    {
+                                      d0 = -d0;
+                                    }
+
+                                  bdiff += (uint32_t)d0;
+                                }
+                            }
+                        }
+
+                      clip += bclip;
+                      sum += bsum;
+                      if (captured > 0)
+                        {
+                          int bd = (int)(bdiff / (32ul * 640ul));
+
+                          if (bd > maxdiff)
+                            {
+                              maxdiff = bd;
+                              maxband = band;
+                            }
+                        }
+                    }
+
+                  printf("[Cam] rgbdiag #%d: clip=%lu.%lu%% mean=%lu "
+                         "banddiff=%d @band%d\n",
+                         i,
+                         (unsigned long)(clip * 100 / (640ul * 480ul)),
+                         (unsigned long)((clip * 1000 / (640ul * 480ul)) %
+                                         10),
+                         (unsigned long)(sum / (640ul * 480ul)),
+                         maxdiff, maxband);
+
+                  if (captured > 0 && maxdiff > worst_diff)
+                    {
+                      worst_diff = maxdiff;
+                      worst_idx = i;
+                      memcpy(s_worst, sh, 640ul * 480ul * 2ul);
+                    }
+
+                  memcpy(s_prev, sh, 640ul * 480ul * 2ul);
+                  captured++;
+                }
+            }
+
+          esp32s3_cam_dvp_stop();
+          esp32s3_cam_dvp_set_stream(false);
+
+          printf("[Cam] rgbdiag: %d/%d captured, short_frames %u->%u, "
+                 "worst=#%d banddiff=%d\n",
+                 captured, n, (unsigned)short0,
+                 (unsigned)esp32s3_cam_dvp_get_short_frames(),
+                 worst_idx, worst_diff);
+
+          if (worst_idx >= 0)
+            {
+              FILE *fp = fopen("/mnt/sd/rgbworst.rgb", "wb");
+
+              if (fp != NULL)
+                {
+                  static uint8_t s_b[4096];
+                  size_t off;
+
+                  for (off = 0; off < 640ul * 480ul * 2ul;
+                       off += sizeof(s_b))
+                    {
+                      memcpy(s_b, s_worst + off, sizeof(s_b));
+                      fwrite(s_b, 1, sizeof(s_b), fp);
+                    }
+
+                  fclose(fp);
+                  printf("[Cam] rgbdiag: worst -> /mnt/sd/rgbworst.rgb\n");
+                }
+            }
+        }
+
+      cam_cli_pins_release();
+      return 0;
+    }
+
+  printf("Usage: plant cam probe | cfg | rgb565 | reg | capture | rgbshot | shadowshot | rgbdiag | "
+         "stats | jpeg [w h] | jpegdiag [w h] | jpegq | preview [N] | bar | "
+         "satlevel [-4..4] | ae [-5..5] | explos [lines] | "
+         "gamma default|local | sde on|off | desat on|off | cmode [0..5] | "
+         "swap [on|off] | diag\n");
+  return -1;
+}
+#endif
+
+/****************************************************************************
+ * cmd_mem — 内存/存储诊断（Phase 0.4，BUG-4 排查工具）
+ *
+ * 输出：heap（malloc 池）+ LVGL 池 + /mnt/sd 用量。
+ * 用途：泄漏复现实验（切 Tab 前后对比）、黑屏时第一手证据。
+ ****************************************************************************/
+
+static int cmd_mem(int argc, char *argv[])
+{
+  struct mallinfo mi;
+
+  (void)argc;
+  (void)argv;
+
+  printf("=== MEM DIAG ===\n");
+#if defined(CONFIG_MM_KERNEL_HEAP) || defined(CONFIG_XTENSA_IMEM_USE_SEPARATE_HEAP)
+  {
+#ifdef CONFIG_MM_KERNEL_HEAP
+    struct mallinfo ki = kmm_mallinfo();
+#else
+    extern struct mallinfo xtensa_imm_mallinfo(void);
+    struct mallinfo ki = xtensa_imm_mallinfo();
+#endif
+    printf("internal_sram: free=%u largest=%u total=%u\n",
+           (unsigned)ki.fordblks, (unsigned)ki.mxordblk,
+           (unsigned)ki.arena);
+  }
+#endif
+
+
+
+  /* 1. 系统堆（malloc 池）——WROOM 512KB SRAM 的资源健康核心。
+   *    判据（工业级阈值，见 docs 资源调度策略）：
+   *      free ≥ 16KB 且 largest ≥ 8KB → OK（SD 挂载/音频 apb 瞬态安全）
+   *      free 8~16KB                 → 警戒（大 malloc 可能失败）
+   *      free < 8KB 或 largest < 4KB → 危险（SD/音频/FAT 会偶发失败） */
+
+  mi = mallinfo();
+  printf("heap: free=%u largest=%u total=%u",
+         (unsigned)mi.fordblks, (unsigned)mi.mxordblk,
+         (unsigned)mi.arena);
+  if (mi.fordblks >= 16384 && mi.mxordblk >= 8192)
+    {
+      printf(" [OK]\n");
+    }
+  else if (mi.fordblks >= 8192)
+    {
+      printf(" [警戒]\n");
+    }
+  else
+    {
+      printf(" [危险: SD/音频可能偶发失败]\n");
+    }
+
+#ifdef CONFIG_ESP32S3_SPIRAM
+  {
+    extern size_t esp_spiram_get_size(void);
+    extern uint32_t esp_spiram_allocable_vaddr_start(void);
+    extern uint32_t esp_spiram_allocable_vaddr_end(void);
+    extern uint32_t esp32s3_psram_static_base(void);
+    extern size_t esp_himem_reserved_area_size(void);
+    extern uint32_t g_mapped_size;
+
+    printf("psram: physical=%lu mapped=%lu start=0x%08lx end=0x%08lx "
+           "static=0x%08lx himem=%lu\n",
+           (unsigned long)esp_spiram_get_size(),
+           (unsigned long)g_mapped_size,
+           (unsigned long)esp_spiram_allocable_vaddr_start(),
+           (unsigned long)esp_spiram_allocable_vaddr_end(),
+           (unsigned long)esp32s3_psram_static_base(),
+           (unsigned long)esp_himem_reserved_area_size());
+  }
+#endif
+
+  /* 2. LVGL 池（仅 UI 已初始化时安全） */
+
+#ifdef CONFIG_PLANT_UI
+  if (lv_is_initialized())
+    {
+      lv_mem_monitor_t mon;
+
+      lv_mem_monitor(&mon);
+      if (mon.total_size == 0)
+        {
+          /* 本工程 LVGL 走系统 malloc（无固定池），lv_mem_monitor
+           * 输出无意义；真实占用看上方 heap 行，切页细粒度用
+           * plant memlog on（2026-09-08 修正误导文案）。 */
+
+          printf("lvgl: heap-backed（无固定池，走系统堆）→ 占用见 heap 行\n");
+        }
+      else
+        {
+          printf("lvgl: total=%u free=%u used_pct=%d%% frag=%d%%",
+                 (unsigned)mon.total_size, (unsigned)mon.free_size,
+                 (int)mon.used_pct, (int)mon.frag_pct);
+          if (mon.free_size < mon.total_size / 4)
+            {
+              printf(" [警戒: UI 池余量 <25%%]\n");
+            }
+          else
+            {
+              printf(" [OK]\n");
+            }
+        }
+    }
+  else
+    {
+      printf("lvgl: not initialized\n");
+    }
+#endif
+
+  /* 3. 静态保留（链接期定死，不占堆）。
+   * ⚠ 2026-09-08：LVGL 本版无固定池（走系统 malloc），不再打印
+   * "lvgl_pool=80KB" 旧文案（那曾与 CONFIG_LV_MEM_SIZE_KILOBYTES 混淆）。 */
+
+#ifdef CONFIG_PLANT_CAMERA_CAPTURE
+  printf("static: cam_dvp_rxbuf=37.5KB lcd_wrbuf=9KB（内部 SRAM 常驻）\n");
+#else
+  printf("static: lcd_wrbuf=9KB（内部 SRAM 常驻）\n");
+#endif
+
+  /* 4. 存储（SD 卡用量，NuttX 用 statvfs） */
+
+#ifdef CONFIG_PLANT_SD_CARD
+  {
+    struct statvfs st;
+
+    if (statvfs("/mnt/sd", &st) == 0)
+      {
+        uint64_t total = (uint64_t)st.f_blocks * st.f_frsize;
+        uint64_t free  = (uint64_t)st.f_bfree * st.f_frsize;
+
+        printf("sd: total=%lluKB free=%lluKB\n",
+               (unsigned long long)(total / 1024),
+               (unsigned long long)(free / 1024));
+      }
+    else
+      {
+        printf("sd: not mounted\n");
+      }
+  }
+
+#endif
+
+  printf("=== MEM DIAG END ===\n");
+  return 0;
+}
+
+/****************************************************************************
+ * cmd_memlog — 切页内存打点开关（plant memlog on|off，默认关）
+ *
+ * 设置共享标志，由 ui_task 在每次切页真正完成（延迟删除已冲刷）后
+ * 打一行系统堆余量 + 相对首页基线增量：观测各页对象开销、回首页
+ * 增量是否归零（泄漏检查）。UI 不运行时设置也安全（下次 UI 启动生效）。
+ ****************************************************************************/
+
+#ifdef CONFIG_PLANT_UI
+static int cmd_memlog(int argc, char *argv[])
+{
+  if (argc >= 3 && strcmp(argv[2], "on") == 0)
+    {
+      ui_app_memlog_ctl(1);
+      return 0;
+    }
+
+  if (argc >= 3 && strcmp(argv[2], "off") == 0)
+    {
+      ui_app_memlog_ctl(0);
+      return 0;
+    }
+
+  printf("Usage: plant memlog on|off\n");
+  return -1;
+}
+#endif
+
+/****************************************************************************
+ * cmd_demo — 完整外设演示（明天给老板看）
+ ****************************************************************************/
+
+static int cmd_demo(int argc, char *argv[])
+{
+  int ret;
+
+  printf("\n");
+  printf("========================================\n");
+  printf("  植小伴 — 全外设演示\n");
+  printf("========================================\n\n");
+
+  /* 1. LCD 显示 */
+
+#ifdef CONFIG_PLANT_UI_PANEL
+  printf("[1] LCD: 已初始化（main 中）\n\n");
+#else
+  printf("[1] LCD: 未配置\n\n");
+#endif
+
+  /* 2. IMU (ICM-42607) */
+
+#ifdef CONFIG_PLANT_GESTURE_SENSOR
+  printf("[2] IMU (ICM-42607)...\n");
+  ret = imu_init();
+  if (ret == 0)
+    {
+      int16_t ax, ay, az;
+      float temp;
+      ret = imu_read_accel(&ax, &ay, &az);
+      printf("[2] 加速度: X=%d Y=%d Z=%d\n", ax, ay, az);
+      ret = imu_read_temp(&temp);
+      printf("[2] 温度: %.1f°C\n", temp);
+      printf("[2] IMU OK\n\n");
+    }
+  else
+    {
+      printf("[2] IMU 失败: %d\n\n", ret);
+    }
+#else
+  printf("[2] IMU: 未配置\n\n");
+#endif
+
+  /* 3. 土壤传感器 */
+
+#ifdef CONFIG_PLANT_SOIL_SENSOR
+  printf("[3] 土壤传感器 (RS485)...\n");
+  ret = soil_sensor_init(SOIL_SENSOR_DEV_DEFAULT, SOIL_SENSOR_BAUD_DEFAULT);
+  if (ret == 0)
+    {
+      struct soil_data_s data;
+      ret = soil_sensor_read(&data, 0);
+      printf("[3] 湿度=%.1f%% 温度=%.1f°C EC=%.1f pH=%.1f\n",
+             data.moisture, data.temp, data.ec, data.ph);
+      printf("[3] 土壤传感器 OK\n\n");
+    }
+  else
+    {
+      printf("[3] 土壤传感器失败: %d\n\n", ret);
+    }
+#else
+  printf("[3] 土壤传感器: 未配置\n\n");
+#endif
+
+  /* 4. 电池 ADC */
+
+#ifdef CONFIG_PLANT_SYSTEM_MONITOR
+  printf("[4] 电池 ADC...\n");
+  int mv, pct;
+  ret = battery_read_mv(&mv);
+  battery_read_pct(&pct);
+  printf("[4] 电压=%dmV 电量=%d%%\n", mv, pct);
+  printf("[4] 电池 ADC OK\n\n");
+#else
+  printf("[4] 电池 ADC: 未配置\n\n");
+#endif
+
+  /* 5. 摄像头 */
+
+#ifdef CONFIG_PLANT_CAMERA_CAPTURE
+  printf("[5] 摄像头 (OV3660)...\n");
+  ret = camera_init();
+  printf("[5] 摄像头 %s\n\n", ret == 0 ? "OK" : "失败");
+#else
+  printf("[5] 摄像头: 未配置\n\n");
+#endif
+
+  /* 6. 语音（I2S + ES8311 + ES7210） */
+
+#ifdef CONFIG_PLANT_AI_VOICE
+  printf("[6] 语音 I2S...\n");
+  ret = ai_voice_init();
+  if (ret == 0)
+    {
+      printf("[6] 播放测试音 1000Hz...\n");
+      ai_voice_play_tone(1000, 500);
+      printf("[6] 语音 OK\n\n");
+    }
+  else
+    {
+      printf("[6] 语音失败: %d\n\n", ret);
+    }
+#else
+  printf("[6] 语音: 未配置\n\n");
+#endif
+
+  /* 7. WiFi */
+
+#ifdef CONFIG_PLANT_WIFI_MANAGER
+  printf("[7] WiFi...\n");
+  if (wifi_manager_is_connected())
+    {
+      wifi_status_t status;
+      wifi_manager_get_status(&status);
+      printf("[7] 已连接 RSSI=%d dBm\n", status.rssi);
+    }
+  else
+    {
+      printf("[7] 未连接\n");
+    }
+  printf("[7] WiFi OK\n\n");
+#else
+  printf("[7] WiFi: 未配置\n\n");
+#endif
+
+  /* 8. SD 卡 */
+
+#ifdef CONFIG_PLANT_SD_CARD
+  printf("[8] SD 卡...\n");
+  printf("[8] SD 卡: 已配置\n\n");
+#else
+  printf("[8] SD 卡: 未配置\n\n");
+#endif
+
+  printf("========================================\n");
+  printf("  演示完成！\n");
+  printf("========================================\n\n");
+
+  return 0;
+}
+
+/****************************************************************************
+ * cmd_font — 中文字体诊断（阶段 A：缺字量化，见 CLAUDE_SYSTEM.md §14）
+ *
+ * plant font status [文本]：
+ *   无文本 → 数据源 + 示例缺字统计
+ *   有文本 → 测该文本在当前 20px 字体下缺多少字（方框数）
+ * 注：lv_font_get_glyph_dsc 是纯查表（const 数据），无需启动 UI 即可用。
+ ****************************************************************************/
+
+#ifdef CONFIG_PLANT_UI
+static int cmd_font(int argc, char *argv[])
+{
+  static const char demo[] =
+    "小绿你好，今天浇水了吗？这盆植物看起来需要多晒太阳";
+  int miss;
+
+  /* ⚠ 2026-09-10 实测：SD 字库的 FILE* 句柄按任务组隔离（NuttX fd 表按组划分），
+   * 在 ui_task 里 open 的句柄只能在 ui_task 里读。本组命令跑在 shell
+   * 上下文，所以查 SD 兜底必然 EBADF → 汉字会被误报成"缺"。
+   * 要看屏幕上真实的缺字/字宽，看 plant objs（miss）的输出
+   * （那条跑在 UI 上下文，与绘制同一个句柄）。 */
+
+  if (argc >= 4 && strcmp(argv[2], "trace") == 0)
+    {
+      zh_font_init();
+      printf("[Font] ⚠ 本命令在 shell 上下文：SD 兜底句柄归 ui_task，"
+             "此处查 SD 会误报缺字；\n"
+             "       屏幕真实缺字/字宽请看 plant objs 的输出\n");
+      zh_font_trace_text(20, argv[3]);
+      return 0;
+    }
+
+  if (argc >= 4 && strcmp(argv[2], "clean") == 0)
+    {
+      char out[256];
+
+      zh_font_init();
+      zh_text_sanitize(out, sizeof(out), argv[3]);
+      printf("[Font] 净化演示: \"%s\" -> \"%s\"\n", argv[3], out);
+      printf("[Font] (这里是 shell 上下文，查不到 SD 兜底 → 汉字会被误判成"
+             "无字形，本演示主要看 emoji/变体符过滤)\n");
+      return 0;
+    }
+
+  if (argc >= 4 && strcmp(argv[2], "sd") == 0)
+    {
+      zh_font_init();
+      printf("[Font] ⚠ 同上：shell 上下文读 SD 句柄必 EBADF，"
+             "本输出仅看查找流程\n");
+      zh_font_diag_sd(zh_font_utf8_first(argv[3]));
+      return 0;
+    }
+
+  if (argc < 3 || strcmp(argv[2], "status") != 0)
+    {
+      printf("Usage: plant font status [文本]\n");
+      printf("       plant font trace <文本>   逐字打印兜底层级\n");
+      printf("       plant font sd <字>       打印 SD 查找过程\n");
+      printf("       plant font clean <文本>  演示文本净化（剔无字形字符）\n");
+      printf("  ⚠ 上两条跑在 shell 上下文，查 SD 兜底会误报缺字；"
+             "屏幕真实缺字/字宽用 plant objs（miss）\n");
+      return -1;
+    }
+
+  zh_font_init();
+  printf("[Font] 字体策略: %s（20px 覆盖 %d 字）\n",
+         zh_font_src() == ZH_SRC_FLASH_SUBSET ?
+         "仅 flash 子集（SD 兜底未就绪）" :
+         "flash 子集主字体 + SD 全量兜底",
+         zh_font_count(20));
+
+  if (argc >= 4)
+    {
+      miss = zh_font_check_text(20, argv[3]);
+      printf("[Font] 20px 检查 \"%s\" → 缺 %d 字（显示为方框）\n",
+             argv[3], miss);
+    }
+  else
+    {
+      miss = zh_font_check_text(20, demo);
+      printf("[Font] 示例文本缺字: %d\n", miss);
+      printf("[Font] 用法: plant font status <任意中文文本> 可测缺字\n");
+    }
+
+  return 0;
+}
+#endif
+
+
+/****************************************************************************
+ * cmd_nav — 调试：跨线程切换 4-Tab 页面（plant nav <home|data|tasks|diary>）
+ *
+ * 直接调用 ui_app_nav_to 只是置标志；实际 LVGL 切页由 ui_task 的
+ * 500ms 刷新定时器执行（铁律：LVGL 对象只在 ui_task 操作）。这里睡
+ * 1.6s 保证切换 + 首帧渲染完成，供后续截屏。
+ ****************************************************************************/
+
+static int cmd_nav(int argc, char *argv[])
+{
+  static const char *const names[4] =
+    { "home", "data", "tasks", "diary" };
+  int tab = -1;
+  int i;
+
+  if (argc < 3)
+    {
+      printf("Usage: plant nav <home|data|tasks|diary>\n");
+      return -1;
+    }
+
+  for (i = 0; i < 4; i++)
+    {
+      if (strcmp(argv[2], names[i]) == 0)
+        {
+          tab = i;
+          break;
+        }
+    }
+
+  if (tab < 0)
+    {
+      printf("Usage: plant nav <home|data|tasks|diary>\n");
+      return -1;
+    }
+
+  printf("[Nav] switch to %s (%d)...\n", names[tab], tab);
+
+  /* 若当前停在拍照页，先正常离开（停预览 + 关摄像头），
+   * 否则预览线程会继续往新页面上刷相机画面。 */
+
+  screen_camera_leave_if_active();
+
+  if (ui_app_nav_to(tab) != 0)
+    {
+      printf("[Nav] rejected (UI not ready)\n");
+      return -1;
+    }
+
+  /* 等 ui_task 定时器完成切换 + 至少一帧渲染（500ms 粒度 → 1.6s 足够） */
+
+  usleep(1600 * 1000);
+  printf("[Nav] %s ready\n", names[tab]);
+  return 0;
+}
+
+/****************************************************************************
+ * cmd_tsim — 调试：模拟真实点按做 Tab 切换压力（plant tsim <cycles>）
+ *
+ * 在 ui_task 内用额外 LVGL pointer indev 按下/抬起底部 Tab 按钮，完整走
+ * LVGL 输入事件管线（含"点击回调里删除当前页面"路径），专用于复现
+ * "跑一阵后界面切换卡住（疑似触摸失灵）"。
+ ****************************************************************************/
+
+static int cmd_tsim(int argc, char *argv[])
+{
+  int cycles;
+  int timeout_ms;
+  int waited;
+
+  if (argc < 3)
+    {
+      printf("Usage: plant tsim <cycles> | stop | status\n");
+      return -1;
+    }
+
+  if (strcmp(argv[2], "stop") == 0)
+    {
+      ui_app_tsim_stop();
+      printf("[SynTap] stopped\n");
+      return 0;
+    }
+
+  if (strcmp(argv[2], "status") == 0)
+    {
+      printf("[SynTap] left=%d\n", ui_app_tsim_left());
+      return 0;
+    }
+
+  cycles = atoi(argv[2]);
+  if (cycles <= 0)
+    {
+      printf("Usage: plant tsim <cycles>\n");
+      return -1;
+    }
+
+  if (ui_app_tsim_start(cycles) != 0)
+    {
+      printf("[SynTap] start failed (busy?)\n");
+      return -1;
+    }
+
+  timeout_ms = cycles * 700 + 20000;
+
+  for (waited = 0; waited < timeout_ms; waited += 100)
+    {
+      if (ui_app_tsim_left() < 0)
+        {
+          printf("[SynTap] completed cycles=%d\n", cycles);
+          return 0;
+        }
+
+      usleep(100 * 1000);
+    }
+
+  printf("[SynTap] STALL: not finished after %d ms (left=%d)\n",
+         timeout_ms, ui_app_tsim_left());
+  return -1;
+}
+
+/****************************************************************************
+ * cmd_tap — 调试：在屏幕坐标注入一次真实点按（plant tap <x> <y>）
+ *
+ * 走 tsim 那路合成 indev，完整经过 LVGL 输入管线，用来远程进二级页
+ * （拍照页等）验证布局，不必手点屏幕。
+ ****************************************************************************/
+
+static int cmd_tap(int argc, char *argv[])
+{
+  int x;
+  int y;
+  int ret;
+
+  if (argc < 4)
+    {
+      printf("Usage: plant tap <x> <y>   (%dx%d)\n",
+             TP_SCREEN_W, TP_SCREEN_H);
+      return -1;
+    }
+
+  x = atoi(argv[2]);
+  y = atoi(argv[3]);
+
+  ret = ui_app_tap_at(x, y);
+  if (ret != 0)
+    {
+      printf("[SynTap] tap failed: %d\n", ret);
+      return -1;
+    }
+
+  /* 等一下让 ui_task 采到按下->抬起（每次 33ms，再留点余量） */
+
+  usleep(300 * 1000);
+  printf("[SynTap] tap sent %d,%d\n", x, y);
+  return 0;
+}
+
+/****************************************************************************
+ * cmd_scroll — 调试：注入一次垂直滑动（plant scroll <x> <y> <dy> <steps>）
+ ****************************************************************************/
+
+static int cmd_scroll(int argc, char *argv[])
+{
+  int x;
+  int y;
+  int dy;
+  int steps;
+  int waited;
+  int ret;
+
+  if (argc < 6)
+    {
+      printf("Usage: plant scroll <x> <y> <dy> <steps>\n");
+      return -1;
+    }
+
+  x = atoi(argv[2]);
+  y = atoi(argv[3]);
+  dy = atoi(argv[4]);
+  steps = atoi(argv[5]);
+
+  ret = ui_app_scroll_at(x, y, dy, steps);
+  if (ret != 0)
+    {
+      printf("[SynScroll] start failed: %d\n", ret);
+      return -1;
+    }
+
+  for (waited = 0; waited < 3000; waited += 20)
+    {
+      if (ui_app_scroll_left() < 0)
+        {
+          printf("[SynScroll] completed\n");
+          return 0;
+        }
+
+      usleep(20 * 1000);
+    }
+
+  printf("[SynScroll] timeout\n");
+  return -1;
+}
+
+/****************************************************************************
+ * cmd_tdiag — 调试：真实触摸双端诊断（plant tdiag [on|off]）
+ *
+ * GT911 驱动侧计数（polls/down/up/i2c err）在板级 gt911_diag_snapshot()，
+ * LVGL 侧 25ms 定时器采样真实 indev 按下次数。on 后每 ~2s 自动打一行，
+ * 用于复现"跑一会后点触摸没反应"时区分：驱动/芯片没上报、还是上报了
+ * 但 LVGL/应用没消费、还是 ui_task 整体卡死。
+ ****************************************************************************/
+
+static int cmd_tdiag(int argc, char *argv[])
+{
+  if (argc >= 3 && strcmp(argv[2], "on") == 0)
+    {
+      ui_app_tdiag_ctl(1);
+      return 0;
+    }
+
+  if (argc >= 3 && strcmp(argv[2], "off") == 0)
+    {
+      ui_app_tdiag_ctl(0);
+      return 0;
+    }
+
+  ui_app_tdiag_ctl(2);   /* default: print once */
+  return 0;
+}
+
+/****************************************************************************
+ * cmd_cap — 调试：把当前屏幕整屏截成 BMP（plant cap <名字>）
+ *        （输出 /mnt/sd/<名字>.bmp）
+ *
+ * 实现：从系统堆（PSRAM 8MB 已并入）malloc ~154KB 快照缓冲，请求
+ * ui_task 用 LVGL snapshot（lv_snapshot_take_to_draw_buf）渲染当前
+ * lv_screen_active 到该缓冲并写 BMP。避免直接读回 LCD GRAM（读回路径
+ * 在此板会静默终止任务）。文件为 16bpp RGB565、行序自上而下。
+ ****************************************************************************/
+
+#ifdef CONFIG_PLANT_SD_CARD
+static int cmd_cap(int argc, char *argv[])
+{
+  static const uint32_t cap_bufsize =
+    TP_SCREEN_W * TP_SCREEN_H * 2u + 512u;
+  char path[96];
+  const char *name;
+  uint8_t *buf;
+  int ret;
+  int i;
+
+  name = (argc >= 3) ? argv[2] : "screen";
+
+  /* 文件名白名单：字母/数字/_（纯调试，防路径注入） */
+
+  for (i = 0; name[i] != '\0' && i < 48; i++)
+    {
+      char c = name[i];
+
+      if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') || c == '_'))
+        {
+          printf("[Cap] 非法文件名: %s\n", name);
+          return -1;
+        }
+    }
+
+  if (i == 0)
+    {
+      printf("[Cap] 非法文件名\n");
+      return -1;
+    }
+
+  snprintf(path, sizeof(path), "/mnt/sd/%s.bmp", name);
+
+  buf = (uint8_t *)malloc(cap_bufsize);
+  if (buf == NULL)
+    {
+      printf("[Cap] malloc %luB 失败\n", (unsigned long)cap_bufsize);
+      return -1;
+    }
+
+  printf("[Cap] snapshot → %s ...\n", path);
+  fflush(stdout);
+
+  ret = ui_app_capture_to_file(path, buf, cap_bufsize);
+
+  free(buf);
+
+  if (ret != 0)
+    {
+      printf("[Cap] 失败\n");
+      return -1;
+    }
+
+  printf("[Cap] OK\n");
+  return 0;
+}
+#endif /* CONFIG_PLANT_SD_CARD */
+
+
+/****************************************************************************
+ * cmd_capa — 调试：把当前屏幕快照转成 ASCII 点阵直接打印到串口
+ *        （plant capa [x y w h]，可选窗口，缺省整屏 320x240）
+ *
+ * 与 cmd_cap 同一 snapshot 机制（LVGL snapshot → 系统堆缓冲），但映射为
+ * 字符后从串口打印，不写 SD（大批量写 BMP 在此板会卡死）。输出约
+ * 120x160 字符，可直接目检汉字是正常笔画还是"方框/豆腐块"。
+ ****************************************************************************/
+
+#ifdef CONFIG_PLANT_UI
+static int cmd_capa(int argc, char *argv[])
+{
+  static const uint32_t cap_bufsize =
+    TP_SCREEN_W * TP_SCREEN_H * 2u + 512u;
+  int x = 0;
+  int y = 0;
+  int w = TP_SCREEN_W;
+  int h = TP_SCREEN_H;
+  uint8_t *buf;
+  int ret;
+
+  if (argc >= 6)
+    {
+      x = atoi(argv[2]);
+      y = atoi(argv[3]);
+      w = atoi(argv[4]);
+      h = atoi(argv[5]);
+    }
+
+  buf = (uint8_t *)malloc(cap_bufsize);
+  if (buf == NULL)
+    {
+      printf("[Capa] malloc %luB 失败\n", (unsigned long)cap_bufsize);
+      return -1;
+    }
+
+  printf("[Capa] snapshot->ascii region %d,%d %dx%d\n", x, y, w, h);
+  fflush(stdout);
+
+  ret = ui_app_capture_ascii(buf, cap_bufsize, x, y, w, h);
+
+  free(buf);
+
+  if (ret != 0)
+    {
+      printf("[Capa] 失败\n");
+      return -1;
+    }
+
+  printf("[Capa] OK\n");
+  return 0;
+}
+
+static int cmd_ink(int argc, char *argv[])
+{
+  int x;
+  int y;
+  int w;
+  int h;
+  int ink;
+
+  if (argc < 6)
+    {
+      printf("Usage: plant ink <x> <y> <w> <h>\n");
+      return -1;
+    }
+
+  x = atoi(argv[2]);
+  y = atoi(argv[3]);
+  w = atoi(argv[4]);
+  h = atoi(argv[5]);
+  ink = ui_app_capture_ink(x, y, w, h);
+
+  printf("[Ink] result=%d\n", ink);
+  return ink < 0 ? -1 : 0;
+}
+#endif /* CONFIG_PLANT_UI */
+
+
+/****************************************************************************
+ * cmd_objs — 调试：转储当前屏对象树（label 文本/坐标/字体/码点）
+ *        （plant objs）—— 把屏幕上的方框定位到具体 label 的字符。
+ ****************************************************************************/
+
+#ifdef CONFIG_PLANT_UI
+static int cmd_objs(int argc, char *argv[])
+{
+  int ret;
+  int miss_only = (argc >= 3 && strcmp(argv[2], "miss") == 0);
+
+  printf("[Obj] request object dump%s...\n", miss_only ? " (miss only)" : "");
+  fflush(stdout);
+
+  ret = miss_only ? ui_app_dump_missing() : ui_app_dump_objects();
+
+  if (ret != 0)
+    {
+      printf("[Obj] 失败\n");
+      return -1;
+    }
+
+  printf("[Obj] OK\n");
+  return 0;
+}
+#endif /* CONFIG_PLANT_UI */
+
+
+/****************************************************************************
+ * cmd_lcdbar — 调试：绕过 SD/UI 初始化，直接写全屏 8 色竖条
+ ****************************************************************************/
+
+static int cmd_lcdbar(void)
+{
+  static const uint16_t bars[8] =
+  {
+    0xffff, 0xffe0, 0x07ff, 0x07e0, 0xf81f, 0xf800, 0x001f, 0x0000
+  };
+
+  static const char *names[8] =
+  {
+    "white", "yellow", "cyan", "green",
+    "magenta", "red", "blue", "black"
+  };
+
+  struct lcddev_area_s area;
+  uint8_t *buf;
+  int fd;
+  int x;
+  int y;
+  int i;
+
+  buf = malloc((size_t)TP_SCREEN_W * TP_SCREEN_H * 2u);
+  if (buf == NULL)
+    {
+      printf("[LcdBar] malloc failed\n");
+      return -ENOMEM;
+    }
+
+  for (y = 0; y < TP_SCREEN_H; y++)
+    {
+      for (x = 0; x < TP_SCREEN_W; x++)
+        {
+          uint16_t v = bars[x / (TP_SCREEN_W / 8)];
+          uint8_t *d = buf + ((size_t)y * TP_SCREEN_W + (size_t)x) * 2u;
+
+          d[0] = (uint8_t)(v & 0xff);
+          d[1] = (uint8_t)(v >> 8);
+        }
+    }
+
+  fd = open("/dev/lcd0", O_WRONLY);
+  if (fd < 0)
+    {
+      printf("[LcdBar] open failed: %d\n", fd);
+      free(buf);
+      return -1;
+    }
+
+  memset(&area, 0, sizeof(area));
+  area.col_start = 0;
+  area.col_end = TP_SCREEN_W - 1;
+  area.row_start = 0;
+  area.row_end = TP_SCREEN_H - 1;
+  area.data = buf;
+
+  i = ioctl(fd, LCDDEVIO_PUTAREA, (unsigned long)&area);
+  close(fd);
+  free(buf);
+
+  if (i < 0)
+    {
+      printf("[LcdBar] LCDDEVIO_PUTAREA failed: %d\n", i);
+      return i;
+    }
+
+  printf("[LcdBar] 已写 8 条竖彩条（左->右）：");
+  for (i = 0; i < 8; i++)
+    {
+      printf(" %s", names[i]);
+    }
+
+  printf("\n");
+  return 0;
+}
+
+
+#ifdef CONFIG_ESP32S3_CORES3_LCD
+static int cmd_swlcd(void)
+{
+  extern int board_cores3_sw_lcd_test(uint16_t color);
+  int ret;
+
+  printf("[SwLcd] bit-banging ILI9342C init and white fill...\n");
+  fflush(stdout);
+  ret = board_cores3_sw_lcd_test(0xffff);
+  printf("[SwLcd] done ret=%d (white expected)\n", ret);
+  return ret;
+}
+#endif
+
+
+/****************************************************************************
+ * cmd_lcddiag — 读取并强制打开 CoreS3 面板使能与背光电源
+ ****************************************************************************/
+
+#ifdef CONFIG_ESP32S3_CORES3_LCD
+static int cmd_lcddiag(void)
+{
+  extern int board_cores3_ioexp_read_reg(uint8_t reg, uint8_t *value);
+  extern int board_cores3_pmic_read_reg(uint8_t reg, uint8_t *value);
+  extern int board_cores3_ioexp_write(uint8_t pin, bool value);
+  extern int board_cores3_ioexp_set_dir(uint8_t pin, bool output);
+  extern int board_cores3_backlight_set(int percent);
+  extern int board_cores3_touch_firmware_id(uint8_t *firmware_id);
+
+  uint8_t aw_out0 = 0;
+  uint8_t aw_out1 = 0;
+  uint8_t aw_cfg0 = 0;
+  uint8_t aw_cfg1 = 0;
+  uint8_t aw_in0 = 0;
+  uint8_t aw_in1 = 0;
+  uint8_t pmu_status0 = 0;
+  uint8_t pmu_status1 = 0;
+  uint8_t pmu_en = 0;
+  uint8_t pmu_dldo1 = 0;
+  uint8_t touch_id = 0;
+  int ret = 0;
+
+  board_cores3_touch_firmware_id(&touch_id);
+
+  ret |= board_cores3_ioexp_read_reg(0x00, &aw_in0);
+  ret |= board_cores3_ioexp_read_reg(0x01, &aw_in1);
+  ret |= board_cores3_ioexp_read_reg(0x02, &aw_out0);
+  ret |= board_cores3_ioexp_read_reg(0x03, &aw_out1);
+  ret |= board_cores3_ioexp_read_reg(0x04, &aw_cfg0);
+  ret |= board_cores3_ioexp_read_reg(0x05, &aw_cfg1);
+  ret |= board_cores3_pmic_read_reg(0x00, &pmu_status0);
+  ret |= board_cores3_pmic_read_reg(0x01, &pmu_status1);
+  ret |= board_cores3_pmic_read_reg(0x90, &pmu_en);
+  ret |= board_cores3_pmic_read_reg(0x99, &pmu_dldo1);
+
+  printf("[LcdDiag] i2c_ret=%d touch_fw=0x%02x\n", ret, touch_id);
+  printf("[LcdDiag] AW in0=%02x in1=%02x out0=%02x out1=%02x "
+         "cfg0=%02x cfg1=%02x\n",
+         aw_in0, aw_in1, aw_out0, aw_out1, aw_cfg0, aw_cfg1);
+  printf("[LcdDiag] AXP status0=%02x status1=%02x en=%02x dldo1=%02x\n",
+         pmu_status0, pmu_status1, pmu_en, pmu_dldo1);
+
+  printf("[LcdDiag] forcing LCD_EN P1_1 high and DLDO1=3.3V...\n");
+  ret = board_cores3_ioexp_set_dir(9, true);
+  ret |= board_cores3_ioexp_write(9, true);
+  ret |= board_cores3_backlight_set(100);
+
+  aw_out1 = 0;
+  pmu_en = 0;
+  pmu_dldo1 = 0;
+  ret |= board_cores3_ioexp_read_reg(0x03, &aw_out1);
+  ret |= board_cores3_pmic_read_reg(0x90, &pmu_en);
+  ret |= board_cores3_pmic_read_reg(0x99, &pmu_dldo1);
+
+  printf("[LcdDiag] after ret=%d AW out1=%02x AXP en=%02x dldo1=%02x\n",
+         ret, aw_out1, pmu_en, pmu_dldo1);
+  return ret < 0 ? ret : 0;
+}
+
+static int cmd_axp(void)
+{
+  extern int board_cores3_pmic_read_reg(uint8_t reg, uint8_t *value);
+  static const uint8_t regs[] =
+    {
+      0x00, 0x01, 0x10, 0x12, 0x14, 0x15, 0x16, 0x18, 0x19, 0x1a,
+      0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x2b, 0x30, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b,
+      0x48, 0x49, 0x4a, 0x61, 0x62, 0x63, 0x64, 0x65, 0x69, 0x90, 0x92, 0x93,
+      0x94, 0x95, 0x99, 0xa2, 0xa4
+    };
+  int i;
+  int ret = 0;
+
+  for (i = 0; i < sizeof(regs); i++)
+    {
+      uint8_t v = 0;
+      int r = board_cores3_pmic_read_reg(regs[i], &v);
+      printf("[AXP] reg%02x=%02x%s\n", regs[i], v, r < 0 ? " (ERR)" : "");
+      ret |= r;
+    }
+  return ret < 0 ? ret : 0;
+}
+
+static int cmd_pwr(int argc, char *argv[])
+{
+  extern int board_cores3_pmic_read_reg(uint8_t reg, uint8_t *value);
+  extern int board_cores3_ioexp_read_reg(uint8_t reg, uint8_t *value);
+  extern int board_cores3_ioexp_write(uint8_t pin, bool value);
+  extern int board_cores3_ioexp_set_dir(uint8_t pin, bool output);
+  uint8_t st0 = 0;
+  uint8_t st1 = 0;
+  uint8_t out0 = 0;
+  uint8_t lo = 0;
+  uint8_t hi = 0;
+  int vbat = -1;
+  int vbus = -1;
+  int vsys = -1;
+
+  if (argc >= 3)
+    {
+      int pin = atoi(argv[1]);
+      bool on = atoi(argv[2]) != 0;
+      int r = board_cores3_ioexp_set_dir((uint8_t)pin, true);
+      r |= board_cores3_ioexp_write((uint8_t)pin, on);
+
+      printf("[Pwr] set P%d_%d=%d ret=%d\n", pin >> 3, pin & 7, on, r);
+      usleep(300 * 1000);
+    }
+  else if (argc >= 2)
+    {
+      bool on = strcmp(argv[1], "0") != 0;
+      int r = board_cores3_ioexp_write(0, on);
+
+      printf("[Pwr] set P0_0(BUS_OUT_EN)=%d ret=%d\n", on, r);
+      usleep(200 * 1000);
+    }
+
+  board_cores3_pmic_read_reg(0x00, &st0);
+  board_cores3_pmic_read_reg(0x01, &st1);
+  board_cores3_ioexp_read_reg(0x02, &out0);
+
+  if (board_cores3_pmic_read_reg(0x34, &hi) >= 0 &&
+      board_cores3_pmic_read_reg(0x35, &lo) >= 0)
+    {
+      vbat = ((int)hi << 8) | lo;
+    }
+
+  if (board_cores3_pmic_read_reg(0x38, &hi) >= 0 &&
+      board_cores3_pmic_read_reg(0x39, &lo) >= 0)
+    {
+      vbus = ((int)hi << 8) | lo;
+    }
+
+  if (board_cores3_pmic_read_reg(0x3a, &hi) >= 0 &&
+      board_cores3_pmic_read_reg(0x3b, &lo) >= 0)
+    {
+      vsys = ((int)hi << 8) | lo;
+    }
+
+  printf("[Pwr] AW out0=%02x AXP s0=%02x s1=%02x VBAT=%dmV VBUS=%dmV VSYS=%dmV\n",
+         out0, st0, st1, vbat, vbus, vsys);
+  printf("[Pwr] VBUS_GOOD=%d BATFET_OPEN=%d BAT_PRESENT=%d\n",
+         (st0 >> 5) & 1, (st0 >> 4) & 1, (st0 >> 3) & 1);
+  return 0;
+}
+#endif
+
+
+#ifdef CONFIG_ESP32S3_CORES3_LCD
+static int cmd_lcdblink(void)
+{
+  extern int board_cores3_backlight_set(int percent);
+  int i;
+
+  printf("[Blink] toggling AXP2101 DLDO1 backlight 6 times\n");
+  for (i = 0; i < 6; i++)
+    {
+      bool on = (i & 1) != 0;
+      int ret = board_cores3_backlight_set(on ? 100 : 0);
+
+      printf("[Blink] %d DLDO1=%s ret=%d\n", i, on ? "on" : "off", ret);
+      fflush(stdout);
+      usleep(700 * 1000);
+    }
+
+  board_cores3_backlight_set(100);
+  printf("[Blink] done, backlight left on\n");
+  return 0;
+}
+#endif
+
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+int main(int argc, char *argv[])
+{
+  /* Version marker */
+
+  printf("\n=== Firmware V%d.%d.%d ===\n\n",
+         OTA_FW_VERSION_MAJOR, OTA_FW_VERSION_MINOR, OTA_FW_VERSION_PATCH);
+
+  {
+    extern int esp32s3_reset_reasons(int cpu);
+    printf("[Boot] reset reason: cpu0=%d cpu1=%d\n",
+           esp32s3_reset_reasons(0), esp32s3_reset_reasons(1));
+  }
+
+#ifdef CONFIG_ESP32S3_CORES3_LCD
+#ifdef CONFIG_ARCH_BOARD_M5STACK_CORES3
+#ifdef CONFIG_PLANT_VOICE_WAKE
+  if (argc >= 2 && strcmp(argv[1], "wake") == 0)
+    return voice_wake_command(argc - 2, argv + 2);
+#endif
+#ifdef CONFIG_PLANT_AI_VOICE
+  /* These read-only diagnostics do not access SD or reinitialize codecs. */
+  if(argc>=3 && !strcmp(argv[1],"voice") &&
+     (!strcmp(argv[2],"rxpair") || !strcmp(argv[2],"rxqueue") || !strcmp(argv[2],"codecstate")))
+    return cmd_voice(argc,argv);
+#endif
+#if defined(CONFIG_ARCH_BOARD_M5STACK_CORES3) && defined(CONFIG_PLANT_UI)
+  /* Numerical display diagnostics bypass SD and do not change UI state. */
+  if (argc >= 2 && strcmp(argv[1], "lcdasync") == 0)
+    {
+      extern void lv_nuttx_lcd_async_enable(bool enabled);
+      extern void lv_nuttx_lcd_async_dump(void);
+      if(argc==3 && !strcmp(argv[2],"on"))lv_nuttx_lcd_async_enable(true);
+      else if(argc==3 && !strcmp(argv[2],"off"))lv_nuttx_lcd_async_enable(false);
+      else if(argc!=2 && !(argc==3 && !strcmp(argv[2],"status")))
+        {printf("Usage: plant lcdasync [on|off|status]\n");return -EINVAL;}
+      lv_nuttx_lcd_async_dump();return 0;
+    }
+  if(argc>=3 && !strcmp(argv[1],"cam") && !strcmp(argv[2],"cadence"))
+    {
+      extern int screen_camera_request_frame_period(unsigned milliseconds);
+      extern unsigned screen_camera_frame_period_requested(void);
+      int rc=0;
+      if(argc==4 && (!strcmp(argv[3],"10")||!strcmp(argv[3],"20")||!strcmp(argv[3],"40")))
+        rc=screen_camera_request_frame_period((unsigned)atoi(argv[3]));
+      else if(argc!=3)return -EINVAL;
+      printf("[CamCadence] requested_ms=%u rc=%d\n",screen_camera_frame_period_requested(),rc);
+      return rc;
+    }
+  if(argc>=2 && !strcmp(argv[1],"lcdperf"))
+    {
+      extern void lv_nuttx_lcd_perf_trace(bool enabled);
+      extern void lv_nuttx_lcd_perf_dump(void);
+      if(argc>3)return -EINVAL;
+      if(argc==3)
+        {
+          if(!strcmp(argv[2],"on"))lv_nuttx_lcd_perf_trace(true);
+          else if(!strcmp(argv[2],"off"))lv_nuttx_lcd_perf_trace(false);
+          else if(strcmp(argv[2],"status"))return -EINVAL;
+        }
+      lv_nuttx_lcd_perf_dump();return 0;
+    }
+#endif
+  if(argc>=3 && !strcmp(argv[1],"cam") && !strcmp(argv[2],"snapshot"))
+    {
+      if(interaction_active())return -EBUSY;
+      const uint8_t *image=NULL;size_t bytes=0;
+      bool boost=!(argc>=4&&!strcmp(argv[3],"baseline"));
+      int before_frame=camera_preview_get_frame_index();
+      clock_t begin=clock_systime_ticks();
+      int rc=camera_preview_snapshot_test(&image,&bytes,1800,boost);
+      printf("[SnapshotTest] boosted=%d rc=%d bytes=%u ms=%u frame_before=%d frame_after=%d\n",boost,rc,(unsigned)bytes,(unsigned)((clock_systime_ticks()-begin)*1000/CLOCKS_PER_SEC),before_frame,camera_preview_get_frame_index());
+      return rc;
+    }
+  if (argc >= 2 && strcmp(argv[1], "interact") == 0)
+    return interaction_command(argc - 2, argv + 2);
+  if (argc >= 2 && strcmp(argv[1], "body") == 0)
+    {
+      return stackchan_body_command(argc - 2, argv + 2);
+    }
+#endif
+
+  if (argc >= 2 && strcmp(argv[1], "axp") == 0)
+    {
+      return cmd_axp();
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "pwr") == 0)
+    {
+      return cmd_pwr(argc - 1, &argv[1]);
+    }
+#endif
+
+  if (argc >= 2 && strcmp(argv[1], "lcdbar") == 0)
+    {
+      return cmd_lcdbar();
+    }
+
+#ifdef CONFIG_ESP32S3_CORES3_LCD
+  if (argc >= 2 && strcmp(argv[1], "swlcd") == 0)
+    {
+      return cmd_swlcd();
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "lcddiag") == 0)
+    {
+      return cmd_lcddiag();
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "lcdblink") == 0)
+    {
+      return cmd_lcdblink();
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "sddiag") == 0)
+    {
+      extern int board_cores3_sd_diag(void);
+
+      return board_cores3_sd_diag();
+    }
+#endif
+
+#ifdef CONFIG_PLANT_VOICE_AUTOTEST
+  /* 调试专用：开机自跑语音链路（配合 OpenOCD+GDB，无需串口交互）。
+   * 跑：1) 播放已知音调（隔离 TX/DAC 链路——音调干净=播放链路 OK，
+   *        嘶声在录音数据；音调也嘶=播放链路坏）
+   *    2) rate 测试（流结构 dump）
+   *    3) 录音 2s → 回放
+   * 跑完返回 → nsh 提示符回来，可手动跑 plant voice 命令。 */
+
+  printf("[Autotest] 语音链路自测启动\n");
+
+  printf("[Autotest] 阶段1：播放 440Hz 音调 1s（听：干净=播放链路OK）\n");
+  ai_voice_play_tone(440, 1000);
+
+  printf("[Autotest] 阶段2：RX 速率/结构测试\n");
+  ai_voice_rx_rate_test(2);
+  printf("[Autotest] rate 测试完成，tick=%lu\n",
+         (unsigned long)clock_systime_ticks());
+  {
+    FAR uint8_t *wav = (FAR uint8_t *)malloc(44 + 16000 * 2 * 2);
+    int ret;
+
+    if (wav != NULL)
+      {
+        printf("[Autotest] 阶段3：开始录音，tick=%lu\n",
+               (unsigned long)clock_systime_ticks());
+        ret = ai_voice_record(wav, 44 + 16000 * 2 * 2, 2);
+        printf("[Autotest] 录音返回 ret=%d，tick=%lu\n",
+               ret, (unsigned long)clock_systime_ticks());
+        if (ret > 0)
+          {
+            printf("[Autotest] 录音 OK (%d B)，开始回放，tick=%lu\n",
+                   ret, (unsigned long)clock_systime_ticks());
+            ai_voice_play(wav, (size_t)ret);
+            printf("[Autotest] 回放结束，tick=%lu\n",
+                   (unsigned long)clock_systime_ticks());
+          }
+
+        free(wav);
+      }
+  }
+
+  printf("[Autotest] 自测结束，回到 nsh（可跑 plant voice tone / loop）\n");
+  return 0;
+#endif
+
+#if defined(CONFIG_PLANT_UI_PANEL) && defined(CONFIG_ARCH_BOARD_M5STACK_CORES3)
+  lcd_init();
+#endif
+
+#ifdef CONFIG_PLANT_SD_CARD
+  /* Boot-time auto-mount (non-fatal when no card is present) */
+
+  sd_card_init();
+#endif
+
+#ifdef CONFIG_PLANT_WIFI_MANAGER
+  if (argc >= 2 && strcmp(argv[1], "wifi") == 0)
+    {
+      return cmd_wifi(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_AI_MODULE
+  if (argc >= 2 && strcmp(argv[1], "ai") == 0)
+    {
+      return cmd_ai(argc, argv);
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "srv") == 0)
+    {
+      return cmd_srv(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_AI_VOICE
+  if (argc >= 2 && strcmp(argv[1], "voice") == 0)
+    {
+      return cmd_voice(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_SOIL_SENSOR
+  if (argc >= 2 && strcmp(argv[1], "soil") == 0)
+    {
+      return cmd_soil(argc, argv);
+    }
+#endif
+
+  if (argc >= 2 && strcmp(argv[1], "lcddma") == 0)
+    {
+      /* v174：取景写屏走 GDMA 试验开关。
+       * 开后 >64B 的 SPI 块走 DMA（轮询路径实测只有 1.85MB/s）。
+       * 历史上"DMA 误开 → 整屏花屏"属于全局误用，这里可随时关回。 */
+
+      extern void esp32s3_spi_set_dma_preview(bool on);
+      extern bool esp32s3_spi_get_dma_preview(void);
+      bool on = (argc >= 3) && strcmp(argv[2], "on") == 0;
+
+      esp32s3_spi_set_dma_preview(on);
+      printf("[Lcd] SPI DMA(preview) = %s\n",
+             esp32s3_spi_get_dma_preview() ? "on" : "off");
+      return 0;
+    }
+
+#ifdef CONFIG_LCD_ST7789
+  if (argc >= 2 && strcmp(argv[1], "lcdrd") == 0)
+    {
+      extern int st7789_read_bytes(uint8_t cmd, uint8_t *buf, int n);
+      uint8_t buf[8];
+      uint8_t cmd = (uint8_t)strtoul(argv[2], NULL, 16);
+      int n = (argc >= 4) ? atoi(argv[3]) : 3;
+      int i;
+      int ret;
+
+      if (n > 8)
+        {
+          n = 8;
+        }
+
+      for (i = 0; i < n; i++)
+        {
+          buf[i] = 0;
+        }
+
+      ret = st7789_read_bytes(cmd, buf, n);
+      printf("[LcdRd] cmd=0x%02x ret=%d:", cmd, ret);
+
+      for (i = 0; i < n; i++)
+        {
+          printf(" %02x", buf[i]);
+        }
+
+      printf("\n");
+      return 0;
+    }
+  if (argc >= 2 && strcmp(argv[1], "lcdfreq") == 0)
+    {
+      /* 调试：设置 LCD SPI 时钟（Hz 或 MHz 整数）。80MHz 超出 ST7789
+       * 规格（写时序 ~62.5MHz），怀疑偶发错位/花屏与超频有关。 */
+
+      extern void st7789_set_spi_freq(uint32_t hz);
+      uint32_t v = (argc >= 3) ? (uint32_t)strtoul(argv[2], NULL, 10)
+                               : 80000000u;
+
+      if (v < 1000)
+        {
+          v *= 1000000u;   /* 按 MHz 解释 */
+        }
+
+      st7789_set_spi_freq(v);
+      return 0;
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "lcdfps") == 0)
+    {
+      /* 面板扫描率实时调整（ST7789 0xC6 FRCTRL2，RTNA[4:0]）：
+       * 写屏行速 63us/行 vs 面板 52us/行 的差距是撕裂根因，
+       * 把面板调到 ~45-50Hz 可让两者接近 → 错位带大幅减小。 */
+
+      extern void st7789_write_cmd1(uint8_t cmd, uint8_t data);
+      uint8_t v = (argc >= 3) ? (uint8_t)strtoul(argv[2], NULL, 16) : 0x0f;
+
+      st7789_write_cmd1(0xc6, v);
+      printf("[Lcd] 0xC6(FRCTRL2) <- 0x%02x", v);
+      printf("\n");
+      return 0;
+    }
+#endif /* CONFIG_LCD_ST7789 */
+
+  if (argc >= 2 && strcmp(argv[1], "prevverify") == 0)
+    {
+      camera_preview_set_verify(argc >= 3 && strcmp(argv[2], "on") == 0);
+      return 0;
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "prevhold") == 0)
+    {
+      camera_preview_set_hold(argc >= 3 && strcmp(argv[2], "on") == 0);
+      return 0;
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "prevms") == 0)
+    {
+      int ms = (argc >= 3) ? atoi(argv[2]) : -1;
+
+      if (ms >= 0)
+        {
+          camera_preview_set_min_interval_ms(ms);
+        }
+      else
+        {
+          camera_preview_set_min_interval_ms(0);
+        }
+
+      printf("[Cam] preview min interval now %d ms",
+             camera_preview_set_min_interval_ms_get());
+      printf("\n");
+      return 0;
+    }
+
+#ifdef CONFIG_LCD_ST7789
+  if (argc >= 2 && strcmp(argv[1], "scanline") == 0)
+    {
+      extern int st7789_read_scanline(uint8_t *raw);
+      uint8_t raw[4];
+      int n = (argc >= 3) ? atoi(argv[2]) : 16;
+      int i;
+
+      for (i = 0; i < n; i++)
+        {
+          int v = st7789_read_scanline(raw);
+
+          printf("[Scan] %d: %d raw=%02x %02x %02x %02x", i, v,
+                 raw[0], raw[1], raw[2], raw[3]);
+          printf("\n");
+          usleep(3000);
+        }
+
+      return 0;
+    }
+#endif /* CONFIG_LCD_ST7789 */
+
+#ifdef CONFIG_PLANT_CAMERA_CAPTURE
+  if (argc >= 2 && strcmp(argv[1], "cam") == 0)
+  if (argc >= 2 && strcmp(argv[1], "cam") == 0)
+    {
+      return cmd_cam(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_SD_CARD
+  if (argc >= 2 && strcmp(argv[1], "sd") == 0)
+    {
+      return cmd_sd(argc, argv);
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "sn") == 0)
+    {
+      return cmd_sn(argc, argv);
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "cfg") == 0)
+    {
+      return cmd_cfg(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_UI
+  if (argc >= 2 && strcmp(argv[1], "img") == 0)
+    {
+      extern void ui_app_show_image(const uint8_t *rgb565, int w, int h);
+      extern void ui_app_hide_image(void);
+
+      if (argc >= 3 && strcmp(argv[2], "hide") == 0)
+        {
+          ui_app_hide_image();
+          printf("[Img] test image hidden\n");
+          return 0;
+        }
+
+      /* 目标缓冲：复用摄像头驱动静态 rxbuf（160×120×2=38400），
+       * 摄像头不在运行，缓冲区空闲且生命周期稳定 */
+
+      extern uint8_t *esp32s3_cam_dvp_get_frame(void);
+      uint8_t *fb = esp32s3_cam_dvp_get_frame();
+      int x;
+      int y;
+
+      if (argc >= 3 && strcmp(argv[2], "test") == 0)
+        {
+          /* 四象限色块：红/绿/蓝/白 —— 一眼验证 LCD 颜色通道。
+           * 直接写 LCD 全屏（软件缩放，绕过 LVGL lv_image 渲染 bug） */
+
+          for (y = 0; y < 120; y++)
+            {
+              for (x = 0; x < 160; x++)
+                {
+                  uint16_t v;
+
+                  if (x < 80 && y < 60)
+                    {
+                      v = 0xf800;       /* 红 */
+                    }
+                  else if (x >= 80 && y < 60)
+                    {
+                      v = 0x07e0;       /* 绿 */
+                    }
+                  else if (x < 80 && y >= 60)
+                    {
+                      v = 0x001f;       /* 蓝 */
+                    }
+                  else
+                    {
+                      v = 0xffff;       /* 白 */
+                    }
+
+                  fb[y * 320 + x * 2] = v & 0xff;
+                  fb[y * 320 + x * 2 + 1] = v >> 8;
+                }
+            }
+
+          lcd_put_rgb565(fb, 160, 120, 0, 0,
+                         TP_SCREEN_W, TP_SCREEN_H);
+          printf("[Img] test pattern -> LCD direct (R/G/B/W quadrants)\n");
+          return 0;
+        }
+
+      if (argc >= 4)
+        {
+          /* plant img show <file.raw>：从 SD 读 160×120 RGB565 直接写 LCD */
+
+          FILE *fp = fopen(argv[3], "rb");
+          size_t n;
+
+          if (fp == NULL)
+            {
+              printf("[Img] open %s failed\n", argv[3]);
+              return -1;
+            }
+
+          n = fread(fb, 1, 38400, fp);
+          fclose(fp);
+
+          if (n != 38400)
+            {
+              printf("[Img] read %zu bytes (want 38400) — file must be "
+                     "160x120 RGB565 raw\n", n);
+              return -1;
+            }
+
+          lcd_put_rgb565(fb, 160, 120, 0, 0,
+                         TP_SCREEN_W, TP_SCREEN_H);
+          printf("[Img] showing %s -> LCD direct (160x120 RGB565)\n", argv[3]);
+          return 0;
+        }
+
+      printf("Usage: plant img test | show <file.raw> | hide\n");
+      return -1;
+    }
+#endif
+
+
+#ifdef CONFIG_PLANT_UI
+  if (argc >= 2 && strcmp(argv[1], "tsim") == 0)
+    {
+      return cmd_tsim(argc, argv);
+    }
+#endif
+#ifdef CONFIG_PLANT_UI
+  if (argc >= 2 && strcmp(argv[1], "nav") == 0)
+    {
+      return cmd_nav(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_UI
+  if (argc >= 2 && strcmp(argv[1], "tap") == 0)
+    {
+      return cmd_tap(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_UI
+  if (argc >= 2 && strcmp(argv[1], "scroll") == 0)
+    {
+      return cmd_scroll(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_UI
+  if (argc >= 2 && strcmp(argv[1], "tdiag") == 0)
+    {
+      return cmd_tdiag(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_UI
+  if (argc >= 2 && strcmp(argv[1], "memlog") == 0)
+    {
+      return cmd_memlog(argc, argv);
+    }
+#endif
+
+#if defined(CONFIG_PLANT_UI) && defined(CONFIG_PLANT_SD_CARD)
+  if (argc >= 2 && strcmp(argv[1], "cap") == 0)
+    {
+      return cmd_cap(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_UI
+  if (argc >= 2 && strcmp(argv[1], "ink") == 0)
+    {
+      return cmd_ink(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_UI
+  if (argc >= 2 && strcmp(argv[1], "capa") == 0)
+    {
+      return cmd_capa(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_UI
+  if (argc >= 2 && strcmp(argv[1], "objs") == 0)
+    {
+      return cmd_objs(argc, argv);
+    }
+  if(argc==4 && !strcmp(argv[1],"face") && !strcmp(argv[2],"preview"))
+    {int rc=screen_voice_preview_request(atoi(argv[3]));printf("[FacePreview] injected_visual_only state=%d rc=%d lease_ms=8000\n",atoi(argv[3]),rc);return rc;}
+  if (argc >= 2 && strcmp(argv[1], "audit") == 0)
+    {
+      ui_app_audit();
+      return 0;
+    }
+#endif
+
+#ifdef CONFIG_ESP32S3_WIFI
+  if (argc >= 2 && strcmp(argv[1], "ota") == 0)
+    {
+      return cmd_ota(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_UI
+  if (argc >= 2 && strcmp(argv[1], "font") == 0)
+    {
+      return cmd_font(argc, argv);
+    }
+#endif
+
+  if (argc >= 2 && strcmp(argv[1], "demo") == 0)
+    {
+      return cmd_demo(argc, argv);
+    }
+
+#ifdef CONFIG_PLANT_SYSTEM_MONITOR
+  if (argc >= 2 && strcmp(argv[1], "battery") == 0)
+    {
+      int mv = -1, pct = -1;
+      int rv = battery_read_mv(&mv), rp = battery_read_pct(&pct);
+      printf("[Battery] source=%s mv=%d pct=%d voltage_rc=%d level_rc=%d\n",
+#ifdef CONFIG_ARCH_BOARD_M5STACK_CORES3
+             "AXP2101",
+#else
+             "ADC",
+#endif
+             mv, pct, rv, rp);
+      return rv < 0 ? rv : rp;
+    }
+#endif
+  if (argc >= 2 && strcmp(argv[1], "power") == 0)
+    return power_service_command(argc-2,argv+2);
+
+  if (argc >= 2 && strcmp(argv[1], "mem") == 0)
+    {
+      return cmd_mem(argc, argv);
+    }
+
+#ifdef CONFIG_PLANT_UI
+  /* 产品模式：无参数（或 plant ui）→ 开机自启 UI 首屏。
+   * 所有子命令（wifi/ai/voice/soil/sd/ota/demo）优先于 UI，
+   * 供 NSH 串口调试使用。
+   */
+
+  if (argc < 2 || strcmp(argv[1], "ui") == 0)
+    {
+#if defined(CONFIG_PLANT_SD_CARD) && defined(CONFIG_PLANT_WIFI_MANAGER)
+      /* 开机后台自动恢复：读 SD plant.cfg → 连 WiFi → 配服务器 */
+      boot_cfg_start();
+#endif
+      return ui_app_start();
+    }
+#endif
+
+  printf("Plant Companion — AI Smart Plant Care\n\n");
+  printf("Usage: plant [ui|command]\n\n");
+  printf("  (no args / ui)            Start product-mode UI (boot screen)\n");
+  printf("Commands:\n");
+#ifdef CONFIG_PLANT_WIFI_MANAGER
+  printf("  wifi  <ssid> [password]     Connect to WiFi\n");
+#endif
+#ifdef CONFIG_PLANT_AI_MODULE
+  printf("  ai    test                  Test AI connectivity\n");
+  printf("  ai    advise <8 params>     Get AI plant advice\n");
+#endif
+#ifdef CONFIG_PLANT_AI_VOICE
+  printf("  voice tone <freq>           Play a test tone\n");
+  printf("  voice rec [seconds]         Record mic -> WAV (16 kHz)\n");
+  printf("  voice diag [seconds]        A/B quiet-vs-speech stats (root-cause)\n");
+  printf("  voice raw [seconds]         Raw 24k RX stream dump (frame check)\n");
+  printf("  voice loop [seconds]        Record then play back\n");
+#endif
+#ifdef CONFIG_PLANT_SOIL_SENSOR
+  printf("  soil  read                  Read soil sensor data\n");
+#endif
+#ifdef CONFIG_PLANT_SD_CARD
+  printf("  sd    status                 Show SD mount status\n");
+  printf("  sd    test                   SD card read/write test\n");
+  printf("  sd    mount                  Mount SD card to /mnt/sd\n");
+  printf("  sd    umount                 Unmount SD card\n");
+  printf("  cfg   save|show|connect|clear  开机配置存 SD/恢复（防重启丢配置）\n");
+  printf("  sn    [<编号>]               查看/设置设备序列号（写 SD，重启生效）\n");
+#endif
+  printf("  demo                        Run full peripheral demo\n");
+  printf("  mem                         Memory/storage diagnostics\n");
+#ifdef CONFIG_ESP32S3_WIFI
+  printf("  ota   check                 Check for firmware update (A/B switch)\n");
+  printf("  ota   stage                 Download + verify only, no switch\n");
+  printf("  ota   status                Show OTA status\n");
+  printf("  ota   confirm               Mark current slot VALID (cancel rollback)\n");
+#endif
+#ifdef CONFIG_PLANT_UI
+  printf("  font  status [文本]         中文字体缺字诊断（CLAUDE_SYSTEM §14）\n");
+  printf("  font  trace <文本>        逐字打印字形来源（主字体/SD/符号/ 缺）\n");
+  printf("  font  sd <字>            打印 SD 兜底查找过程（fseek/fread/errno）\n");
+  printf("  objs                        转储当前屏对象树（方框定位）\n");
+  printf("  tap   <x> <y>           注入一次点按（远程进二级页）\n");
+  printf("  memlog on|off               切页完成时打印堆余量（默认关）\n");
+#endif
+
+  return 0;
+}

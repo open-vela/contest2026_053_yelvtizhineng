@@ -1,0 +1,52 @@
+#
+# For a description of the syntax of this configuration file,
+# see the file kconfig-language.txt in the NuttX tools repository.
+#
+
+if ARCH_BOARD_M5STACK_CORES3
+
+# CoreS3 is flashed with the ESP-IDF second-stage bootloader and A/B OTA slots.
+config ESP32S3_CORES3_USE_LEGACY_APP_FORMAT
+	bool
+	default y
+	select ESP32S3_APP_FORMAT_LEGACY
+
+config ESP32S3_CORES3_LCD
+	bool "Enable CoreS3 LCD"
+	default n
+	select ESP32S3_SPI3
+	select LCD
+	select LCD_DEV
+	select LCD_ILI9341
+	---help---
+		Enable the M5Stack CoreS3 320x240 ILI9342C/E display.
+
+config ESP32S3_BOARD_TOUCHSCREEN
+	bool "Enable CoreS3 touchscreen"
+	default n
+	select ESP32S3_I2C0
+	select INPUT
+	select INPUT_TOUCHSCREEN
+	select INPUT_FT5X06
+	select FT5X06_SINGLEPOINT
+	---help---
+		Enable the M5Stack CoreS3 FT6336U touchscreen.
+
+menu "Board Touchscreen Configuration"
+	depends on ESP32S3_BOARD_TOUCHSCREEN
+
+config ESP32S3_BOARD_TOUCHSCREEN_PATH
+	string "Touchscreen Path for VFS"
+	default "/dev/input0"
+
+config ESP32S3_BOARD_TOUCHSCREEN_SAMPLE_CACHES
+	int "Touchscreen Sample Cache Number"
+	default 64
+
+config ESP32S3_BOARD_TOUCHSCREEN_SAMPLE_DELAYS
+	int "Touchscreen Sample Delay Ticks"
+	default 20
+
+endmenu # Touchscreen Configuration
+
+endif # ARCH_BOARD_M5STACK_CORES3
