@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <nuttx/clock.h>
@@ -34,7 +35,9 @@
 #include "../../hal/hal_i2c.h"
 #include "../../hal/hal_i2s.h"
 #include "ai_voice.h"
+#include "box_voice_tone.h"
 #include "ai_ns.h"
+#include "../../components/box_aec/box_aec.h"
 
 /* I2C bus initializer (lives in kernel, resolved at link time) */
 
@@ -664,6 +667,8 @@ static void ai_voice_heap_warn(FAR const char *op)
 
 static volatile bool g_stream_cancel;
 static volatile bool g_stream_finish;
+static volatile bool g_background_finish;
+void ai_voice_background_finish(void){g_background_finish=true;}
 
 void ai_voice_stream_cancel(void)
 {
@@ -706,7 +711,10 @@ void ai_voice_stream_finish(void)
  *   队列排空 + 线程退出后才算录完 → 调用方的"写文件/上传完成"顺序不变。
  ****************************************************************************/
 
-#define AI_VOICE_IOQ_BLOCKS   12   /* 12×2048 采样 ≈ 1.5s 缓冲（放堆/外部内存，不吃内部 SRAM） */
+#define AI_VOICE_IOQ_BLOCKS   16   /* Power of two; one slot stays empty. */
+#if (AI_VOICE_IOQ_BLOCKS & (AI_VOICE_IOQ_BLOCKS - 1)) != 0
+# error Voice ring size must be a power of two
+#endif
 #define AI_VOICE_IOQ_SAMPLES  2048
 #define AI_VOICE_IOQ_BATCH    4    /* 攒 4 块（≈400ms）提交一次，见 IO 线程注释 */
 #define AI_VOICE_IOQ_DRAIN_MS 3000 /* 收工期限：超期丢块保命（见 ioq_stop） */
@@ -730,7 +738,9 @@ struct ai_voice_ioq_s
 
   /* ⚠️ 2026-09-16 二修：攒批缓冲 + 诊断计数（防"录音卡在聆听"复发） */
   FAR int16_t *acc;            /* 攒批缓冲（BATCH×2048 采样） */
-  uint32_t acc_n;              /* 攒批内已用采样数 */
+  uint32_t acc_n;              /* Samples in current batch. */
+  uint32_t acc_blocks;
+  volatile uint32_t dbg_posts;
   volatile uint32_t dbg_pushed;
   volatile uint32_t dbg_batched;
   volatile uint32_t dbg_dropped;
@@ -747,12 +757,13 @@ static FAR int16_t *s_ioq_ring;
 
 static int ai_voice_ioq_ring_ensure(void)
 {
-  if (s_ioq_ring != NULL)
+  if (s_ioq_ring != NULL && s_ioq.acc != NULL)
     {
       return 0;
     }
 
-  s_ioq_ring = (FAR int16_t *)malloc((size_t)AI_VOICE_IOQ_BLOCKS *
+  if (s_ioq_ring == NULL)
+    s_ioq_ring = (FAR int16_t *)malloc((size_t)AI_VOICE_IOQ_BLOCKS *
                                      AI_VOICE_IOQ_SAMPLES * sizeof(int16_t));
   if (s_ioq_ring == NULL)
     {
@@ -806,7 +817,8 @@ static FAR void *ai_voice_ioq_thread(FAR void *param)
       if (q->stop && q->deadline != 0 &&
           (int32_t)(clock_systime_ticks() - (clock_t)q->deadline) >= 0)
         {
-          q->acc_n = 0;              /* 丢掉半批，不再发网络 */
+          q->acc_n = 0;              /* No partial upload after deadline. */
+          q->dbg_dropped++;
           break;
         }
 
@@ -825,22 +837,38 @@ static FAR void *ai_voice_ioq_thread(FAR void *param)
        * 到几分钟 → 录音队列填满 → 界面永远停在"聆听"。
        * 攒批后请求数降到 1/BATCH，而且空位先还，采集侧完全不受 I/O 影响。 */
 
+      /* Variable 2004-sample blocks do not divide the 8192-sample
+       * allocation. Flush BEFORE copying anything that would not fit.
+       */
+      if (q->acc_n + n > AI_VOICE_IOQ_BATCH * AI_VOICE_IOQ_SAMPLES)
+        {
+          if (q->cb != NULL && q->acc_n > 0)
+            { q->cb(q->acc, q->acc_n, q->arg); q->dbg_posts++; }
+          q->acc_n = 0;
+          q->acc_blocks = 0;
+        }
+
       memcpy(q->acc + q->acc_n,
              q->buf + (size_t)idx * AI_VOICE_IOQ_SAMPLES, n * 2);
       q->acc_n += n;
+      q->acc_blocks++;
       q->dbg_batched++;
 
       nxsem_post(&q->free_sem);          /* 空位先还，不等 I/O 做完 */
 
-      if (q->acc_n >= (AI_VOICE_IOQ_BATCH * AI_VOICE_IOQ_SAMPLES) ||
-          q->tl == q->hd)
+      /* Count blocks rather than waiting for a fifth short block.
+       * An empty live queue is not end-of-stream: keep the partial batch.
+       */
+      if (q->acc_blocks >= AI_VOICE_IOQ_BATCH)
         {
           if (q->cb != NULL && q->acc_n > 0)
             {
               q->cb(q->acc, q->acc_n, q->arg);
+              q->dbg_posts++;
             }
 
           q->acc_n = 0;
+          q->acc_blocks = 0;
         }
     }
 
@@ -849,7 +877,9 @@ static FAR void *ai_voice_ioq_thread(FAR void *param)
   if (q->cb != NULL && q->acc_n > 0)
     {
       q->cb(q->acc, q->acc_n, q->arg);
+      q->dbg_posts++;
       q->acc_n = 0;
+      q->acc_blocks = 0;
     }
 
   nxsem_post(&q->exit_sem);
@@ -874,12 +904,10 @@ static int ai_voice_ioq_start(ai_voice_stream_cb_t cb, void *arg)
 
   if (s_ioq.abandoned)
     {
-      if (nxsem_tickwait(&s_ioq.exit_sem, MSEC2TICK(15000)) < 0)
+      if (nxsem_trywait(&s_ioq.exit_sem) < 0)
         {
-          printf("[Voice] ⚠ 上一轮 IO 线程仍未退出，本轮语音暂不可用\n");
-  s_ioq.dbg_wait_ms = 0;
-  s_ioq.deadline    = 0;
-  s_ioq.abandoned   = false;
+          printf("[Voice] previous IO still draining; retry later\n");
+          return -EAGAIN;
         }
 
       pthread_join(s_ioq.tid, NULL);
@@ -897,12 +925,14 @@ static int ai_voice_ioq_start(ai_voice_stream_cb_t cb, void *arg)
   s_ioq.arg     = arg;
   s_ioq.started = false;
   s_ioq.acc_n   = 0;
+  s_ioq.acc_blocks = 0;
+  s_ioq.dbg_posts = 0;
   s_ioq.dbg_pushed  = 0;
   s_ioq.dbg_batched = 0;
   s_ioq.dbg_dropped = 0;
   s_ioq.dbg_wait_ms = 0;
 
-  nxsem_init(&s_ioq.free_sem, 0, AI_VOICE_IOQ_BLOCKS);
+  nxsem_init(&s_ioq.free_sem, 0, AI_VOICE_IOQ_BLOCKS - 1);
   nxsem_init(&s_ioq.data_sem, 0, 0);
   nxsem_init(&s_ioq.exit_sem, 0, 0);
 
@@ -967,7 +997,7 @@ static void ai_voice_ioq_push(FAR const int16_t *pcm, uint32_t samples)
 
     for (;;)
       {
-        int w = nxsem_tickwait(&s_ioq.free_sem, MSEC2TICK(400));
+        int w = nxsem_trywait(&s_ioq.free_sem);
 
         if (w >= 0)
           {
@@ -1046,8 +1076,8 @@ static void ai_voice_ioq_stop(void)
   s_ioq.started = false;
 }
 
-int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
-                           int max_seconds, int silent_blocks)
+static int voice_record_impl(ai_voice_stream_cb_t cb, void *arg,
+                           int max_seconds, int silent_blocks,bool background,bool local)
 {
   /* 独立滤波状态（stream 专用，与 record 隔离）——
    * ⚠️ 2026-09-01 删破坏性滤波链后仅剩高通去 DC 状态 */
@@ -1066,7 +1096,9 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
   static int16_t s_out[2048];
 
   /* 24kHz 读缓冲（static：WiFi 连接后堆被动态缓冲吃紧，语音链路零 malloc） */
-  static int16_t s_chunk48[1002];   /* 与 chunk_samples=1002 同步 */
+  static int16_t s_chunk48[1002];
+  static int16_t *s_reference;
+  bool use_aec=false;   /* 与 chunk_samples=1002 同步 */
 
   FAR int16_t *chunk48;
   uint32_t chunk_samples;
@@ -1094,6 +1126,8 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
   /* ⚠️ 2026-09-16 三修：自适应静音门限（"说了停不下来"根治）相关状态 */
   int64_t vad_noise  = 0;          /* 噪声地板（块均方；0=还没测到） */
   int32_t vad_thr    = 300 * 300;  /* 当前静音门限（均方） */
+  uint32_t vad_speech_samples = 0;
+  uint32_t vad_silent_samples = 0;
   int     vad_speech = 0;          /* 判到人声的块数 */
   bool    ended_silent = false;    /* 是否由静音自动结束 */
 
@@ -1101,10 +1135,24 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
 
   /* FIFO 溢出丢采样基线（本轮增量 = 真正丢掉的采样数） */
 
+  /* Local rechecks can leave the 2.73-second RX FIFO nearly full.
+   * Bound pre-window backlog before measuring capture loss. Keep two
+   * seconds for a complete wake word; foreground commands need one.
+   * Without this, the first new DMA block can overflow a stale full FIFO
+   * and incorrectly invalidate the next otherwise contiguous recording. */
+  if(background||local)
+    {
+      /* A local wake recheck can leave RX full just as cached feedback
+       * starts. Bound paired mic/reference backlog before the drop baseline
+       * on the playback path too. Keep 200ms for immediate barge-in. */
+      uint32_t keep=box_aec_speaker_active()?AI_VOICE_SAMPLE_RATE/5:
+          AI_VOICE_SAMPLE_RATE*(silent_blocks>0?1:2);
+      hal_i2s_rx_keep_latest(keep);
+    }
   uint32_t drop0 = hal_i2s_rx_drop_count();
 
-  g_stream_cancel = false;   /* 每次录音开始清取消标志 */
-  g_stream_finish = false;   /* 每次录音开始清「说完」标志 */
+  if(background)g_background_finish=false;
+  else { g_stream_cancel=false;g_stream_finish=false; }
 
   if (cb == NULL)
     {
@@ -1113,9 +1161,9 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
 
   ai_voice_heap_warn("录音");
 
-  if (max_seconds <= 0 || max_seconds > AI_VOICE_MAX_SECONDS)
+  if (max_seconds <= 0 || max_seconds > AI_VOICE_STREAM_MAX_SECONDS)
     {
-      max_seconds = AI_VOICE_MAX_SECONDS;
+      max_seconds = AI_VOICE_STREAM_MAX_SECONDS;
     }
 
   ret = ai_voice_init();
@@ -1124,6 +1172,12 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
       return ret;
     }
 
+  if(background && box_aec_init())
+    {
+      if(!s_reference)s_reference=calloc(1002+2048,sizeof(int16_t));
+      use_aec=s_reference!=NULL;
+      if(use_aec)box_aec_record_begin();
+    }
   chunk_samples = 1002;   /* 24kHz 2004B/读（3 的倍数，见 record 注释） */
   chunk48 = s_chunk48;    /* static，零 malloc */
 
@@ -1132,7 +1186,7 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
   /* ⚠️ 2026-09-16：回调（写 SD / 上传网络）改为走独立 IO 线程，
    * 采集线程只 memcpy —— 这是"录音被压缩/不清晰"的根治点。 */
 
-  if (ai_voice_ioq_start(cb, arg) < 0)
+  if (!background && !local && ai_voice_ioq_start(cb, arg) < 0)
     {
       return -ENOMEM;
     }
@@ -1158,14 +1212,14 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
 
       /* 外部取消（取消=丢弃，如 THINKING 阶段再点）：
        * 再点按键 → 立即停止录音 */
-      if (g_stream_cancel)
+      if (background ? g_background_finish : g_stream_cancel)
         {
           break;
         }
 
       /* ⚠️ 2026-08-31 微信式「再点=说完」：结束录音（保留已录内容，
        * 返回正时长 → worker 照常 finalize 发给 AI） */
-      if (g_stream_finish)
+      if (!background && g_stream_finish)
         {
           break;
         }
@@ -1176,7 +1230,8 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
           continue;
         }
 
-      ret = hal_i2s_read_slot(chunk48, chunk_samples * 2, 0);
+      ret = use_aec?hal_i2s_read_reference(chunk48,s_reference,chunk_samples*2):
+                    hal_i2s_read_slot(chunk48,chunk_samples*2,0);
       if (ret <= 0)
         {
           break;
@@ -1216,6 +1271,12 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
 
           s_out[out_n + j] = (int16_t)((s0 * (2 - (int32_t)frac) +
                                         s1 * (int32_t)frac) / 2);
+          if(use_aec)
+            {
+              int32_t r0=s_reference[RX_SETTLE_SAMPLES+p0];
+              int32_t r1=s_reference[RX_SETTLE_SAMPLES+p0+1];
+              s_reference[1002+out_n+j]=(int16_t)((r0*(2-(int32_t)frac)+r1*(int32_t)frac)/2);
+            }
         }
 
       /* ⚠️ 2026-09-01 删破坏性滤波链：11点中值（非线性破坏语音，抹清辅音）
@@ -1304,52 +1365,44 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
               int32_t msq = (int32_t)(sq / out_n);   /* 均方（非 RMS） */
               int32_t thr;
 
-              /* 噪声地板：快降慢升（比当前低就立刻跟随，高只按 1/64 逼近）
-               * —— 说话块不会把地板抬高，停顿时地板马上贴住底噪。 */
-
-              if (vad_noise == 0 || msq < vad_noise)
-                {
-                  vad_noise = msq;
-                }
-              else
-                {
-                  vad_noise += (msq - vad_noise) / 64;
-                }
-
-              /* 门限 = 噪声地板 ×4，且夹在 [300², 3000²]：安静房间仍是
-               * 原来的 300²，嘈杂环境自动抬高——这是"说了停不下来、要硬等
-               * 满 5 秒"的根治点（办公室底噪 RMS≈284 就贴在旧门限上）。 */
-
+              /* Compare against the earlier quiet floor, never against
+               * the current speech block itself. Update only on quiet.
+               */
               thr = (int32_t)(vad_noise * 4);
-              if (thr < 300 * 300)
-                {
-                  thr = 300 * 300;
-                }
-              else if (thr > 3000 * 3000)
-                {
-                  thr = 3000 * 3000;
-                }
+              int32_t floor=background?9000:300*300;
+              if (thr < floor) thr = floor;
+              if (thr > 3000 * 3000) thr = 3000 * 3000;
 
               vad_thr = thr;
 
               if (msq < thr)
                 {
                   silent_cnt++;
+                  vad_silent_samples += out_n;
+                  if (vad_noise == 0 || msq < vad_noise) vad_noise = msq;
+                  else vad_noise += (msq - vad_noise) / 64;
                 }
               else
                 {
                   silent_cnt = 0;
+                  vad_silent_samples = 0;
+                  vad_speech_samples += out_n;
                   vad_speech++;
                 }
             }
 
-          ai_voice_ioq_push(s_out, out_n);
+          if(use_aec)box_aec_feed(s_out,s_reference+1002,out_n,cb,arg);
+          else if(background||local)cb(s_out,out_n,arg);else ai_voice_ioq_push(s_out,out_n);
           out_n = 0;
 
-          if (silent_blocks > 0 && silent_cnt >= silent_blocks)
+          if (silent_blocks > 0 &&
+              ((vad_speech_samples >= AI_VOICE_AI_RATE / 5 &&
+                vad_silent_samples >= (uint32_t)silent_blocks * AI_VOICE_AI_RATE / 10) ||
+               (vad_speech_samples < AI_VOICE_AI_RATE / 5 &&
+                n16 >= 4 * AI_VOICE_AI_RATE)))
             {
               ended_silent = true;
-              break;   /* 静音足够久 → 说完自动停 */
+              break;
             }
         }
     }
@@ -1357,8 +1410,11 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
   /* 尾部不足一块的数据也回调（不丢尾） */
   if (out_n > 0 && cb != NULL)
     {
-      ai_voice_ioq_push(s_out, out_n);
+      if(use_aec)box_aec_feed(s_out,s_reference+1002,out_n,cb,arg);
+          else if(background||local)cb(s_out,out_n,arg);else ai_voice_ioq_push(s_out,out_n);
     }
+
+  if(use_aec)box_aec_record_end(cb,arg);
 
   /* ⚠️ 2026-09-16 实时性诊断：录音耗时必须 ≈ 录音时长。
    * 若"实时比"明显小于 1000，说明每块丢了采样（时间轴被压缩），
@@ -1404,7 +1460,7 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
     printf("[Voice] 丢采样 %lu 个（FIFO 溢出；0 = 时间轴完整）\n",
            (unsigned long)(hal_i2s_rx_drop_count() - drop0));
 
-    printf("[Voice] IO 队列: 入队 %lu / 攒批 %lu / 丢块 %lu / 最长等待 %lu ms\n",
+    if(!background&&!local)printf("[Voice] IO 队列: 入队 %lu / 攒批 %lu / 丢块 %lu / 最长等待 %lu ms\n",
            (unsigned long)s_ioq.dbg_pushed,
            (unsigned long)s_ioq.dbg_batched,
            (unsigned long)s_ioq.dbg_dropped,
@@ -1412,6 +1468,8 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
 
     /* ⚠️ 2026-09-16 三修：把"结束方式"和 VAD 门限打出来——"说完自动停"
      * 是否真的生效，一眼可判（固定门限在嘈杂环境下永不触发）。 */
+
+    if(!background&&!local)printf("[Voice] upload requests=%lu\n", (unsigned long)s_ioq.dbg_posts);
 
     printf("[Voice] 结束方式 %s（静音 %d 块 / 门限(均方) %ld / "
            "噪声地板 %ld / 判到人声 %d 块）\n",
@@ -1421,7 +1479,27 @@ int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
 
   /* 队列排空 + IO 线程退出后才算录完（写文件/上传完成顺序不变） */
 
-  ai_voice_ioq_stop();
+  /* RX keeps running during network drain. FIFO overflow after capture
+   * has ended is expected and must not invalidate the completed utterance.
+   */
+  uint32_t capture_dropped = hal_i2s_rx_drop_count() - drop0;
+  if(!background&&!local)ai_voice_ioq_stop();
+
+  /* Duration alone is not speech. Reject silence and isolated clicks.
+   * Raw diagnostic recording (silent_blocks==0) remains unfiltered.
+   */
+  if (silent_blocks > 0 && vad_speech_samples < AI_VOICE_AI_RATE / 5)
+    {
+      printf("[Voice] no effective speech (%lu ms), skip AI\n",
+             (unsigned long)(vad_speech_samples * 1000 / AI_VOICE_AI_RATE));
+      return -ENODATA;
+    }
+
+  if ((!background && !local && (s_ioq.dbg_dropped != 0 || s_ioq.abandoned)) || capture_dropped != 0)
+    {
+      printf("[Voice] incomplete recording, skip AI\n");
+      return -EOVERFLOW;
+    }
 
   return (int)(n16 * 1000 / AI_VOICE_AI_RATE);   /* 录音时长 ms */
 }
@@ -1440,6 +1518,7 @@ int ai_voice_play(FAR const uint8_t *wav, size_t size)
   int data_bytes = 0;
   bool found = false;
   int ret;
+  struct box_voice_tone tone={0};
 
   if (size < 44 || memcmp(wav, "RIFF", 4) != 0)
     {
@@ -1533,6 +1612,7 @@ int ai_voice_play(FAR const uint8_t *wav, size_t size)
                                (int32_t)b * (int32_t)frac) / 3);
               }
 
+            s=box_voice_tone_sample(&tone,s);
             outbuf[n_out++] = s;   /* L */
             outbuf[n_out++] = s;   /* R */
           }
@@ -1614,9 +1694,11 @@ int ai_voice_play_file(FAR const char *wav_path)
   uint32_t data_off = 0;
   uint32_t data_bytes = 0;
   uint32_t sample_rate = 0;   /* 从 fmt chunk 读，TTS=24000（匹配 I2S 24k）*/
+  uint16_t format=0,channels=0,bits=0;
   uint32_t sent = 0;
   FILE *fp;
   int ret;
+  struct box_voice_tone tone={0};
 
   if (wav_path == NULL)
     {
@@ -1631,7 +1713,7 @@ int ai_voice_play_file(FAR const char *wav_path)
       return -errno;
     }
 
-  if (fread(hdr, 1, 12, fp) != 12 || memcmp(hdr, "RIFF", 4) != 0)
+  if (fread(hdr, 1, 12, fp) != 12 || memcmp(hdr, "RIFF", 4) != 0 || memcmp(hdr+8,"WAVE",4)!=0)
     {
       fclose(fp);
       return -EINVAL;
@@ -1653,19 +1735,25 @@ int ai_voice_play_file(FAR const char *wav_path)
         uint32_t csize = (uint32_t)ch[4] | ((uint32_t)ch[5] << 8) |
                          ((uint32_t)ch[6] << 16) | ((uint32_t)ch[7] << 24);
 
-        if (memcmp(ch, "fmt ", 4) == 0 && csize >= 8)
+        if(csize>0x7ffffffeu){fclose(fp);return -EINVAL;}
+        if (memcmp(ch, "fmt ", 4) == 0 && csize >= 16)
           {
-            uint8_t fhdr[8];
+            uint8_t fhdr[16];
 
             /* fmt 数据：audio_format(2)+channels(2)+sample_rate(4) */
-            if (fread(fhdr, 1, 8, fp) == 8)
+            if (fread(fhdr, 1, 16, fp) == 16)
               {
+                format=fhdr[0]|(uint16_t)fhdr[1]<<8;
+                channels=fhdr[2]|(uint16_t)fhdr[3]<<8;
+                bits=fhdr[14]|(uint16_t)fhdr[15]<<8;
                 sample_rate = (uint32_t)fhdr[4] | ((uint32_t)fhdr[5] << 8) |
                               ((uint32_t)fhdr[6] << 16) |
                               ((uint32_t)fhdr[7] << 24);
               }
+            else{fclose(fp);return -EINVAL;}
 
-            fseek(fp, (long)csize - 8 + (csize & 1), SEEK_CUR);
+            long skip=(long)csize-16+(csize&1);
+            if(skip&&fseek(fp,skip,SEEK_CUR)!=0){fclose(fp);return -EIO;}
           }
         else if (memcmp(ch, "data", 4) == 0)
           {
@@ -1675,7 +1763,7 @@ int ai_voice_play_file(FAR const char *wav_path)
           }
         else
           {
-            fseek(fp, (long)csize + (csize & 1), SEEK_CUR);
+            if(fseek(fp, (long)csize + (csize & 1), SEEK_CUR)!=0){fclose(fp);return -EIO;}
           }
       }
     }
@@ -1685,11 +1773,12 @@ int ai_voice_play_file(FAR const char *wav_path)
    * 旧代码假设 16kHz 做 3:2 重采样 → 24k 数据被错位 → 无声/音调错。
    * 16kHz（如旧 WAV/录音）才走 3:2 插值。 */
 
-  if (sample_rate != 24000 && sample_rate != 16000)
-    {
-      printf("[Voice] 播放警告: 未知采样率 %u Hz，按 24k 原样播放\n",
-             (unsigned)sample_rate);
-    }
+  if(format!=1||channels!=1||bits!=16||(sample_rate!=24000&&sample_rate!=16000)){fclose(fp);return -ENOTSUP;}
+  if(!data_bytes){fclose(fp);return -ENODATA;}
+  if(data_bytes&1u){fclose(fp);return -EINVAL;}
+  struct stat info;
+  if(stat(wav_path,&info)<0){int error=-errno;fclose(fp);return error;}
+  if(info.st_size<0||(uint64_t)data_off+data_bytes>(uint64_t)info.st_size){fclose(fp);return -ENODATA;}
 
   printf("[Voice] 播放 %s: %u Hz, %uB data\n",
          wav_path, (unsigned)sample_rate, (unsigned)data_bytes);
@@ -1701,7 +1790,8 @@ int ai_voice_play_file(FAR const char *wav_path)
       return ret;
     }
 
-  fseek(fp, (long)data_off, SEEK_SET);
+  /* The parser is already at the first PCM byte. Keep ordinary cached
+   * WAV reads sequential rather than seeking away from buffered data. */
 
   {
     uint32_t t0 = clock_systime_ticks();
@@ -1718,7 +1808,7 @@ int ai_voice_play_file(FAR const char *wav_path)
       if (g_stream_cancel)
         {
           printf("[Voice] 播放被取消（用户点按停止）\n");
-          break;
+          hal_i2s_write_flush();fclose(fp);return -ECANCELED;
         }
 
       n_in = (data_bytes - sent) / 2;
@@ -1733,9 +1823,11 @@ int ai_voice_play_file(FAR const char *wav_path)
         }
 
       got = fread(in, 2, (size_t)n_in, fp);
-      if (got == 0)
+      if (got != (size_t)n_in)
         {
-          break;
+          int error=ferror(fp)?-EIO:-ENODATA;
+          printf("[Voice] WAV short read got=%lu expected=%d error=%d\n",(unsigned long)got,n_in,error);
+          hal_i2s_write_flush();fclose(fp);return error;
         }
 
       n_in = (int)got;
@@ -1763,6 +1855,7 @@ int ai_voice_play_file(FAR const char *wav_path)
                                  (int32_t)b * (int32_t)frac) / 3);
                 }
 
+              s=box_voice_tone_sample(&tone,s);
               outbuf[n_out++] = s;
               outbuf[n_out++] = s;
             }
@@ -1773,8 +1866,9 @@ int ai_voice_play_file(FAR const char *wav_path)
 
           for (j = 0; j < n_in; j++)
             {
-              outbuf[n_out++] = in[j];
-              outbuf[n_out++] = in[j];
+              int16_t softened=box_voice_tone_sample(&tone,in[j]);
+              outbuf[n_out++] = softened;
+              outbuf[n_out++] = softened;
             }
         }
 
@@ -1839,7 +1933,9 @@ int ai_voice_play_file(FAR const char *wav_path)
 
     /* 全部入队后等 DMA 发完（复用缓冲/换方向前必须 flush） */
 
-    hal_i2s_write_flush();
+    ret=hal_i2s_write_flush();
+    if(ret<0){fclose(fp);return ret;}
+    if(sent!=data_bytes){fclose(fp);return -ENODATA;}
 
     {
       uint32_t elapsed = clock_systime_ticks() - t0;
@@ -1855,7 +1951,8 @@ int ai_voice_play_file(FAR const char *wav_path)
 
       printf("[Voice] 播放耗时=%u ticks (理论≈%u, %s)\n",
              elapsed, expect,
-             elapsed <= expect + expect / 10 ? "实时连续" : "有停顿!");
+             elapsed>=expect-expect/10&&elapsed<=expect+expect/10 ? "实时连续" : "节拍异常!");
+      if(expect>=10&&elapsed<expect-expect/10){fclose(fp);return -EIO;}
     }
   }
 
@@ -1892,12 +1989,14 @@ static size_t   s_sp_hdr_len;
 static uint32_t s_sp_skip;
 static uint32_t s_sp_fmt_size;
 static uint32_t s_sp_rate;
+static struct box_voice_tone s_sp_tone;
 static uint32_t s_sp_data_bytes;
 static uint8_t  s_sp_pcm[SP_PCM_STAGE];
 static size_t   s_sp_pcm_len;
 static uint32_t s_sp_written;      /* 已喂给 I2S 的 PCM 字节 */
 static uint32_t s_sp_recv;         /* 收到的 PCM 字节 */
 static uint32_t s_sp_t0;
+static uint32_t s_sp_wait_t0;
 static int      s_sp_st;
 static bool     s_sp_active;
 
@@ -1962,6 +2061,7 @@ static int sp_flush_pcm(bool fin)
                                  (int32_t)b * (int32_t)frac) / 3);
                 }
 
+              s=box_voice_tone_sample(&s_sp_tone,s);
               outbuf[n_out++] = s;
               outbuf[n_out++] = s;
             }
@@ -1972,11 +2072,17 @@ static int sp_flush_pcm(bool fin)
 
           for (j = 0; j < n_in; j++)
             {
-              outbuf[n_out++] = in[j];
-              outbuf[n_out++] = in[j];
+              int16_t softened=box_voice_tone_sample(&s_sp_tone,in[j]);
+              outbuf[n_out++] = softened;
+              outbuf[n_out++] = softened;
             }
         }
 
+      if(s_sp_written==0){
+        s_sp_t0=clock_systime_ticks();
+        printf("[Voice] first PCM queued delay_ms=%lu profile=local-soft-v1\n",
+               (unsigned long)((s_sp_t0-s_sp_wait_t0)*1000/TICK_PER_SEC));
+      }
       ret = hal_i2s_write_async(outbuf, (uint32_t)n_out * 2);
       if (ret < 0)
         {
@@ -1986,7 +2092,12 @@ static int sp_flush_pcm(bool fin)
           return ret;
         }
 
+      uint32_t before_written=s_sp_written;
       s_sp_written += (uint32_t)n_in * 2;
+      /* At least half a second has entered the bounded TX pipeline. This
+       * distinguishes active playback from waiting for an HTTP stream. */
+      if(before_written<s_sp_rate&&s_sp_written>=s_sp_rate)
+        printf("[Voice] playback active pcm_bytes=%lu rate=%lu\n",(unsigned long)s_sp_written,(unsigned long)s_sp_rate);
       off += n_in * 2;
     }
 
@@ -2136,6 +2247,7 @@ int ai_voice_stream_play_begin(void)
 {
   int ret;
 
+  s_sp_tone=(struct box_voice_tone){0};
   s_sp_active = false;
   s_sp_st = SP_RIFF;
   s_sp_hdr_len = 0;
@@ -2155,7 +2267,7 @@ int ai_voice_stream_play_begin(void)
       return ret;
     }
 
-  s_sp_t0 = clock_systime_ticks();
+  s_sp_wait_t0 = s_sp_t0 = clock_systime_ticks();
   s_sp_active = true;
   return 0;
 }
@@ -2248,6 +2360,8 @@ int ai_voice_stream_play_end(void)
       ret = sp_flush_pcm(true);
     }
 
+  if(!g_stream_cancel && (s_sp_st!=SP_DATA || !s_sp_written || s_sp_pcm_len ||
+      (s_sp_data_bytes!=UINT32_MAX && s_sp_written!=s_sp_data_bytes)))ret=-ENODATA;
   s_sp_pcm_len = 0;
   s_sp_hdr_len = 0;
   s_sp_active = false;
@@ -2416,4 +2530,23 @@ int ai_voice_i2c_test(void)
 
   printf("[I2C] 结果: %d/3 次读操作有应答\n", pass);
   return pass >= 2 ? 0 : -ENODEV;
+}
+
+int ai_voice_stream_record(ai_voice_stream_cb_t cb,void *arg,int seconds,int silence)
+{return voice_record_impl(cb,arg,seconds,silence,false,false);}
+int ai_voice_background_record(ai_voice_stream_cb_t cb,void *arg,int seconds,int silence)
+{return voice_record_impl(cb,arg,seconds,silence,true,false);}
+
+/* Callback is a bounded in-memory copy: no upload thread or I/O queue. */
+int ai_voice_stream_record_local(ai_voice_stream_cb_t cb,void *arg,int seconds,int silence)
+{return voice_record_impl(cb,arg,seconds,silence,false,true);}
+
+int ai_voice_local_tone_benchmark(void)
+{
+ struct box_voice_tone tone={0};volatile int16_t result=0;
+ clock_t began=clock_systime_ticks();
+ for(unsigned i=0;i<240000;i++)result=box_voice_tone_sample(&tone,(int16_t)((i*997u)%24000u-12000));
+ unsigned ms=(unsigned)((clock_systime_ticks()-began)*1000/TICK_PER_SEC);
+ printf("[VoiceTone] profile=local-soft-v1 samples=240000 audio_ms=10000 cpu_ms=%u sink=%d\n",ms,result);
+ return ms<1000?0:-ETIMEDOUT;
 }

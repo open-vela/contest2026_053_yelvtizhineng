@@ -1,0 +1,26 @@
+见壤 · 植小伴 — 叶绿体智能，2026
+
+Project-authored contributions are provided under Apache License 2.0.
+Existing upstream copyright notices remain in the source files.
+
+This application runs on openvela / Apache NuttX. The BOX DVP reference
+comes from yang-asjdsad/nuttx and yang-asjdsad/nuttx-apps, feat/idf-dvp-port,
+at the exact commits listed in patches/box/baselines.json.
+
+Third-party notices:
+- Espressif ESP-SR v2.0.0 MultiNet libraries/models and headers:
+  app/plant-companion/components/box_phrase/vendor/ESP_SR_LICENSE
+  https://github.com/espressif/esp-sr/tree/v2.0.0
+- Espressif ESP-DSP: vendor/ESP_DSP_LICENSE in that same directory.
+- newlib: vendor/NEWLIB_LICENSE and vendor/LICENSE.newlib.
+- cJSON: MIT copyright/license embedded in its distributed source.
+- Noto Sans CJK / Noto Sans SC subset fonts: Google and Noto contributors,
+  SIL Open Font License 1.1; licenses/Noto-SIL-OFL-1.1.txt.
+- OpenMoji emoji subset font derivatives: OpenMoji contributors,
+  https://openmoji.org/ ; Creative Commons Attribution-ShareAlike 4.0;
+  licenses/OpenMoji-CC-BY-SA-4.0.txt. Converted LVGL glyph data in
+  ui/assets/fonts/lv_font_emoji_*.c retains that license.
+- NuttX aggregated component notices: licenses/NuttX-LICENSE.txt.
+
+Generated UI artwork is part of this project's application assets.
+Third-party firmware dependencies are not reclassified as project-authored code.

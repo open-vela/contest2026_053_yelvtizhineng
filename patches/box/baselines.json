@@ -1,0 +1,356 @@
+{
+  "baselines": {
+    "nuttx": {
+      "repository": "https://gitee.com/yang-asjdsad/nuttx.git",
+      "revision": "287b4b51aea0b428a5bcbc0c8835f5bd692e9c19"
+    },
+    "apps": {
+      "repository": "https://gitee.com/yang-asjdsad/nuttx-apps.git",
+      "revision": "8986d35eb230779a28da793a9220148a8cb18072"
+    },
+    "esp-hal": {
+      "repository": "https://github.com/espressif/esp-hal-3rdparty",
+      "revision": "9fc713a95b1ff150dd0b0647e465d3c624056bb1"
+    }
+  },
+  "files": [
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/common/xtensa_assert.c",
+      "before_sha256": "10c804bebde28bee066756f0c1271cde4d7c80b9a3b2ee60d74fb41454e70bbd",
+      "after_sha256": "46824d795f83869b03dfe10148794150206a36b80021dd3c545f676efcdf5fb9"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/Make.defs",
+      "before_sha256": "55d409486e3aafa3bd0ecb14d3747d04a9cd9bab0c900b513f5e08edf2a68a82",
+      "after_sha256": "06fb932994abaf3d352759a80c7c08ece1446447c09dadcc2a83c0da488ce81e"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_allocateheap.c",
+      "before_sha256": "e21a58db9ded24f1e88320f7776c0794c71c40a67ac428580c5b6b111b497431",
+      "after_sha256": "862fda2aa5c75b2b910e60258128fbb0ad81ca2e53dd41ee7f00881cb36cdcef"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_cam_dvp.c",
+      "before_sha256": "6c28272da0a35a959fa303ce9b214d5c7ab79076fd88471362864216332a93a0",
+      "after_sha256": "b79aa4550e6b3397a885dcde129bdf3d2c47ac743240700f1b247192cca23426"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_cam_dvp.h",
+      "before_sha256": "6aa40a718003b2e55125baa2184c57f217e26979437710a749424d1194a9a33f",
+      "after_sha256": "519b8b25e542984c709cff3ec03b8f016ff14842a4eb8f4ff1cafc0506c14039"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_cpustart.c",
+      "before_sha256": "5673036374bdae8fbf7dc40c3397089c08d3f9fae49a70772fd3775e8fc808b6",
+      "after_sha256": "47e7cdcf2226cadc2e2918b76af51feb20d503f7d2c310024b34c94bcb466edb"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_dma.c",
+      "before_sha256": "8ac4aee085ca6dc78212682ad0925254c32fb339c2080c4e5f4a40a61c3f13f9",
+      "after_sha256": "fe9f00b40d2f14821f4893492d3483f801a8a6a3003bf44851cb539d339dc8ed"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_dma.h",
+      "before_sha256": "4659221a2a503d15f5eea2f1b0855719303310be527041af945550e4c6fec6c7",
+      "after_sha256": "6f6171c002881ebad83b252a0d691da23ceaf12fd3a94b774db6fc04b3da71fb"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_i2c.c",
+      "before_sha256": "086edb7fc772ba916850a08cdb7334705b006677ba23953707cc4d2a7476d774",
+      "after_sha256": "50de94a6a2b03f428e3be32767ba0775ba6ea2797d4bc06ecbfb80168f0cb95f"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_i2s.c",
+      "before_sha256": "f1e28226186538368c50208e613784910aaf04e14c5370eaa0bc2eff5b32163f",
+      "after_sha256": "65ac89030482483aed79c2bbc5c57e38353becdcd0545d2cea83473657ca4118"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_i2s.h",
+      "before_sha256": "93d0ceb2b80d58e8f5b3caa0333e2a2cbaf6f9f709e390e22ddf0400bb68613b",
+      "after_sha256": "6834d45f3f99974458eb6ccaaa26e5859602cef5b83959c51a41856d80afa7ef"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_idle.c",
+      "before_sha256": "f2471aa0775418b6300a57fd34e214f592b79320163c4464e1b425699489c762",
+      "after_sha256": "afc95a14d38d69c942d531c6d0f1e98d257b6df60424ab7ec8bcebd69be3e560"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_lowputc.c",
+      "before_sha256": "40cffc3e3b22170d50bffd123e0bc67700b0b53a63abb72310918abf4abb666c",
+      "after_sha256": "525b4be9c39ac759054162badee5fd9b932b013e4c1da85f297f73f5686f2613"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_lowputc.h",
+      "before_sha256": "06624467bf8c8d5ffbf47df5f19545b36f29549471723e50999a67ef5400da88",
+      "after_sha256": "61207019ac1de971585ac8fa88e37c315472e8595e112e76ae63f1114a999a26"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_panic_dump.c",
+      "before_sha256": "0f2716e369eb5eb28a2296596a0a55926de91cf600af133db0afcbae87af1807",
+      "after_sha256": "309d31fa6e2d29885b72ca174d21c9ad26a65ae679a82ed1d2d33ac3d1b834b0"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_psram_quad.c",
+      "before_sha256": "84466a016f3716c404d104fd9f7a308105d0ff03b4f5910ff4d96e5a2017f15e",
+      "after_sha256": "1a56a1e7fca0ca95e8a772cff6fce9381ec291d81c152fec7c9e4d36d99f40f8"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_sdmmc.c",
+      "before_sha256": "4fd8c048ba27e532062c0228196df6f9a9f7b4953e3a90be8fa19ad0e11f137a",
+      "after_sha256": "17890800d138be24fd3878055df6c67277b416894d0a04e61f9b97653d569a39"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_spi.c",
+      "before_sha256": "669b15e37e7021ad2b4b58302ff5c335681f00f4935fd266de3279f9287a444a",
+      "after_sha256": "33956df88019a63d49484bc2be13250b8a2e7c5eb038d7efd1c75657e3cbe771"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_spiflash.c",
+      "before_sha256": "6a330295da91917536d1deccca3f4712282193a2330100c6ad89f73a2fafd197",
+      "after_sha256": "a389ec9a0ca617fc0383d38d4c8af8384d607737ca95a91f39ae66f4941d9f46"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_spiflash_mtd.c",
+      "before_sha256": "e7206f7cbb55248cae71433ae9754a9230adeb3a806d7691a4a77945b641de55",
+      "after_sha256": "25359639b3024b35094cfb027eed355d983304d2229992cda00171b5b08a290d"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_spiram.c",
+      "before_sha256": "a964101b539a64245e97ea5db5eec8b98f932290ac32287ef6ea1dfe66ceb573",
+      "after_sha256": "65e8cd43e25b84b881a8c1405e7d34a89334be327d4add03c0bf77b50006d467"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_spiram.h",
+      "before_sha256": "1ab64339601235d74d0b15e5683fe2aa251e679014556f81219f02fe50a1b837",
+      "after_sha256": "839ece1824e21073199543095d79b86e5da02e6653c289c261271965a30ee085"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_start.c",
+      "before_sha256": "9a86c2d9585e8bf9e913c3d2ba3e1a7e8f9e08fa6575e65aa462c59b5a74ef01",
+      "after_sha256": "097b75d290bebd1462fd0b4b569ca0bdc087ce4118c4fd17a58b927f64c1340f"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_usbserial.c",
+      "before_sha256": "3f367db3ba7aa0554b953245afab54ec2327b7088a258ab524ece82a9c8312e7",
+      "after_sha256": "90168454fb38b6dc7cc02b7f7dd55a24b7b2af55b39f01a5c008bc82e1c84562"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_wifi_adapter.c",
+      "before_sha256": "90f66891b5f6160d2e09099239fd871144508f4d04e73d6fc7d58dafc24814cf",
+      "after_sha256": "2145739df082cf9a84d649324cd363231f50b80877960bfe3aa102c8f98d95b9"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_wifi_utils.c",
+      "before_sha256": "4666de7a314f0958ef5276388baa769f15dfdc7de1736f26c2616a1f9da6b4d3",
+      "after_sha256": "0f9af8b09b39ad06eb9e5667755691fad91d6e7d2be23d40363a2e63ca66d83f"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/esp32s3_wlan.c",
+      "before_sha256": "6905b1bcfccb99435999f0a2f8d47594538097ec0a90c66b1fe402586414b28b",
+      "after_sha256": "b4db5b2c2c864b8235b67bc4a2fc656ff4c7f8a006847d50a6449dc13cc0f1fd"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/hal_i2s.c",
+      "before_sha256": "9d5221de415191385a0e40616d73312bb90e055747740995c62ef65d1184ff59",
+      "after_sha256": "02aa5e7442cc8680c35d50f3984ece17a173d56ef05752016fce344018dab121"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/hal_i2s.h",
+      "before_sha256": "552d9581f8d458b669d4df23fd98fa2053b6071de1a263fc3fdfe06c462e19f0",
+      "after_sha256": "0dcba00e209b8aa507bf69cbbaff024e20f55774b5423abdd003fa22fc610aad"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/hal_i2s_box_tdm.h",
+      "before_sha256": null,
+      "after_sha256": "deed2b9b2a4e4d5fc34515fccfc94cd4d3f7baf56d3ad32365ca2777989bfbe0"
+    },
+    {
+      "tree": "nuttx",
+      "path": "arch/xtensa/src/esp32s3/hal_i2s_reference.h",
+      "before_sha256": null,
+      "after_sha256": "397a11d994063cb476f4a29b012dceef6616de78a7e06489f791f2a82d78bf4c"
+    },
+    {
+      "tree": "nuttx",
+      "path": "boards/xtensa/esp32s3/common/scripts/legacy_sections.ld",
+      "before_sha256": "162e226f01d21e2798ed3b417c8406dbdee99811ecb2fb214bcab83f574d9d91",
+      "after_sha256": "2796860135fca855deb6b014a288b1fc4b5e8ea5b0804aef45ab9745077d82aa"
+    },
+    {
+      "tree": "nuttx",
+      "path": "boards/xtensa/esp32s3/esp32s3-box/src/esp32s3_board_camera.c",
+      "before_sha256": "374e75b13de7102595c17ecb5e0815d4d48e504c6bd5a659bef3917b57f088b7",
+      "after_sha256": "92af9afa6c1614a7aaf3b23696599a3fe8edf91b30500f5cf2a8031656a0de1a"
+    },
+    {
+      "tree": "nuttx",
+      "path": "boards/xtensa/esp32s3/esp32s3-box/src/esp32s3_board_lcd_st7789.c",
+      "before_sha256": "66f9aaedd0c298de8edc3d6f47899b610a2ae253385c8c74ccd91d9da9516138",
+      "after_sha256": "11eec237285f396aff462ef50db5210e8e0f0a1f56ab4b62ecd5e2f57cb0e409"
+    },
+    {
+      "tree": "nuttx",
+      "path": "boards/xtensa/esp32s3/esp32s3-box/src/esp32s3_board_touchsceen_gt911.c",
+      "before_sha256": "f5bb1cd19e6fc62757250e8fef7119dda8b5edf9630158a90ac29a772eb31939",
+      "after_sha256": "4947457f63dacb4dcb90c2d49efbe6406df92f853670645dcbd7d2dcb86617f5"
+    },
+    {
+      "tree": "nuttx",
+      "path": "boards/xtensa/esp32s3/esp32s3-box/src/esp32s3_bringup.c",
+      "before_sha256": "2166b8a56028c1e1ebce6e4877b47cecdb7e8d3c5c35e11149e4ee2ba00dbe2a",
+      "after_sha256": "9be72058d161cd5cf42bc4f7143da8dc0a24946dd6dc624b2985a13bc078b391"
+    },
+    {
+      "tree": "nuttx",
+      "path": "drivers/lcd/ili9341.c",
+      "before_sha256": "120b291fe164285e7200076997d565b7b5321849c4d1179ce7b42bc6769428f3",
+      "after_sha256": "9c785fc563fe103091e40b639c7acf246031492c3d1c723993d41cdfd6152a97"
+    },
+    {
+      "tree": "nuttx",
+      "path": "drivers/lcd/st7789.c",
+      "before_sha256": "7729ebf24a450406dff04b5ad358af971e682758bcf16beb06f1b27d3f011193",
+      "after_sha256": "c304c10e2593854304e8e91641f9a1f3ce85e88d899ec1d9c5a0b75c93e13459"
+    },
+    {
+      "tree": "nuttx",
+      "path": "drivers/serial/serial.c",
+      "before_sha256": "72456dc93740ab265e022bd14eddd41314c77924fc25083027d2617bb61f04a9",
+      "after_sha256": "c711fb2b3a5f19a9369fa9d747006054282b381e59f635c3fc2acc2b94a48d87"
+    },
+    {
+      "tree": "nuttx",
+      "path": "fs/fat/fs_fat32.c",
+      "before_sha256": "b0535ba0063f21df481dd63d7acb119443e0579a6bcb4cbc05ce7b2bf48214f3",
+      "after_sha256": "cdd38d5db83155abc1055cfafce451c8aab735c7033c5ec43b652601b533a358"
+    },
+    {
+      "tree": "nuttx",
+      "path": "fs/fat/fs_fat32.h",
+      "before_sha256": "abd38bc82efe7df1b8832201354c52c560ff6a61df15fe7c464dc61f601f1cc1",
+      "after_sha256": "752d7bec2ba228a2bc4d673eed51d296cbc3fa35954b05aa77a4faf067bfc634"
+    },
+    {
+      "tree": "nuttx",
+      "path": "fs/fat/fs_fat32attrib.c",
+      "before_sha256": "73ca278e7c567814380e311b9fcd8aa0ac8444d3f2e0ef265a232ca94b087de2",
+      "after_sha256": "94a119d0a5211fdc97f614e467142b5d85d8072bb7787ff12fd745860c6d1715"
+    },
+    {
+      "tree": "nuttx",
+      "path": "fs/fat/fs_fat32util.c",
+      "before_sha256": "b13ce7aedda3bd4b93d0ecd405ecfde8036fc9b52cc21bf25000c31a3dc766c5",
+      "after_sha256": "7268bb8fb9b4fca8773024bfdd63bcd3430421b8d24e5cf792237a9ddc02a18f"
+    },
+    {
+      "tree": "nuttx",
+      "path": "fs/littlefs/Make.defs",
+      "before_sha256": "5cba3d15ffbb18efabf76146a7243ffb7f3e3e3fa24fd4da0f6a709b80f4797e",
+      "after_sha256": "817012be81b7d719263717bc3c518af7b4873919be285a147383fe882db34296"
+    },
+    {
+      "tree": "nuttx",
+      "path": "include/nuttx/lcd/ili9341.h",
+      "before_sha256": "53a91fa40b62d8709db1684fa0bf5962e800b340500428dd909fa9cd58652cec",
+      "after_sha256": "775e31f1e3e852fdfd0b300ce83ac10f7bde213a69d79eda40eae6b704e4aa9d"
+    },
+    {
+      "tree": "nuttx",
+      "path": "include/nuttx/lcd/lcd_dev.h",
+      "before_sha256": "bb797817b9fa4499caac3ab3241374c782d74c4f0ee2ab9b9bb549895935e731",
+      "after_sha256": "d5058a314499a31cb8132feff2770497fe14d77e847bc6735fb26dc7bd3bcf8b"
+    },
+    {
+      "tree": "nuttx",
+      "path": "sched/init/nx_smpstart.c",
+      "before_sha256": "ef6012e23c5e3322526dc9edcb150cc259e13018086257f4b901cfc02096d672",
+      "after_sha256": "f251ffc0cb9cdf231fcda00a0d31380cd8d734734474918263c472c3eff80e1a"
+    },
+    {
+      "tree": "nuttx",
+      "path": "sched/init/nx_start.c",
+      "before_sha256": "2b7179bf54c3fd0b5a1ecaa0a40a650fe663135da0635485c13cf6ca315fb1b8",
+      "after_sha256": "7abdbb181032bac50d2414ae2e7d1f50e76d42c433da340c572fe337d6cd9e76"
+    },
+    {
+      "tree": "nuttx",
+      "path": "sched/irq/irq_initialize.c",
+      "before_sha256": "ebbbf67aa03e884618acdbd9e056ee8de0f2047a2d330b72854c0d20e3e50387",
+      "after_sha256": "9c300807d3c1589659ae2f55a00ef03fa6dc1956ae1ce3a3c98b63be55969b22"
+    },
+    {
+      "tree": "nuttx",
+      "path": "sched/misc/assert.c",
+      "before_sha256": "e41cee93a047caf590950259337c2d9e4eb2f6f3f3c5ac715605d65875974bfd",
+      "after_sha256": "8fa471132c20391ed9466d8d7eb968d7430a97eccde130b10b7cb0378010b6f4"
+    },
+    {
+      "tree": "nuttx",
+      "path": "sched/semaphore/sem_wait.c",
+      "before_sha256": "5b57d52ee66763198de0dcf76d3550631523ad6cf524fcb9ddb5c42589c0aded",
+      "after_sha256": "c95728cea1e40694a66c3e0113427fa8a89d34abeaedde032d3877d7695dec4d"
+    },
+    {
+      "tree": "apps",
+      "path": "graphics/lvgl/Make.defs",
+      "before_sha256": "22e3f37eeb60fb53dac35d6282fd827a7311d30fce8344a9cef1095cffce7393",
+      "after_sha256": "7188d09cf15436d8a87735089c9d370413240662997e8557076c6aadffcff184"
+    },
+    {
+      "tree": "apps",
+      "path": "graphics/lvgl/Makefile",
+      "before_sha256": "b96c3e2194876c8f9b024e02a34274633d076bc40f58740383ff60917942262a",
+      "after_sha256": "71545d256b5288c82e9e4fc4209a303d1d218d7bd549d719bbace323c2235675"
+    },
+    {
+      "tree": "apps",
+      "path": "netutils/cjson/Makefile",
+      "before_sha256": "58c38436b0f5b71b18115b27120fbc9765ea807177cdcd8312d3f796edf6e5a4",
+      "after_sha256": "a5c86b80032db90e2d1cb5292e1512d196a19137145c9c70c4d5e7c091145157"
+    },
+    {
+      "tree": "apps",
+      "path": "netutils/mqttc/Makefile",
+      "before_sha256": "1c40cc56a31ca7d895089e99be57bf87d5c89e284f9fdbffe8ed70ad79c9f08a",
+      "after_sha256": "bd7db00ddef6d122a8b0a4f34dc34b65bdd70b4ebf0d4ac49899d7618520f563"
+    },
+    {
+      "tree": "apps",
+      "path": "system/libuv/Makefile",
+      "before_sha256": "53453a3e14c224fe5af0ecfa293ceb9221542bb1766d79149da6baf247d1fe74",
+      "after_sha256": "cbf98ead37c64a2161953b2e6e30def7c9c378c4c7c62d0e6b7518836dbad767"
+    }
+  ],
+  "note": "Exact reproduction references; separate from the official contest branch. Public upstream integration is not claimed.",
+  "hash_encoding": "UTF-8 source bytes with CRLF normalized to LF"
+}

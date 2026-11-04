@@ -23,7 +23,7 @@ extern "C" {
 #define MASE_MIC_DISTANCE 65          // According to physical design of mic-array
 
 /**
- * @brief Sets mic-array type, currently 2-mic line array and 3-mic circular array 
+ * @brief Sets mic-array type, currently 2-mic line array and 3-mic circular array
  * are supported.
  */
 typedef enum {
@@ -55,7 +55,7 @@ typedef void* mase_handle_t;
  * @param operating_mode	'0' for normal mode and '1' for wake-up enhanced mode.
  *
  * @param filter_strength	Strengh of the mic-array speech enhancement, must be 0, 1, 2 or 3.
- * 
+ *
  * @return
  *         - NULL: Create failed
  *         - Others: An instance of MASE

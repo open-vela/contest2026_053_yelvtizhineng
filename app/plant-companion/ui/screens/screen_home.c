@@ -1,662 +1,158 @@
-/****************************************************************************
- * apps/plant-companion/ui/screens/screen_home.c
- *
- * (1) 主界面 —— 对齐《嵌入式 UI V3 大字版》
- *   问候行 28 + 植物卡 76 + 4 传感器 60 + AI 提示 32 + 3 快捷键 56 = 252
- *   + 底部 Tab 52 = 304（屏 320，留 16 余量）
- *
- * 字号：12（辅助标签）/ 16（正文）/ 19（植物名、数值）/ 25（未用）
- ****************************************************************************/
-
-#include <lvgl/lvgl.h>
-#include <stdio.h>
-#include <string.h>
-
+#include <nuttx/config.h>
 #include "screen_home.h"
 #include "screen_camera.h"
 #include "screen_voice.h"
+#include "screen_wifi.h"
+#include "../../ota/ota.h"
 #include "../ui_app.h"
-#include "../theme/theme_plant.h"
-#include "../widgets/widget_bottomnav.h"
-#include "../../services/plant_state.h"
-#include "../../services/record_service.h"
-
-#ifdef CONFIG_ESP32S3_WIFI
-#  include "screen_ota.h"
-#endif
-
-#ifdef CONFIG_PLANT_WIFI_MANAGER
-#  include "screen_wifi.h"
-#endif
-
-/* 图标（UTF-8 字节，避免源码里嵌 4 字节字符导致工具链不一致） */
-
-#define IC_SUN      "\xE2\x98\x80"              /* U+2600  */
-#define IC_LEAF     "\xF0\x9F\x8C\xBF"          /* U+1F33F */
-#define IC_WATER    "\xF0\x9F\x92\xA7"          /* U+1F4A7 */
-#define IC_TEMP     "\xF0\x9F\x8C\xA1"          /* U+1F321 */
-#define IC_TUBE     "\xF0\x9F\xA7\xAA"          /* U+1F9EA */
-#define IC_BULB     "\xF0\x9F\x92\xA1"          /* U+1F4A1 */
-#define IC_CAMERA   "\xF0\x9F\x93\xB7"          /* U+1F4F7 */
-#define IC_MIC      "\xF0\x9F\x8E\xA4"          /* U+1F3A4 */
-#define IC_HAPPY    "\xF0\x9F\x98\x8A"          /* U+1F60A */
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-static lv_obj_t *s_arc;
-static lv_obj_t *s_arc_val;
-static lv_obj_t *s_v_moist;
-static lv_obj_t *s_v_temp;
-static lv_obj_t *s_v_ph;
-static lv_obj_t *s_v_ec;
-static lv_obj_t *s_hint;
-static lv_obj_t *s_name;
-static lv_obj_t *s_meta;
-static lv_obj_t *s_day;
-static lv_obj_t *s_st_time;         /* 顶栏：时间 "HH:MM" */
-static lv_obj_t *s_st_date;         /* 顶栏：日期 "M月D日" */
-static lv_obj_t *s_st_net;          /* 顶栏：网络状态 */
-static lv_obj_t *s_st_bat;          /* 顶栏：电池电量 */
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/* 传感器小格：图标 + 大数值 + 标签 */
-
-static lv_obj_t *home_cell(lv_obj_t *parent, const char *icon,
-                           const char *val, const char *label,
-                           uint32_t val_color)
-{
-  lv_obj_t *cell = lv_obj_create(parent);
-  lv_obj_t *l;
-
-  lv_obj_remove_style_all(cell);
-  lv_obj_set_height(cell, 60);
-  lv_obj_set_flex_grow(cell, 1);
-  lv_obj_set_style_bg_color(cell, lv_color_hex(0xffffff), 0);
-  lv_obj_set_style_bg_opa(cell, LV_OPA_90, 0);
-  lv_obj_set_style_radius(cell, 12, 0);
-  lv_obj_set_style_pad_all(cell, 2, 0);
-  lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_flex_align(cell, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
-                        LV_FLEX_ALIGN_CENTER);
-
-  l = lv_label_create(cell);
-  lv_label_set_text(l, icon);
-  lv_obj_set_style_text_font(l, TP_ICON_S, 0);
-
-  l = lv_label_create(cell);
-  lv_label_set_text(l, val);
-  lv_obj_set_style_text_font(l, TP_FONT_TITLE, 0);
-  lv_obj_set_style_text_color(l, lv_color_hex(val_color), 0);
-
-  l = lv_label_create(cell);
-  lv_label_set_text(l, label);
-  lv_obj_set_style_text_font(l, TP_FONT_CAPTION, 0);
-  lv_obj_set_style_text_color(l, lv_color_hex(TP_CLR_TEXT_SUB), 0);
-
-  return cell;
+#include "../widgets/companion_ui.h"
+#include "../../services/voice_service.h"
+#include "../../services/handsfree_service.h"
+#include "../../services/ai_service.h"
+#include "../../components/voice_agent/voice_agent.h"
+#include "../../components/system_monitor/user_preferences.h"
+#include <stdio.h>
+#include <string.h>
+static lv_obj_t *status,*clock_label,*menu_volume_value,*menu_volume_hint;
+static void photo(lv_event_t *e){
+ (void)e;if(voice_service_busy()||ai_service_busy())return;
+ ui_app_push_screen(screen_camera_create());
 }
-
-static lv_obj_t *home_cell_value(lv_obj_t *cell)
-{
-  return (lv_obj_t *)lv_obj_get_child(cell, 1);
+static void voice(lv_event_t *e){(void)e;ui_app_push_screen(screen_voice_create());}
+static void data(lv_event_t *e){(void)e;ui_app_nav_to(PLANT_TAB_DATA);}
+static void menu_nav(lv_event_t *e){
+ int tab=(int)(intptr_t)lv_event_get_user_data(e);ui_app_pop_screen();ui_app_nav_to(tab);
 }
-
-/* 快捷入口：拍照 → (2) 拍照页；说话 → (6) 语音页 */
-
-static void home_on_camera(lv_event_t *e)
-{
-  (void)e;
-  ui_app_push_screen(screen_camera_create());
+static void wifi(lv_event_t *e){(void)e;ui_app_push_screen(screen_wifi_create());}
+static void maintenance(lv_event_t *e){
+ (void)e;lv_obj_t *p=cu_root();char version[64];
+ cu_button(p,12,6,56,48,"返回",16,0xe4edda,cu_back,NULL);
+ cu_label(p,90,14,300,"设备信息",22,CU_INK);
+ cu_label(p,24,80,430,"植小伴 BOX",30,CU_INK);
+ snprintf(version,sizeof(version),"固件版本 %d.%d.%d",OTA_FW_VERSION_MAJOR,OTA_FW_VERSION_MINOR,OTA_FW_VERSION_PATCH);
+ cu_label(p,24,132,430,version,22,CU_INK);
+ cu_label(p,24,181,430,"480 × 320 彩屏",22,CU_INK);
+ cu_label(p,24,244,432,"当前固件暂不支持在线升级。\n维护时请由大人协助。",16,0x667d66);
+ ui_app_push_screen(p);
 }
-
-static void home_on_voice(lv_event_t *e)
-{
-  (void)e;
-  ui_app_push_screen(screen_voice_create());
+static void volume(lv_event_t *e){
+ int d=(int)(intptr_t)lv_event_get_user_data(e);
+ int v=voice_agent_get_dac_volume()+d;if(v<0)v=0;if(v>255)v=255;
+ if(voice_agent_set_dac_volume(v)==0){
+  plant_pref_save_int("/mnt/sd/plant_volume.cfg",v);
+  if(menu_volume_value)lv_label_set_text_fmt(menu_volume_value,"%d%%",(v*100+127)/255);
+  if(menu_volume_hint)lv_label_set_text(menu_volume_hint,d<0?"已调低":"已调高");
+ }else if(menu_volume_hint)lv_label_set_text(menu_volume_hint,"请再试一次");
 }
-
-/* 浇水：本期无执行器（预留），按"记录一次浇水"处理 —— 写一条日记 +
- * 提示条确认，让用户看到真实反馈。 */
-
-static void home_on_water(lv_event_t *e)
-{
-  struct record_diary_s d;
-  (void)e;
-
-  memset(&d, 0, sizeof(d));
-  d.color = 0x3b82f6;
-  d.day_offset = 0;
-  snprintf(d.title, sizeof(d.title), "浇了200ml水");
-  snprintf(d.detail, sizeof(d.detail), "手动记录");
-
-  record_diary_add(&d);
-  record_diary_save();
-
-  if (s_hint != NULL)
-    {
-      lv_label_set_text(s_hint, IC_WATER " 已记下这次浇水，日记里能看到啦");
-    }
+static void menu_deleted(lv_event_t *e){(void)e;menu_volume_value=NULL;menu_volume_hint=NULL;}
+static lv_obj_t *menu_shape(lv_obj_t *p,int x,int y,int w,int h,uint32_t color,int radius){
+ lv_obj_t *o=cu_panel(p,x,y,w,h,color,radius);lv_obj_remove_flag(o,LV_OBJ_FLAG_CLICKABLE);return o;
 }
-
-#ifdef CONFIG_ESP32S3_WIFI
-static void home_on_ota(lv_event_t *e)
-{
-  (void)e;
-  ui_app_push_screen(screen_ota_create(false));
+static void menu_line(lv_obj_t *p,const lv_point_precise_t *points,int n,uint32_t color){
+ lv_obj_t *o=lv_line_create(p);lv_line_set_points(o,points,n);
+ lv_obj_set_style_line_color(o,lv_color_hex(color),0);lv_obj_set_style_line_width(o,2,0);
+ lv_obj_set_style_line_rounded(o,true,0);lv_obj_remove_flag(o,LV_OBJ_FLAG_CLICKABLE);
 }
-#endif
-
-#ifdef CONFIG_PLANT_WIFI_MANAGER
-/* 网络设置入口：扫 SSID / 自己输密码连接（换环境不用重刷固件） */
-
-static void home_on_wifi(lv_event_t *e)
-{
-  (void)e;
-  ui_app_push_screen(screen_wifi_create());
+static void menu_icon(lv_obj_t *card,int kind){
+ static const uint32_t bg[]={0xe6efd2,0xf9e8d6,0xe1efec,0xe5eaf5};
+ static const uint32_t ink[]={0x5f8a3f,0xb07c47,0x4a8d7a,0x647eaa};
+ static const lv_point_precise_t task[]={{9,8},{7,8},{7,30},{28,30},{28,8},{25,8}};
+ static const lv_point_precise_t tick[]={{11,19},{15,23},{24,14}};
+ static const lv_point_precise_t book[]={{5,7},{17,10},{29,7},{29,28},{17,31},{5,28},{5,7}};
+ static const lv_point_precise_t spine[]={{17,10},{17,31}};
+ static const lv_point_precise_t wifi_outer[]={{3,13},{8,9},{13,7},{19,7},{24,9},{29,13}};
+ static const lv_point_precise_t wifi_inner[]={{8,18},{12,15},{16,14},{20,15},{24,18}};
+ static const lv_point_precise_t wifi_tip[]={{13,23},{16,22},{19,23}};
+ lv_obj_t *chip=menu_shape(card,12,18,36,36,bg[kind],12);
+ if(kind==0){
+  menu_line(chip,task,6,ink[kind]);menu_line(chip,tick,3,ink[kind]);
+  lv_obj_t *clip=menu_shape(chip,11,4,13,7,bg[kind],2);
+  lv_obj_set_style_border_color(clip,lv_color_hex(ink[kind]),0);lv_obj_set_style_border_width(clip,2,0);
+ }else if(kind==1){menu_line(chip,book,7,ink[kind]);menu_line(chip,spine,2,ink[kind]);}
+ else if(kind==2){
+  menu_line(chip,wifi_outer,6,ink[kind]);menu_line(chip,wifi_inner,5,ink[kind]);menu_line(chip,wifi_tip,3,ink[kind]);
+  menu_shape(chip,14,27,4,4,ink[kind],2);
+ }else{
+  lv_obj_t *device=menu_shape(chip,8,4,21,29,bg[kind],5);
+  lv_obj_set_style_border_color(device,lv_color_hex(ink[kind]),0);lv_obj_set_style_border_width(device,2,0);
+  menu_shape(chip,12,10,13,14,0xc7d5eb,3);menu_shape(chip,16,27,4,3,ink[kind],2);
+ }
 }
-#endif
-
-/****************************************************************************
- * Public Functions
- ****************************************************************************/
-
-lv_obj_t *screen_home_create(plant_nav_cb_t cb, void *user_data)
-{
-  lv_obj_t *scr = lv_obj_create(lv_screen_active());
-  lv_obj_t *top;
-  lv_obj_t *hero;
-  lv_obj_t *row;
-  lv_obj_t *qa;
-  lv_obj_t *l;
-#if defined(CONFIG_ESP32S3_WIFI) || defined(CONFIG_PLANT_WIFI_MANAGER)
-  lv_obj_t *st_btns;
-#endif
-  struct plant_state_s ps;
-  char buf[64];
-  int i;
-
-  lv_obj_remove_style_all(scr);
-  lv_obj_set_size(scr, 480, 320);
-  lv_obj_remove_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
-  theme_page_bg(scr, TP_CLR_HOME_BG_A, TP_CLR_HOME_BG_B);
-
-  plant_state_get(&ps);
-
-  /* ── 问候行（28） ───────────────────────────────────────────── */
-
-  top = lv_obj_create(scr);
-  lv_obj_remove_style_all(top);
-  lv_obj_set_size(top, 480, 28);
-  lv_obj_set_pos(top, 0, 0);
-  lv_obj_set_style_pad_hor(top, 12, 0);
-  lv_obj_set_style_pad_right(top, 68, 0);   /* 给右上角按钮组留位 */
-  lv_obj_set_style_pad_column(top, 6, 0);
-  lv_obj_set_flex_flow(top, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(top, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
-                        LV_FLEX_ALIGN_CENTER);
-
-  {
-    lv_obj_t *av = lv_obj_create(top);
-
-    lv_obj_remove_style_all(av);
-    lv_obj_set_size(av, 22, 22);
-    lv_obj_set_style_radius(av, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(av, lv_color_hex(0xfbbf24), 0);
-    lv_obj_set_style_bg_opa(av, LV_OPA_COVER, 0);
-
-    l = lv_label_create(av);
-    lv_label_set_text(l, IC_SUN);
-    lv_obj_set_style_text_font(l, TP_ICON_S, 0);
-    lv_obj_center(l);
-  }
-
-  l = lv_label_create(top);
-  lv_label_set_text(l, "早安小绿");
-  lv_obj_set_style_text_font(l, TP_FONT_BODY, 0);
-  lv_obj_set_style_text_color(l, lv_color_hex(TP_CLR_GREEN_DEEP), 0);
-
-  s_day = lv_label_create(top);
-  snprintf(buf, sizeof(buf), "第%d天", ps.plant_day > 0 ? ps.plant_day : 1);
-  lv_label_set_text(s_day, buf);
-  lv_obj_set_style_text_font(s_day, TP_FONT_CAPTION, 0);
-  lv_obj_set_style_text_color(s_day, lv_color_hex(0x65a30d), 0);
-
-  {
-    lv_obj_t *sp = lv_obj_create(top);
-
-    lv_obj_remove_style_all(sp);
-    lv_obj_set_size(sp, 4, 4);
-    lv_obj_set_flex_grow(sp, 1);
-  }
-
-  /* 顶栏状态（右）：时间 / 日期 / 网络 / 电量。
-
-   * 全部真实值，由 screen_home_set_status() 刷新：时间来自服务器校时后
-   * 的本地走时，网络来自 wifi_manager_is_connected()，电量来自电池 ADC。
-   * 未取到就显示 "--" —— 不拿假值占位。
-   * 原「☀ 26°」天气丸是写死的假数据，已删除（真实温度见下方温度卡）。 */
-
-  s_st_time = lv_label_create(top);
-  lv_label_set_text(s_st_time, "--:--");
-  lv_obj_set_style_text_font(s_st_time, TP_FONT_BODY, 0);
-  lv_obj_set_style_text_color(s_st_time, lv_color_hex(TP_CLR_GREEN_DEEP), 0);
-
-  s_st_date = lv_label_create(top);
-  lv_label_set_text(s_st_date, "");
-  lv_obj_set_style_text_font(s_st_date, TP_FONT_CAPTION, 0);
-  lv_obj_set_style_text_color(s_st_date, lv_color_hex(TP_CLR_TEXT_SUB), 0);
-
-  s_st_net = lv_label_create(top);
-  lv_label_set_text(s_st_net, "未联网");
-  lv_obj_set_style_text_font(s_st_net, TP_FONT_CAPTION, 0);
-  lv_obj_set_style_text_color(s_st_net, lv_color_hex(TP_CLR_TEXT_MUTED), 0);
-
-  s_st_bat = lv_label_create(top);
-  lv_label_set_text(s_st_bat, "电池 --%");
-  lv_obj_set_style_text_font(s_st_bat, TP_FONT_CAPTION, 0);
-  lv_obj_set_style_text_color(s_st_bat, lv_color_hex(TP_CLR_TEXT_SUB), 0);
-
-#if defined(CONFIG_ESP32S3_WIFI) || defined(CONFIG_PLANT_WIFI_MANAGER)
-  /* 右上角图标按钮组（OTA 刷新 + 网络设置）。
-   *
-   * 不能用 top 的 flex 流来排这两个键：顶栏状态文字（时间/日期/电量）长度
-   * 随真实数据变化，flex 会把按钮一路推着走 —— 实测同一块屏上 WiFi 圆钮曾在
-   * x=406 与 x=434 两处出现，tap 坐标跟着飘就点不中。
-   * 改成锚定右上角，位置恒定：容器 [480-12-50, 480-12] = 418..468，
-   * OTA 键 418,3、网络键 446,3（各 22x22），中心即 429,14 / 457,14。 */
-
-  st_btns = lv_obj_create(scr);
-  lv_obj_remove_style_all(st_btns);
-  lv_obj_set_size(st_btns, 50, 22);
-  lv_obj_align(st_btns, LV_ALIGN_TOP_RIGHT, -12, 3);
-  lv_obj_remove_flag(st_btns, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_pad_all(st_btns, 0, 0);
-  lv_obj_set_style_pad_column(st_btns, 6, 0);
-  lv_obj_set_flex_flow(st_btns, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(st_btns, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER,
-                        LV_FLEX_ALIGN_CENTER);
-#endif
-
-#ifdef CONFIG_ESP32S3_WIFI
-  /* OTA 入口（V3 稿没有；保留一个不抢眼的刷新键，点按进检查更新） */
-
-  {
-    lv_obj_t *b = lv_button_create(st_btns);
-
-    lv_obj_remove_style_all(b);
-    lv_obj_set_size(b, 22, 22);
-    lv_obj_set_style_radius(b, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0);
-
-    l = lv_label_create(b);
-    lv_label_set_text(l, LV_SYMBOL_REFRESH);
-    lv_obj_set_style_text_font(l, TP_FONT_CAPTION, 0);
-    lv_obj_set_style_text_color(l, lv_color_hex(TP_CLR_TEXT_MUTED), 0);
-    lv_obj_center(l);
-
-    lv_obj_add_event_cb(b, home_on_ota, LV_EVENT_CLICKED, NULL);
-  }
-#endif
-
-#ifdef CONFIG_PLANT_WIFI_MANAGER
-  /* 网络设置入口（V3 稿没有；22x22 圆钮，与刷新键并排在最右） */
-
-  {
-    lv_obj_t *b = lv_button_create(st_btns);
-
-    lv_obj_remove_style_all(b);
-    lv_obj_set_size(b, 22, 22);
-    lv_obj_set_style_radius(b, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0);
-
-    l = lv_label_create(b);
-    lv_label_set_text(l, LV_SYMBOL_WIFI);
-    lv_obj_set_style_text_font(l, TP_FONT_CAPTION, 0);
-    lv_obj_set_style_text_color(l, lv_color_hex(TP_CLR_GREEN), 0);
-    lv_obj_center(l);
-
-    lv_obj_add_event_cb(b, home_on_wifi, LV_EVENT_CLICKED, NULL);
-  }
-#endif
-
-  /* ── 植物主卡（76） ─────────────────────────────────────────── */
-
-  hero = lv_obj_create(scr);
-  lv_obj_remove_style_all(hero);
-  lv_obj_set_size(hero, 456, 76);
-  lv_obj_set_pos(hero, 12, 30);
-  lv_obj_set_style_bg_color(hero, lv_color_hex(0xffffff), 0);
-  lv_obj_set_style_bg_opa(hero, LV_OPA_COVER, 0);
-  lv_obj_set_style_bg_grad_color(hero, lv_color_hex(0xf0fdf4), 0);
-  lv_obj_set_style_bg_grad_dir(hero, LV_GRAD_DIR_VER, 0);
-  lv_obj_set_style_radius(hero, 16, 0);
-  lv_obj_set_style_border_width(hero, 2, 0);
-  lv_obj_set_style_border_color(hero, lv_color_hex(0xdef7e8), 0);
-  lv_obj_set_style_pad_all(hero, 8, 0);
-  lv_obj_set_style_pad_column(hero, 10, 0);
-  lv_obj_set_flex_flow(hero, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(hero, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
-                        LV_FLEX_ALIGN_CENTER);
-
-  {
-    lv_obj_t *av = lv_obj_create(hero);
-
-    lv_obj_remove_style_all(av);
-    lv_obj_set_size(av, 56, 56);
-    lv_obj_set_style_radius(av, 14, 0);
-    lv_obj_set_style_bg_color(av, lv_color_hex(0x86efac), 0);
-    lv_obj_set_style_bg_opa(av, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_grad_color(av, lv_color_hex(0x4ade80), 0);
-    lv_obj_set_style_bg_grad_dir(av, LV_GRAD_DIR_VER, 0);
-
-    l = lv_label_create(av);
-    lv_label_set_text(l, IC_LEAF);
-    lv_obj_set_style_text_font(l, TP_ICON_XL, 0);
-    lv_obj_center(l);
-  }
-
-  {
-    lv_obj_t *info = lv_obj_create(hero);
-
-    lv_obj_remove_style_all(info);
-    lv_obj_set_size(info, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(info, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(info, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_START);
-
-    s_name = lv_label_create(info);
-    lv_label_set_text(s_name, ps.name[0] != '\0' ? ps.name : "小绿绿");
-    lv_obj_set_style_text_font(s_name, TP_FONT_TITLE, 0);
-    lv_obj_set_style_text_color(s_name, lv_color_hex(TP_CLR_GREEN_DEEP), 0);
-
-    s_meta = lv_label_create(info);
-    snprintf(buf, sizeof(buf), "%s · 客厅窗台",
-             ps.species[0] != '\0' ? ps.species : "绿萝");
-    lv_label_set_text(s_meta, buf);
-    lv_obj_set_style_text_font(s_meta, TP_FONT_CAPTION, 0);
-    lv_obj_set_style_text_color(s_meta, lv_color_hex(TP_CLR_GREEN), 0);
-
-    l = lv_label_create(info);
-    lv_label_set_text(l, IC_HAPPY "\x20心情不错");
-    lv_obj_set_style_bg_color(l, lv_color_hex(0xfef3c7), 0);
-    lv_obj_set_style_bg_opa(l, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(l, 8, 0);
-    lv_obj_set_style_pad_hor(l, 7, 0);
-    lv_obj_set_style_pad_ver(l, 1, 0);
-    lv_obj_set_style_text_font(l, TP_FONT_CAPTION, 0);
-    lv_obj_set_style_text_color(l, lv_color_hex(0x92400e), 0);
-  }
-
-  {
-    lv_obj_t *sp = lv_obj_create(hero);
-
-    lv_obj_remove_style_all(sp);
-    lv_obj_set_size(sp, 4, 4);
-    lv_obj_set_flex_grow(sp, 1);
-  }
-
-  /* 健康分进度环（46） */
-
-  {
-    lv_obj_t *ring = lv_obj_create(hero);
-
-    lv_obj_remove_style_all(ring);
-    lv_obj_set_size(ring, 46, 46);
-    lv_obj_set_style_bg_opa(ring, LV_OPA_TRANSP, 0);
-
-    s_arc = lv_arc_create(ring);
-    lv_obj_set_size(s_arc, 46, 46);
-    lv_obj_center(s_arc);
-    lv_arc_set_rotation(s_arc, 270);
-    lv_arc_set_bg_angles(s_arc, 0, 360);
-    lv_arc_set_value(s_arc, ps.health_score > 0 ? ps.health_score : 80);
-    lv_obj_remove_style(s_arc, NULL, LV_PART_KNOB);
-    lv_obj_remove_flag(s_arc, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_arc_width(s_arc, 4, LV_PART_MAIN);
-    lv_obj_set_style_arc_color(s_arc, lv_color_hex(0xdcfce7), LV_PART_MAIN);
-    lv_obj_set_style_arc_width(s_arc, 4, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_color(s_arc, lv_color_hex(TP_CLR_GREEN), LV_PART_INDICATOR);
-
-    s_arc_val = lv_label_create(ring);
-    snprintf(buf, sizeof(buf), "%d", ps.health_score > 0 ? ps.health_score : 80);
-    lv_label_set_text(s_arc_val, buf);
-    lv_obj_set_style_text_font(s_arc_val, TP_FONT_TITLE, 0);
-    lv_obj_set_style_text_color(s_arc_val, lv_color_hex(TP_CLR_GREEN), 0);
-    lv_obj_center(s_arc_val);
-  }
-
-  /* ── 4 传感器小格（60） ─────────────────────────────────────── */
-
-  row = lv_obj_create(scr);
-  lv_obj_remove_style_all(row);
-  lv_obj_set_size(row, 456, 60);
-  lv_obj_set_pos(row, 12, 110);
-  lv_obj_set_style_pad_column(row, 6, 0);
-  lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER,
-                        LV_FLEX_ALIGN_CENTER);
-
-  /* 四格初值一律 "--"（开机到第一次刷新之间不再闪假数据：
-   * 原写死 62% / 24° / 6.5 / 1.2，看着像真读数）。 */
-
-  s_v_moist = home_cell_value(
-    home_cell(row, IC_WATER, "--", "水分", TP_CLR_GREEN));
-  s_v_temp = home_cell_value(
-    home_cell(row, IC_TEMP, "--", "温度", TP_CLR_GREEN));
-  s_v_ph = home_cell_value(
-    home_cell(row, IC_LEAF, "--", "pH", TP_CLR_GREEN));
-  s_v_ec = home_cell_value(
-    home_cell(row, IC_TUBE, "--", "EC", TP_CLR_GREEN));
-
-  (void)i;
-
-  /* ── AI 提示条（32） ────────────────────────────────────────── */
-
-  s_hint = lv_label_create(scr);
-  lv_label_set_text(s_hint, IC_BULB " AI建议：今天搬窗边晒晒太阳");
-  lv_obj_set_size(s_hint, 456, 32);
-  lv_obj_set_pos(s_hint, 12, 174);
-  lv_obj_set_style_bg_color(s_hint, lv_color_hex(0xfef3c7), 0);
-  lv_obj_set_style_bg_opa(s_hint, LV_OPA_COVER, 0);
-  lv_obj_set_style_bg_grad_color(s_hint, lv_color_hex(0xfde68a), 0);
-  lv_obj_set_style_bg_grad_dir(s_hint, LV_GRAD_DIR_HOR, 0);
-  lv_obj_set_style_radius(s_hint, 12, 0);
-  lv_obj_set_style_pad_hor(s_hint, 10, 0);
-  lv_obj_set_style_text_font(s_hint, TP_FONT_BODY, 0);
-  lv_obj_set_style_text_color(s_hint, lv_color_hex(0x92400e), 0);
-  lv_obj_set_style_text_align(s_hint, LV_TEXT_ALIGN_CENTER, 0);
-  lv_label_set_long_mode(s_hint, LV_LABEL_LONG_CLIP);
-
-  /* ── 3 个快捷键（56） ───────────────────────────────────────── */
-
-  qa = lv_obj_create(scr);
-  lv_obj_remove_style_all(qa);
-  lv_obj_set_size(qa, 456, 56);
-  lv_obj_set_pos(qa, 12, 210);
-  lv_obj_set_style_pad_column(qa, 8, 0);
-  lv_obj_set_flex_flow(qa, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(qa, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER,
-                        LV_FLEX_ALIGN_CENTER);
-
-  {
-    struct
-    {
-      const char *icon;
-      const char *text;
-      uint32_t    c1;
-      uint32_t    c2;
-      lv_event_cb_t fn;
-    } qa_def[3] =
-    {
-      { IC_CAMERA, "拍照", 0x34d399, 0x10b981, home_on_camera },
-      { IC_WATER,  "浇水", 0x60a5fa, 0x3b82f6, home_on_water  },
-      { IC_MIC,    "说话", 0xf472b6, 0xec4899, home_on_voice  },
-    };
-
-    for (i = 0; i < 3; i++)
-      {
-        lv_obj_t *b = lv_button_create(qa);
-
-        lv_obj_remove_style_all(b);
-        lv_obj_set_height(b, 56);
-        lv_obj_set_flex_grow(b, 1);
-        lv_obj_set_style_bg_color(b, lv_color_hex(qa_def[i].c1), 0);
-        lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
-        lv_obj_set_style_bg_grad_color(b, lv_color_hex(qa_def[i].c2), 0);
-        lv_obj_set_style_bg_grad_dir(b, LV_GRAD_DIR_VER, 0);
-        lv_obj_set_style_radius(b, 14, 0);
-        lv_obj_set_style_pad_all(b, 0, 0);
-        lv_obj_set_flex_flow(b, LV_FLEX_FLOW_COLUMN);
-        lv_obj_set_flex_align(b, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
-                              LV_FLEX_ALIGN_CENTER);
-
-        l = lv_label_create(b);
-        lv_label_set_text(l, qa_def[i].icon);
-        lv_obj_set_style_text_font(l, TP_ICON_M, 0);
-
-        l = lv_label_create(b);
-        lv_label_set_text(l, qa_def[i].text);
-        lv_obj_set_style_text_font(l, TP_FONT_BODY, 0);
-        lv_obj_set_style_text_color(l, lv_color_hex(0xffffff), 0);
-
-        lv_obj_add_event_cb(b, qa_def[i].fn, LV_EVENT_CLICKED, NULL);
-      }
-  }
-
-  /* ── 底部 Tab（52） ─────────────────────────────────────────── */
-
-  widget_bottomnav_create(scr, cb, user_data, PLANT_TAB_HOME,
-                          PLANT_NAV_GREEN, false);
-
-  return scr;
+static void menu_card(lv_obj_t *p,int x,int y,int kind,const char *title,const char *hint,lv_event_cb_t cb,void *arg){
+ lv_obj_t *card=cu_button(p,x,y,216,72,title,22,0xfffdf8,cb,arg);
+ lv_obj_t *label=lv_obj_get_child(card,0);
+ lv_obj_align(label,LV_ALIGN_TOP_LEFT,62,10);lv_obj_set_width(label,146);
+ lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_LEFT,0);
+ cu_label(card,62,42,146,hint,16,0x71806b);menu_icon(card,kind);
+ lv_obj_set_style_border_color(card,lv_color_hex(0xe5ebdc),0);lv_obj_set_style_border_width(card,1,0);
 }
-
-void screen_home_refresh(int health, int moisture, int temp, int ph_x10, int ec,
-                         int valid)
-{
-  char buf[16];
-
-  if (s_arc != NULL && s_arc_val != NULL)
-    {
-      if (health < 0)
-        {
-          health = 0;
-        }
-      else if (health > 100)
-        {
-          health = 100;
-        }
-
-      lv_arc_set_value(s_arc, health);
-      snprintf(buf, sizeof(buf), "%d", health);
-      lv_label_set_text(s_arc_val, buf);
-    }
-
-  /* 没有真实读数时一律 "--"，不拿 0 当数据展示 */
-
-  if (s_v_moist != NULL)
-    {
-      if (valid)
-        {
-          snprintf(buf, sizeof(buf), "%d%%", moisture);
-          lv_label_set_text(s_v_moist, buf);
-        }
-      else
-        {
-          lv_label_set_text(s_v_moist, "--");
-        }
-    }
-
-  if (s_v_temp != NULL)
-    {
-      if (valid)
-        {
-          snprintf(buf, sizeof(buf), "%d°", temp);
-          lv_label_set_text(s_v_temp, buf);
-        }
-      else
-        {
-          lv_label_set_text(s_v_temp, "--");
-        }
-    }
-
-  if (s_v_ph != NULL)
-    {
-      /* 真实 pH（pH×10 传参，保一位小数）；5.5~7.5 显示绿色，出界琥珀色 */
-
-      if (valid)
-        {
-          snprintf(buf, sizeof(buf), "%.1f", (float)ph_x10 / 10.0f);
-          lv_label_set_text(s_v_ph, buf);
-          lv_obj_set_style_text_color(s_v_ph,
-                                      lv_color_hex((ph_x10 >= 55 && ph_x10 <= 75) ?
-                                                   TP_CLR_GREEN : TP_CLR_AMBER), 0);
-        }
-      else
-        {
-          lv_label_set_text(s_v_ph, "--");
-        }
-    }
-
-  if (s_v_ec != NULL)
-    {
-      if (valid)
-        {
-          /* EC 单位 uS/cm，与数据页同一口径。
-
-           * 旧的显示逻辑是"收到值再 /10、按 0.1 mS/cm 打一位小数"，而调用
-           * 方已经先 /100，两级缩放叠加后 11 uS/cm 被算成 0.0 —— 屏幕上就
-           * 是恒定不变的一个 0。改为直接按 uS/cm 整数显示。 */
-
-          snprintf(buf, sizeof(buf), "%d", ec);
-          lv_label_set_text(s_v_ec, buf);
-        }
-      else
-        {
-          lv_label_set_text(s_v_ec, "--");
-        }
-    }
+static void more(lv_event_t *e){
+ (void)e;lv_obj_t *p=cu_root();
+ lv_obj_set_style_bg_color(p,lv_color_hex(0xfbfaf2),0);
+ lv_obj_add_event_cb(p,menu_deleted,LV_EVENT_DELETE,NULL);
+ cu_button(p,12,6,64,44,"返回",16,0xe4edda,cu_back,NULL);
+ lv_obj_t *title=cu_label(p,105,13,270,"更多功能",22,CU_INK);
+ lv_obj_set_style_text_align(title,LV_TEXT_ALIGN_CENTER,0);cu_image(p,&cu_leaf,438,15);
+ menu_card(p,16,64,0,"观察任务","一起发现新变化",menu_nav,(void *)PLANT_TAB_TASKS);
+ menu_card(p,248,64,1,"成长日记","看看成长的记录",menu_nav,(void *)PLANT_TAB_DIARY);
+ menu_card(p,16,144,2,"连接网络","连接家里的网络",wifi,NULL);
+ menu_card(p,248,144,3,"设备信息","看看当前版本",maintenance,NULL);
+ lv_obj_t *bar=menu_shape(p,20,232,440,72,0xe9efdf,18);
+ cu_label(bar,16,9,94,"声音",22,CU_INK);
+ menu_volume_hint=cu_label(bar,16,42,96,"自动保存",16,0x71806b);
+ cu_button(bar,124,14,64,44,"-",30,0xfffdf8,volume,(void *)(intptr_t)-6);
+ menu_volume_value=cu_label(bar,201,21,130,"",22,CU_INK);
+ lv_obj_set_style_text_align(menu_volume_value,LV_TEXT_ALIGN_CENTER,0);
+ lv_label_set_text_fmt(menu_volume_value,"%d%%",(voice_agent_get_dac_volume()*100+127)/255);
+ cu_button(bar,350,14,64,44,"+",30,0xfffdf8,volume,(void *)(intptr_t)6);
+ ui_app_push_screen(p);
 }
-
-void screen_home_set_status(const char *time_str, const char *date_str,
-                            int online, int battery_pct)
-{
-  char buf[24];
-
-  if (s_st_time != NULL)
-    {
-      lv_label_set_text(s_st_time,
-                        (time_str != NULL && time_str[0] != '\0') ?
-                        time_str : "--:--");
-    }
-
-  if (s_st_date != NULL)
-    {
-      lv_label_set_text(s_st_date, (date_str != NULL) ? date_str : "");
-    }
-
-  if (s_st_net != NULL)
-    {
-      lv_label_set_text(s_st_net, online ? "已联网" : "未联网");
-      lv_obj_set_style_text_color(
-        s_st_net, lv_color_hex(online ? TP_CLR_GREEN : TP_CLR_TEXT_MUTED), 0);
-    }
-
-  if (s_st_bat != NULL)
-    {
-      if (battery_pct < 0)
-        {
-          lv_label_set_text(s_st_bat, "电池 --%");
-        }
-      else
-        {
-          snprintf(buf, sizeof(buf), "电池 %d%%", battery_pct);
-          lv_label_set_text(s_st_bat, buf);
-        }
-    }
+static void deleted(lv_event_t *e){(void)e;status=NULL;clock_label=NULL;}
+lv_obj_t *screen_home_create(plant_nav_cb_t cb,void *u){
+ (void)cb;(void)u;lv_obj_t *p=cu_root();
+ lv_obj_add_event_cb(p,deleted,LV_EVENT_DELETE,NULL);
+ /* Home-only colors preserve the established appearance of other pages. */
+ lv_obj_set_style_bg_color(p,lv_color_hex(0xfbfaf2),0);
+ cu_image(p,&cu_leaf,16,15);
+ cu_label(p,44,13,108,"植小伴",22,CU_INK);
+ clock_label=cu_label(p,185,18,74,"--:--",16,0x71806b);
+ lv_obj_t *status_button=cu_button(p,306,4,78,44,"状态",16,0xe4edda,data,NULL);
+ cu_image(status_button,&cu_leaf,8,11);
+ lv_obj_align(lv_obj_get_child(status_button,0),LV_ALIGN_TOP_LEFT,33,12);
+ lv_obj_set_width(lv_obj_get_child(status_button,0),38);
+ lv_obj_t *more_button=cu_button(p,396,4,72,44,"更多",16,0xe4edda,more,NULL);
+ for(int i=0;i<3;i++){
+  lv_obj_t *dot=cu_panel(more_button,9+i*5,20,3,3,CU_INK,2);
+  lv_obj_remove_flag(dot,LV_OBJ_FLAG_CLICKABLE);
+ }
+ lv_obj_align(lv_obj_get_child(more_button,0),LV_ALIGN_TOP_LEFT,26,12);
+ lv_obj_set_width(lv_obj_get_child(more_button,0),40);
+ cu_image(p,&cu_buddy,24,36);
+ lv_obj_t *headline=cu_label(p,226,77,238,"今天一起\n发现新变化",30,CU_INK);
+ lv_obj_set_style_text_line_space(headline,6,0);
+ status=cu_label(p,226,180,238,"每一片新叶，都值得期待",16,0x71806b);
+ lv_obj_t *talk_button=cu_button(p,14,240,270,64,"和小伴说话",30,CU_GREEN,voice,NULL);
+ cu_image(talk_button,&cu_mic,24,16);
+ lv_obj_align(lv_obj_get_child(talk_button,0),LV_ALIGN_TOP_LEFT,65,14);
+ lv_obj_set_width(lv_obj_get_child(talk_button,0),192);
+ lv_obj_t *photo_button=cu_button(p,296,240,170,64,"拍照观察",22,0xe4edda,photo,NULL);
+ cu_image(photo_button,&cu_camera,13,18);
+ lv_obj_align(lv_obj_get_child(photo_button,0),LV_ALIGN_TOP_LEFT,48,19);
+ lv_obj_set_width(lv_obj_get_child(photo_button,0),114);
+ return p;
+}
+void screen_home_refresh(int a,int b,int c,int d,int e,int f){(void)a;(void)b;(void)c;(void)d;(void)e;(void)f;}
+void screen_home_set_status(const char *t,const char *d,int online,int bat){
+ (void)d;(void)bat;if(clock_label)lv_label_set_text(clock_label,t&&*t?t:"--:--");
+ if(status){
+  const char *message="每一片新叶，都值得期待";
+  if(handsfree_service_enabled()){
+   const char *hint=handsfree_service_hint();
+   /* Idle copy has one voice invitation, on the primary button. Keep the
+    * live listening, processing, playback and error feedback visible. */
+   if(hint&&*hint&&strcmp(hint,"说你好，小伴")!=0)message=hint;
+  }
+  if(!online)message="还没连上网络";
+  if(strcmp(lv_label_get_text(status),message)!=0)lv_label_set_text(status,message);
+ }
 }

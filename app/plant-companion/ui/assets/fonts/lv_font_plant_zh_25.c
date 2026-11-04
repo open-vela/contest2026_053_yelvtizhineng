@@ -23269,4 +23269,3 @@ lv_font_t lv_font_plant_zh_25 = {
 
 
 #endif /*#if LV_FONT_PLANT_ZH_25*/
-

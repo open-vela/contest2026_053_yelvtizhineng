@@ -23,7 +23,7 @@ extern "C" {
 
 typedef int16_t qtp_t;
 
-//Quantized matrix. Uses fixed numbers and has the storage for the rows/columns inverted 
+//Quantized matrix. Uses fixed numbers and has the storage for the rows/columns inverted
 //for easy use as a multiplicand without stressing out the flash cache too much.
 typedef struct {
     int w;
@@ -44,27 +44,27 @@ typedef struct {
 /**
  * @info About quantized matrices and shift values
  *
- * Grab a coffee (or tea, or hot water)  and sit down when you read this for the first 
+ * Grab a coffee (or tea, or hot water)  and sit down when you read this for the first
  * time. Quantized matrices can speed up your operations, but come with some quirks, and
  * it's good to understand how they work before using them.
  *
  * The data in the quantized matrix type is stored similarily to floating-point types:
  * when storing a real value, the value is stored as a mantissa (base number) and an
  * exponent. The 'real' value that can be re-derived from those two numbers is something
- * similar to mantissa*2^exponent. Up to this point, there's not that much difference from 
+ * similar to mantissa*2^exponent. Up to this point, there's not that much difference from
  * the standard floating point implementations like e.g. IEEE-754.
  *
- * The difference with respect to quantized matrices is that for a quantized matrix, it is 
+ * The difference with respect to quantized matrices is that for a quantized matrix, it is
  * assumed all values stored have more-or-less the same order of magnitude. This allows the
- * matrix to only store all the mantissas, while the exponents are shared; there is only one 
+ * matrix to only store all the mantissas, while the exponents are shared; there is only one
  * exponent for the entire matrix. This makes it quicker to handle matrix operations - the
  * logic to fix the exponents only needs to happen once, while the rest can be done in simple
  * integer arithmetic. It also nets us some memory savings - while normally a floating point
- * number is 32-bit, storing only 16-bit mantissas as the matrix items almost halves the 
+ * number is 32-bit, storing only 16-bit mantissas as the matrix items almost halves the
  * memory requirements.
  *
  * While most of the details of handling the intricacies of the quantized matrixes are done
- * transparently by the code in dl_lib_matrixq.c, some implementation details leak out, 
+ * transparently by the code in dl_lib_matrixq.c, some implementation details leak out,
  * specifically in places where addition/subtraction/division happens.
  *
  * The problem is that the routines do not know what the size of the resulting operation is. For
@@ -72,8 +72,8 @@ typedef struct {
  * to overflow the mantissa of the result if the exponent is the same. However, if by default we
  * assume the mantissas needs to be scaled back, we may lose precision.
  *
- * In order to counter this, all operations that have this issue have a ``shift`` argument. If 
- * the argument is zero, the routine will be conservative, that is, increase the exponent of 
+ * In order to counter this, all operations that have this issue have a ``shift`` argument. If
+ * the argument is zero, the routine will be conservative, that is, increase the exponent of
  * the result to such an extent it's mathematically impossible a value in the result will exceed
  * the maximum value that can be stored. However, when this argument is larger than zero, the
  * algorithm will hold back on this scaling by the indicated amount of bits, preserving precision
@@ -83,12 +83,12 @@ typedef struct {
  * of matrix indices).
  *
  * For deciding on these shift values, it is recommended to start with a shift value of one, then
- * use dl_matrixq_check_sanity on the result. If this indicates clipping, lower the shift value. 
+ * use dl_matrixq_check_sanity on the result. If this indicates clipping, lower the shift value.
  * If it indicates bits are under-used, increase it. Note that for adding and subtraction, only
  * shift values of 0 or 1 make sense; these routines will error out if you try to do something
  * else.
  *
- * For neural networks and other noise-tolerant applications, note that even when 
+ * For neural networks and other noise-tolerant applications, note that even when
  * dl_matrixq_check_sanity does not indicate any problems, twiddling with the shift value may lead
  * to slightly improved precision. Feel free to experiment.
  **/
@@ -174,7 +174,7 @@ void dl_matrixq_dot_matrix_out(const dl_matrix2dq_t *a, const dl_matrix2dq_t *b,
 /**
  * @brief Do a dotproduct of two quantized matrices : res=a.b. This always uses the simple & stupid C algo for the dot product.
  *
- * Result is a fixed-point matrix. 
+ * Result is a fixed-point matrix.
  *
  * Use this only if you expect something is wrong with the accelerated routines that dl_matrixq_dot calls; this function can be
  * much slower than dl_matrixq_dot .
@@ -187,9 +187,9 @@ void dl_matrixq_dot_matrix_out(const dl_matrix2dq_t *a, const dl_matrix2dq_t *b,
 void dl_matrixq_dot_c_impl(const dl_matrix2dq_t *a, const dl_matrix2dq_t *b, dl_matrix2dq_t *res, int shift);
 
 /**
- * @brief Do a dotproduct of two quantized matrices : res=a.b. This always uses the simple & stupid C algo for the dot product. 
+ * @brief Do a dotproduct of two quantized matrices : res=a.b. This always uses the simple & stupid C algo for the dot product.
  *
- * Result is a floating-point matrix. 
+ * Result is a floating-point matrix.
  *
  * Use this only if you expect something is wrong with the accelerated routines that dl_matrixq_dot_matrix_out calls; this function can be
  * much slower than dl_matrixq_dot_matrix_out.
@@ -253,7 +253,7 @@ dl_matrix2dq_t *dl_matrixq_slice(const dl_matrix2dq_t *src, int x, int y, int w,
  * @brief select a range of items from an existing matrix and flatten them into one dimension.
  *
  * @Warning The results are flattened in row-major order.
- *   
+ *
  * @param x     X-offset of the origin of the returned matrix within the sliced matrix
  * @param y     Y-offset of the origin of the returned matrix within the sliced matrix
  * @param w     Width of the resulting matrix
@@ -292,7 +292,7 @@ void dl_matrixq_mul( dl_matrix2dq_t *a,  dl_matrix2dq_t *b, dl_matrix2dq_t *res)
 void dl_matrixq_div(const dl_matrix2dq_t *a, const dl_matrix2dq_t *b, dl_matrix2dq_t *out, int shift);
 
 /**
- * @brief Check if two quantized matrices have the same shape, that is, the same amount of 
+ * @brief Check if two quantized matrices have the same shape, that is, the same amount of
  * rows and columns
  *
  * @param a     First of the two matrices to compare
@@ -324,7 +324,7 @@ void dl_matrixq_add_const(dl_matrix2dq_t *subj, const fptp_t add, int shift);
  * Due to the nature of quantized matrices, depending on the calculations a quantized
  * matrix is the result of and the shift values chosen in those calculations, a quantized
  * matrix may have an exponent and mantissas that lead to a loss of precision, either because
- * most significant mantissa bits are unused, or because a fair amount of mantissas are 
+ * most significant mantissa bits are unused, or because a fair amount of mantissas are
  * clipped. This function checks if this is the case and will report a message to stdout
  * if significant loss of precision is detected.
  *
@@ -364,7 +364,7 @@ void dl_matrixq_readjust_exp(dl_matrix2dq_t *m);
 fptp_t dl_matrixq_get(const dl_matrix2dq_t *m, const int x, const int y);
 
 /**
- * @brief Set a specific item in the quantized matrix to the given 
+ * @brief Set a specific item in the quantized matrix to the given
  * floating-point value
  *
  * @warning If the given value is more than the exponent in the quantized matrix

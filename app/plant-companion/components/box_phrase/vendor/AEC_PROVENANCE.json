@@ -1,0 +1,23 @@
+{
+  "pass": true,
+  "source": "espressif/esp-sr v2.0.0 esp32s3/libesp_audio_processor.a",
+  "source_sha256": "772732626b62836ed06c7bf502eb78428cd9305a34f23d67e0b6630fd9e73512",
+  "closure_definitions": 152,
+  "loaded_sections_unchanged_by_import_remapping": true,
+  "public_definitions_unchanged": true,
+  "undefined_only_remapping": {
+    "sinf": "plant_wake_fast_sinf",
+    "expf": "plant_wake_fast_expf",
+    "floorf": "plant_wake_fast_floorf",
+    "cos": "plant_wake_fast_cos",
+    "exp": "plant_wake_fast_exp",
+    "cosf": "plant_wake_fast_cosf",
+    "sin": "plant_wake_fast_sin",
+    "heap_caps_calloc": "box_aec_caps_calloc",
+    "dl_lib_calloc": "box_aec_dl_calloc",
+    "dl_lib_calloc_psram": "box_aec_dl_calloc_psram",
+    "dl_lib_free": "box_aec_dl_free",
+    "dsps_sqrtf_f32_ansi": "box_aec_sqrt_approx"
+  },
+  "sha256": "6e4648c2b7a5c5736b161eb2fc468f713cf519fb4ac3ebb8756db82d9604543e"
+}

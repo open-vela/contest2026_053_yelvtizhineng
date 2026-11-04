@@ -630,9 +630,14 @@ static const char *const s_kb_row2[3] =
   "~,./?;:'|"
 };
 
-/* 第 3 行固定：首键为切换键，其余为字母 + 三个常用符号 */
+/* 第 3 行首键为切换键；字母随大小写页切换，常用符号保持原位。 */
 
-static const char WKB_ROW3[] = "zxcvbnm.-_";
+static const char *const s_kb_row3[3] =
+{
+  "zxcvbnm.-_",
+  "ZXCVBNM.-_",
+  "zxcvbnm.-_"
+};
 
 static void wkb_apply_layout(void)
 {
@@ -663,7 +668,7 @@ static void wkb_apply_layout(void)
         }
       else
         {
-          chars = WKB_ROW3;
+          chars = s_kb_row3[s_kb_layout];
         }
 
       for (c = 0; c < n; c++)

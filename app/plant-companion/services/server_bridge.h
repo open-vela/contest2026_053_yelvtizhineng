@@ -69,6 +69,13 @@ int server_bridge_config_epoch(void);
  * 返回 0 成功；负 errno 失败（-ENOTCONN=未配置服务器）。 */
 
 int server_bridge_session_begin(void);
+int server_bridge_notice(const char *text);
+int server_bridge_transcribe(const int16_t *pcm,size_t samples,char *text,size_t capacity);
+/* Optional synchronous wait pump: invoked only after the complete PCM body
+ * has been sent. The callback may then reuse PCM; nonzero cancels the POST.
+ * It must return promptly (one bounded microphone slice). */
+int server_bridge_transcribe_idle(const int16_t *pcm,size_t samples,char *text,size_t capacity,
+    int (*idle)(void *),void *idle_arg);
 
 /* 上传一块 PCM16（16kHz mono）到当前会话，seq 自动递增 */
 
@@ -142,6 +149,8 @@ struct sb_diag_result_s
 
 int server_bridge_image_diagnose(const uint8_t *frame, size_t frame_len,
                                  struct sb_diag_result_s *out);
+int server_bridge_image_diagnose_fast(const uint8_t *frame, size_t frame_len,
+                                      struct sb_diag_result_s *out);
 
 /* 兼容壳：把结构化诊断拼成一段文本（换行分段，UI 旧逻辑可直接显示） */
 
@@ -156,6 +165,31 @@ int server_bridge_image_analyze(const uint8_t *frame, size_t frame_len,
 int server_bridge_report_telemetry(float moisture, float temp, float ec,
                                    float ph, float salt, float nitrogen,
                                    float phosphorus, float potassium);
+
+/* 无线土壤：GET /api/v1/devices/sync 的 latest_telemetry
+ * （土壤网关/DR164 上报后服务器入库，终端本地无传感器时拉云端值）。
+ * out 全 0 且返回 0 表示服务器有数；负值 = 拉不到。 */
+
+struct sb_soil_s
+{
+  float moisture;
+  float temp;
+  float ec;
+  float ph;
+  float salt;
+  float nitrogen;
+  float phosphorus;
+  float potassium;
+  uint16_t field_mask;
+  int64_t sample_unix_s;
+  char measured_at[24];
+  char source_id[40];
+  int   valid;
+};
+
+int server_bridge_fetch_soil(struct sb_soil_s *out);
+/* Persistent per-device preference; cloud-only reads never use RS485 pins. */
+int server_bridge_cloud_soil_enabled(void);
 
 /* 心跳保活：POST /api/v1/devices/heartbeat（空 JSON 体，自动带
  * X-Device-Token）。服务器据此刷新 last_seen_at → 管理台在线判定；
@@ -214,6 +248,13 @@ int server_bridge_fetch_pending(struct sb_act_job_s *out, int max, int *n_out);
  * 返回 0 成功；负 errno 失败。 */
 
 int server_bridge_ack_job(const char *job_id, int ok, const char *detail);
+
+/* 当前生效的设备序列号：优先取 SD 配置（plant.cfg 的 sn=），
+ * 没有配置时用编译期默认值。多块板卡靠它区分云端身份。 */
+
+const char *server_bridge_device_sn(void);
+
+int server_bridge_box_answer(const char *question,char *reply,size_t capacity);
 
 #ifdef __cplusplus
 }

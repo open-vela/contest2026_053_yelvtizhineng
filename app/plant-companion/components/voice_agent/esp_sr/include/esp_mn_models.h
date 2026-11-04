@@ -10,7 +10,7 @@ extern "C" {
 /**
  * @brief Get the multinet handle from model name
  *
- * @param model_name   The name of model 
+ * @param model_name   The name of model
  * @returns The handle of multinet
  */
 esp_mn_iface_t *esp_mn_handle_from_name(char *model_name);
@@ -18,7 +18,7 @@ esp_mn_iface_t *esp_mn_handle_from_name(char *model_name);
 /**
  * @brief Get the multinet language from model name
  *
- * @param model_name   The name of model 
+ * @param model_name   The name of model
  * @returns The language of multinet
  */
 char *esp_mn_language_from_name(char *model_name);

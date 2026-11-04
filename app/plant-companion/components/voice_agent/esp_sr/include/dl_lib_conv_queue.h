@@ -25,7 +25,7 @@ typedef float fptp_t;
 //Flags for matrices
 // #define DL_MF_FOREIGNDATA (0)  /*< Matrix *item data actually points to another matrix and should not be freed */
 
-//Float convolution FIFO queue. 
+//Float convolution FIFO queue.
 typedef struct {
     int n;          /*< the length of queue */
     int c;          /*< the channel number of queue element*/
@@ -62,11 +62,11 @@ void dl_conv_queue_free(dl_conv_queue_t *cq);
 void dl_conv_to_matrix2d(dl_conv_queue_t *cq, dl_matrix2d_t* out);
 
 /**
- * @brief Move the front pointer of queue forward, 
-          the First(oldest) element become the last(newest) element, 
+ * @brief Move the front pointer of queue forward,
+          the First(oldest) element become the last(newest) element,
  *
  * @param cq    Input convolution queue
- * @return      Pointer of oldest element  
+ * @return      Pointer of oldest element
  */
 fptp_t *dl_conv_queue_pop(dl_conv_queue_t *cq);
 
@@ -91,7 +91,7 @@ fptp_t *dl_get_queue_item(dl_conv_queue_t *cq, int offset);
 /**
  * @brief   Does a sigmoid operation on the one of element in the convolution queue.
  * Gets the pointer of element in the convolution queue by offset, and does a sigmoid operation
- * by this pointer, then return the pointer      
+ * by this pointer, then return the pointer
  *
  * @param cq      Input convolution queue
  * @param offset  Offset from the front of the queue
@@ -102,7 +102,7 @@ fptp_t *dl_sigmoid_step(dl_conv_queue_t *cq, int offset);
 /**
  * @brief   Does a tanh operation on the one of element in the convolution queue.
  * Gets the pointer of element in the convolution queue by offset, and does a tanh operation
- * by this pointer, then return the pointer  
+ * by this pointer, then return the pointer
  *
  * @param cq      Input convolution queue
  * @param offset  Offset from the front of the queue
@@ -113,7 +113,7 @@ fptp_t *dl_tanh_step(dl_conv_queue_t *cq, int offset);
 /**
  * @brief   Does a softmax operation on the one of element in the convolution queue.
  * Gets the pointer of element in the convolution queue by offset, and does a softmax operation
- * by this pointer, then return the pointer 
+ * by this pointer, then return the pointer
  *
  * @param cq      Input convolution queue
  * @param offset  Offset from the front of the queue
@@ -135,7 +135,7 @@ dl_matrix2d_t *dl_basic_lstm_layer1(const dl_conv_queue_t *in, dl_matrix2d_t *st
  *
  * @param in       Input convolution queue
  * @param out      Output convolution queue
- * @param rate     A positive int, the stride with which we sample input value 
+ * @param rate     A positive int, the stride with which we sample input value
  * @param size     A positive int, the size of 1D-filter
  * @param kernel   The kernel matrix of filter
  * @param bias     The bias matrix of filter. Can be NULL if a bias of 0 is required.
@@ -149,16 +149,16 @@ fptp_t *dl_look_conv_step(dl_conv_queue_t *in, dl_matrix2d_t *out, int rate, int
 /**
  * @brief Fast implement of dilation layer as follows
  *
- *               |-> [gate(sigmoid)] -|        
+ *               |-> [gate(sigmoid)] -|
  *      input -  |                    |-> (*) - output
- *               |-> [filter(tanh)]  -|   
+ *               |-> [filter(tanh)]  -|
  *
  * @Warning All input and output convolution queue and matrix should be allocated. The return pointer
  *          is first element of output queue and should not be freed separately.
  *
  * @param in              Input convolution queue
  * @param out             Output convolution queue
- * @param rate            A positive int, the stride with which we sample input value 
+ * @param rate            A positive int, the stride with which we sample input value
  * @param size            A positive int, the size of 1D-filter
  * @param filter_kernel   The kernel matrix of filter
  * @param filter_bias     The bias matrix of filter. Can be NULL if a bias of 0 is required.

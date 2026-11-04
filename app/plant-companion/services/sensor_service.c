@@ -20,6 +20,8 @@
 #include <semaphore.h>
 
 #include "sensor_service.h"
+#include "power_service.h"
+#include "sensor_presentation.h"
 #include "../components/sensor_driver/soil_sensor.h"
 #ifdef CONFIG_PLANT_AI_MODULE
 #  include "server_bridge.h"
@@ -39,6 +41,12 @@ static void *g_user_data;
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct sensor_view_s g_view;
 static struct sensor_history_s g_history;
+#ifdef CONFIG_PLANT_AI_MODULE
+#  define SENSOR_CLOUD_PULL_MS 300000u
+static uint32_t g_cloud_attempt_ms;
+static bool g_cloud_attempted;
+static int g_cloud_config_epoch;
+#endif
 static int g_history_today_valid;   /* 今天槽位是否已写入（跨天归档用） */
 static int g_last_read_day;         /* 上次读取的"天数"（判断是否跨天） */
 
@@ -54,75 +62,14 @@ static int g_last_read_day;         /* 上次读取的"天数"（判断是否跨
 
 /* 阈值评语规则（离线，UI_SPEC ④ "我很好/很舒服/有点暗/营养够"） */
 
+/* No species thresholds configured: preserve observations without health claims. */
 static void view_update_notes(struct sensor_view_s *v)
 {
-  /* 水分：目标 50-75% */
-
-  if (v->moisture < 20.0f)
-    {
-      v->moisture_status = SENSOR_STATUS_BAD;
-      strlcpy(v->moisture_note, "好渴呀", sizeof(v->moisture_note));
-    }
-  else if (v->moisture < 40.0f)
-    {
-      v->moisture_status = SENSOR_STATUS_WARN;
-      strlcpy(v->moisture_note, "有点干", sizeof(v->moisture_note));
-    }
-  else if (v->moisture <= 75.0f)
-    {
-      v->moisture_status = SENSOR_STATUS_OK;
-      strlcpy(v->moisture_note, "我很好", sizeof(v->moisture_note));
-    }
-  else
-    {
-      v->moisture_status = SENSOR_STATUS_WARN;
-      strlcpy(v->moisture_note, "水太多", sizeof(v->moisture_note));
-    }
-
-  /* 温度：舒适 18-28°C */
-
-  if (v->temp < 10.0f || v->temp > 35.0f)
-    {
-      v->temp_status = SENSOR_STATUS_BAD;
-      strlcpy(v->temp_note, "太冷/热", sizeof(v->temp_note));
-    }
-  else if (v->temp < 18.0f || v->temp > 28.0f)
-    {
-      v->temp_status = SENSOR_STATUS_WARN;
-      strlcpy(v->temp_note, "有点凉/热", sizeof(v->temp_note));
-    }
-  else
-    {
-      v->temp_status = SENSOR_STATUS_OK;
-      strlcpy(v->temp_note, "好舒服", sizeof(v->temp_note));
-    }
-
-  /* EC：绿萝目标 ~1.0-1.6 mS/cm（传感器 μS/cm → /1000） */
-
-  {
-    float ec_ms = v->ec / 1000.0f;
-
-    if (ec_ms < 0.6f)
-      {
-        v->ec_status = SENSOR_STATUS_WARN;
-        strlcpy(v->ec_note, "缺营养", sizeof(v->ec_note));
-      }
-    else if (ec_ms > 2.2f)
-      {
-        v->ec_status = SENSOR_STATUS_WARN;
-        strlcpy(v->ec_note, "营养太浓", sizeof(v->ec_note));
-      }
-    else
-      {
-        v->ec_status = SENSOR_STATUS_OK;
-        strlcpy(v->ec_note, "营养够", sizeof(v->ec_note));
-      }
-  }
-
-  /* 光照估算（占位规则）：水分健康且白天 → 中；否则低 */
-
-  v->light_status = (v->moisture_status == SENSOR_STATUS_OK) ?
-                    LIGHT_EST_MID : LIGHT_EST_LOW;
+  v->moisture_status=v->temp_status=v->ec_status=-1;
+  v->light_status=-1;
+  snprintf(v->moisture_note,sizeof(v->moisture_note),"查看读数");
+  snprintf(v->temp_note,sizeof(v->temp_note),"土壤温度");
+  snprintf(v->ec_note,sizeof(v->ec_note),"电导率");
 }
 
 static uint32_t uptime_ms(void)
@@ -135,6 +82,42 @@ static uint32_t uptime_ms(void)
 
 /* 单次轮询：读传感器 → 更新缓存 + 历史环 */
 
+
+/* 跨天归档 + 写入今天槽位（本地/云端共用，v192 去重） */
+
+static void history_push(float moisture, float temp)
+{
+  struct tm tm_now;
+  time_t now = time(NULL);
+
+  localtime_r(&now, &tm_now);
+  if (g_last_read_day != tm_now.tm_yday)
+    {
+      int i;
+
+      for (i = SENSOR_HISTORY_DAYS - 1; i >= 1; i--)
+        {
+          g_history.day[i] = g_history.day[i - 1];
+          g_history.moisture[i] = g_history.moisture[i - 1];
+          g_history.temp[i] = g_history.temp[i - 1];
+          g_history.valid[i] = g_history.valid[i - 1];
+        }
+
+      g_history.day[0] = 0;
+      g_history_today_valid = 0;
+      g_last_read_day = tm_now.tm_yday;
+    }
+
+  if (!g_history_today_valid)
+    {
+      g_history.day[0] = 0;
+      g_history.moisture[0] = moisture;
+      g_history.temp[0] = temp;
+      g_history.valid[0] = true;
+      g_history_today_valid = 1;
+    }
+}
+
 static void sensor_poll_once(void)
 {
   struct soil_data_s raw;
@@ -143,13 +126,85 @@ static void sensor_poll_once(void)
 
   memset(&new_view, 0, sizeof(new_view));
 
-  ret = soil_sensor_read(&raw, 0);   /* 后台轮询：静默，失败只标 invalid */
+#ifdef CONFIG_PLANT_AI_MODULE
+  ret = server_bridge_cloud_soil_enabled() ? -ENODEV :
+        soil_sensor_read(&raw, 0);
+#else
+  ret = soil_sensor_read(&raw, 0);
+#endif
   if (ret < 0)
     {
+#ifdef CONFIG_PLANT_AI_MODULE
+      /* v190：本地无土壤（RS485 未接/超时）→ 云端无线土壤兜底。
+       * 土壤网关把 DR164 数据写进 telemetry，这里从 devices/sync 拉回来。 */
+      uint32_t now_ms = uptime_ms();
+      struct sb_soil_s cloud;
+
+      int epoch = server_bridge_config_epoch();
+      if (epoch != g_cloud_config_epoch)
+        {
+          g_cloud_config_epoch = epoch;
+          g_cloud_attempted = false;
+        }
+
+      /* Keep the last cloud snapshot between scheduled pulls. A screen
+       * refresh or camera exit must not bypass the five-minute cadence. */
+      if (g_cloud_attempted &&
+          now_ms - g_cloud_attempt_ms < SENSOR_CLOUD_PULL_MS)
+        return;
+
+      if (server_bridge_configured())
+        {
+          g_cloud_attempt_ms = now_ms;
+          g_cloud_attempted = true;
+          printf("[CloudSoil] pull_ms=%lu interval_ms=%lu\n",
+                 (unsigned long)now_ms, (unsigned long)SENSOR_CLOUD_PULL_MS);
+        }
+
+      /* Record attempts as well as successes: failures cannot hammer HTTP. */
+      if (server_bridge_configured() &&
+          server_bridge_fetch_soil(&cloud) == 0 && cloud.valid)
+        {
+          new_view.moisture = cloud.moisture;
+          new_view.temp = cloud.temp;
+          new_view.ec = cloud.ec;
+          new_view.ph = cloud.ph;
+          new_view.salt = cloud.salt;
+          new_view.nitrogen = cloud.nitrogen;
+          new_view.phosphorus = cloud.phosphorus;
+          new_view.potassium = cloud.potassium;
+          new_view.field_mask = cloud.field_mask;
+          new_view.source = SENSOR_SOURCE_CLOUD;
+          /* API does not identify the source reporting period. Do not invent
+           * a freshness threshold from this BOX's own upload configuration. */
+          new_view.expected_interval_ms = 0;
+          new_view.sample_unix_s = cloud.sample_unix_s;
+          snprintf(new_view.measured_at,sizeof(new_view.measured_at),"%s",cloud.measured_at);
+          snprintf(new_view.source_id,sizeof(new_view.source_id),"%s",cloud.source_id);
+          new_view.valid = true;
+          new_view.last_read_ms = now_ms;
+          view_update_notes(&new_view);
+
+          pthread_mutex_lock(&g_lock);
+          new_view.version = g_view.version + 1;
+          g_view = new_view;
+          if((new_view.field_mask&3)==3)history_push(cloud.moisture, cloud.temp);
+          pthread_mutex_unlock(&g_lock);
+
+          if (g_on_update != NULL)
+            {
+              g_on_update(g_user_data);
+            }
+
+          return;
+        }
+#endif
+
       /* 读取失败：保留旧值，仅标 invalid */
 
       pthread_mutex_lock(&g_lock);
-      g_view.valid = false;
+      if (g_view.last_read_ms == 0 || (uptime_ms() - g_view.last_read_ms) > 60000u)
+        { g_view.valid = false; }
       pthread_mutex_unlock(&g_lock);
       return;
     }
@@ -162,52 +217,21 @@ static void sensor_poll_once(void)
   new_view.nitrogen  = raw.nitrogen;
   new_view.phosphorus = raw.phosphorus;
   new_view.potassium = raw.potassium;
-  new_view.valid     = true;
+  const float fields[]={raw.moisture,raw.temp,raw.ec,raw.salt,raw.ph,
+                        raw.nitrogen,raw.phosphorus,raw.potassium};
+  new_view.field_mask = sensor_valid_fields(fields);
+  new_view.source = SENSOR_SOURCE_LOCAL;
+  new_view.expected_interval_ms = g_interval_ms;
+  snprintf(new_view.source_id,sizeof(new_view.source_id),"RS485");
+  new_view.valid     = new_view.field_mask != 0;
   new_view.last_read_ms = uptime_ms();
 
   view_update_notes(&new_view);
 
   pthread_mutex_lock(&g_lock);
+  new_view.version = g_view.version + 1;
   g_view = new_view;
-
-  /* 历史环：今天槽位写入；跨天后整体平移 */
-
-  {
-    struct tm tm_now;
-    time_t now = time(NULL);
-
-    localtime_r(&now, &tm_now);
-
-    if (g_last_read_day != tm_now.tm_yday)
-      {
-        /* 跨天：把 history[1..6] ← history[0..5]，今天槽位留空 */
-        int i;
-
-        for (i = SENSOR_HISTORY_DAYS - 1; i >= 1; i--)
-          {
-            g_history.day[i] = g_history.day[i - 1];
-            g_history.moisture[i] = g_history.moisture[i - 1];
-            g_history.temp[i] = g_history.temp[i - 1];
-            g_history.valid[i] = g_history.valid[i - 1];
-          }
-
-        g_history.day[0] = 0;
-        g_history.moisture[0] = raw.moisture;
-        g_history.temp[0] = raw.temp;
-        g_history.valid[0] = true;
-        g_history_today_valid = 1;
-        g_last_read_day = tm_now.tm_yday;
-      }
-    else if (!g_history_today_valid)
-      {
-        g_history.day[0] = 0;
-        g_history.moisture[0] = raw.moisture;
-        g_history.temp[0] = raw.temp;
-        g_history.valid[0] = true;
-        g_history_today_valid = 1;
-      }
-  }
-
+  if((new_view.field_mask&3)==3)history_push(raw.moisture, raw.temp);
   pthread_mutex_unlock(&g_lock);
 
   if (g_on_update != NULL)
@@ -253,7 +277,7 @@ static int sensor_cloud_upload(void)
     }
 
   sensor_service_get_view(&v);
-  if (!v.valid)
+  if (!v.valid || v.source != SENSOR_SOURCE_LOCAL || v.field_mask != SP_ALL_FIELDS)
     {
       return -1;
     }
@@ -290,8 +314,9 @@ static void *sensor_task_entry(void *arg)
       uint32_t now_ms;
 
       clock_gettime(CLOCK_REALTIME, &ts);
-      ts.tv_sec += g_interval_ms / 1000;
-      ts.tv_nsec += (long)(g_interval_ms % 1000) * 1000000L;
+      unsigned poll_ms=box_power_sensor_interval((unsigned)g_interval_ms);
+      ts.tv_sec += poll_ms / 1000;
+      ts.tv_nsec += (long)(poll_ms % 1000) * 1000000L;
       if (ts.tv_nsec >= 1000000000L)
         {
           ts.tv_sec++;
@@ -364,7 +389,8 @@ int sensor_service_start(int interval_ms,
     /* 8KB：轮询线程现在还要跑 HTTP 上报（socket 收发 + JSON 拼装） */
 
     pthread_attr_init(&attr);
-    pthread_attr_setstacksize(&attr, 8192);
+    /* v191: 8K 不够 sb_http_get(hdr[512]) + fetch_soil JSON，实测 stack_dump */
+    pthread_attr_setstacksize(&attr, 16384);
     ret = pthread_create(&g_task, &attr, sensor_task_entry, NULL);
     pthread_attr_destroy(&attr);
   }

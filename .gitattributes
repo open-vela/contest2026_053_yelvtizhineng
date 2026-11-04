@@ -1,20 +1,16 @@
-# Keep the reviewed soil-node increment byte-stable on Windows and Linux.
-/app/soil-node/** text eol=lf
-/board/soil-node/** text eol=lf
-/docs/soil-node/** text eol=lf
-/patches/soil-node/** text eol=lf
-# Unified-diff context intentionally contains a leading space on blank lines.
-/patches/soil-node/*.patch -whitespace
-/tools/soil-node/** text eol=lf
-/logs/SOIL_NODE_20261104.md text eol=lf
-/soil-node.xml text eol=lf
-/contest2026_053_yelvtizhineng.xml text eol=lf
-/.gitignore text eol=lf
-/README.md text eol=lf
-/.gitattributes text eol=lf
-/logs/README.md text eol=lf
-/logs/tadycharming/manifest.json text eol=lf
-/logs/tadycharming/2026-10-20/codex__01a15876-98e6-7c12-a5c1-9465772a9e8c.jsonl text eol=lf
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.patch text eol=lf
+*.xml text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+defconfig text eol=lf
+*.a binary
+*.patch -whitespace
+licenses/** -whitespace
+app/plant-companion/components/box_phrase/vendor/** -whitespace
+app/plant-companion/components/voice_agent/esp_sr/** -whitespace
 
 /server/**/*.py text eol=lf
 /server/**/*.js text eol=lf

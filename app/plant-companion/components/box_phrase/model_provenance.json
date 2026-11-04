@@ -1,0 +1,8 @@
+{
+  "source": "espressif/esp-sr MultiNet5 Q8 Chinese model; compiled as model_data.c",
+  "blob_sha256": "72e2d43c352a45ce4bcb39743c76ebc25ba9a45f25188ccab6b0f8c3e9761fdc",
+  "raw_bytes": 2203819,
+  "raw_crc32": "0xf0d671c4",
+  "vendor_source": "https://github.com/espressif/esp-sr/tree/v2.0.0",
+  "wake_grammar": "ni hao xiao ban"
+}

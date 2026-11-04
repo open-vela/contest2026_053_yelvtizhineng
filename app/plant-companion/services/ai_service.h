@@ -69,6 +69,13 @@ int ai_service_analyze_async(const uint8_t *jpeg_data, size_t jpeg_len,
                              const struct soil_data_s *soil,
                              ai_service_done_cb_t cb, void *user_data);
 
+/* Continue a photo on an existing background worker with >=8 KiB stack.
+ * Blocks through completion and calls cb on that worker. Never call on LVGL
+ * or NSH. The caller retains the frame, unchanged, until this returns. */
+int ai_service_analyze_on_worker(const uint8_t *jpeg_data, size_t jpeg_len,
+                                 const struct soil_data_s *soil,
+                                 ai_service_done_cb_t cb, void *user_data);
+
 /** 是否正在处理（避免重复提交） */
 bool ai_service_busy(void);
 

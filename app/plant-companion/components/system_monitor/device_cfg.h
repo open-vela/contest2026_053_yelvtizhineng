@@ -1,3 +1,4 @@
+/* Current storage: /data/plant.cfg, atomic writes. Legacy SD config is read-only. */
 /****************************************************************************
  * apps/plant-companion/components/system_monitor/device_cfg.h
  *
@@ -7,10 +8,11 @@
  *   拍一拍/语音请求 -107（未配置服务器）的反复出现。
  *
  * 文件格式（/mnt/sd/plant.cfg，每行 key=value，# 开头为注释）：
- *   wifi_ssid=H3C_1209
+ *   wifi_ssid=YOUR_WIFI_SSID
  *   wifi_password=YOUR_WIFI_PASSWORD
  *   server_host=192.168.3.12
  *   server_port=8011
+ *   sn=ZXB-DEMO-0003            （可选：设备序列号，决定云端身份）
  ****************************************************************************/
 
 #ifndef __PLANT_DEVICE_CFG_H
@@ -41,6 +43,16 @@ int device_cfg_load(char *ssid, size_t ssid_size,
                     char *password, size_t password_size,
                     char *host, size_t host_size,
                     uint16_t *port);
+
+/* 读取 SD 上的设备序列号（plant.cfg 的 sn= 键）。
+ * 返回 0 = 读到；负 errno = 没有配置文件或没有该键。 */
+
+int device_cfg_load_sn(char *sn, size_t sn_size);
+
+/* 只改设备序列号：WiFi/服务器等键保持原样（整文件重写）。
+ * 返回 0 成功；负 errno 失败。 */
+
+int device_cfg_save_sn(const char *sn);
 
 /* 删除 plant.cfg（无文件时返回 0） */
 

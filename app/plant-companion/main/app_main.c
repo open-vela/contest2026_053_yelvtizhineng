@@ -12,14 +12,17 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include "../services/power_service.h"
 #include <malloc.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <pthread.h>
 #include <sys/ioctl.h>
 #include <sys/statvfs.h>
@@ -53,6 +56,8 @@
 #ifdef CONFIG_PLANT_AI_VOICE
 #  include "../ai_module/ai_voice/ai_voice.h"
 #  include "../services/voice_service.h"
+#  include "../services/handsfree_service.h"
+#  include "../components/box_phrase/box_phrase.h"
 #  include "../components/voice_agent/voice_agent.h"
 #  include "../hal/hal_i2s.h"
 #  include "../hal/hal_i2c.h"
@@ -64,6 +69,7 @@ extern FAR struct i2c_master_s *esp32s3_i2cbus_initialize(int bus);
 
 #ifdef CONFIG_PLANT_CAMERA_CAPTURE
 #  include "../components/camera_capture/camera_capture.h"
+extern void *esp32s3_psram_static_alloc(size_t size);
 #endif
 
 #ifdef CONFIG_PLANT_GESTURE_SENSOR
@@ -131,7 +137,7 @@ static void cfg_save_runtime(void)
   /* ⚠ 2026-09-16：这里原来会**整段**覆盖 SD 配置。
    * 只改了 WiFi 就调本函数时，服务器地址因为 s_srv_ok 还是 false 而被写成空，
    * SD 上原来存好的服务器地址就一起丢了 —— 实测：NSH 里
-   *     plant wifi H3C_1209 <密码>
+   *     plant wifi YOUR_WIFI_SSID <密码>
    * 之后 plant cfg show 变成"服务器="，重启后直接报"还没有配置服务器"，
    * 管理台也再也看不到设备在线。
    * 先把 SD 上已有的配置读回来，只有本次真的改过的才覆盖。 */
@@ -172,7 +178,7 @@ static void cfg_save_runtime(void)
   ret = device_cfg_save(ssid, password, host, port);
   if (ret == 0)
     {
-      printf("[Cfg] 已保存开机配置到 /mnt/sd/plant.cfg\n");
+      printf("[Cfg] 已保存开机配置到 /data/plant.cfg\n");
     }
   else
     {
@@ -182,6 +188,11 @@ static void cfg_save_runtime(void)
 #endif /* CONFIG_PLANT_SD_CARD */
 
 #if defined(CONFIG_PLANT_SD_CARD) && defined(CONFIG_PLANT_WIFI_MANAGER)
+#define CFG_DEFAULT_WIFI_SSID     ""
+#define CFG_DEFAULT_WIFI_PASSWORD ""
+#define CFG_DEFAULT_SERVER_HOST   "8.160.165.218"
+#define CFG_DEFAULT_SERVER_PORT   8011
+
 /* 读 SD plant.cfg → 自动连 WiFi → 配置服务器（verbose 供 CLI 使用）。
  * WiFi 已连时跳过重连；服务器注册失败不影响返回值（联网结果更重要）。 */
 
@@ -195,24 +206,21 @@ static int cfg_apply_from_file(bool verbose)
 
   ret = device_cfg_load(ssid, sizeof(ssid), password, sizeof(password),
                         host, sizeof(host), &port);
-  if (ret < 0 && ret != -ENOENT)
+  if (ret < 0 && verbose)
     {
-      if (verbose)
-        {
-          printf("[Cfg] 读取配置失败: %d\n", ret);
-        }
-
-      return ret;
+      printf("[Cfg] 读取配置失败: %d，使用固件默认配置\n", ret);
     }
 
-  if (ssid[0] == '\0' && host[0] == '\0')
+  if (ssid[0] == '\0')
     {
-      if (verbose)
-        {
-          printf("[Cfg] SD 上没有保存的开机配置\n");
-        }
+      strlcpy(ssid, CFG_DEFAULT_WIFI_SSID, sizeof(ssid));
+      strlcpy(password, CFG_DEFAULT_WIFI_PASSWORD, sizeof(password));
+    }
 
-      return -ENOENT;
+  if (host[0] == '\0')
+    {
+      strlcpy(host, CFG_DEFAULT_SERVER_HOST, sizeof(host));
+      port = CFG_DEFAULT_SERVER_PORT;
     }
 
   if (ssid[0] != '\0')
@@ -270,16 +278,36 @@ static int cfg_apply_from_file(bool verbose)
 static void *boot_cfg_thread(void *arg)
 {
   int waited = 0;
+  int attempt;
 
   (void)arg;
 
-  while (!sd_card_status() && waited < 40)
+  while (!sd_card_status() && access("/data/plant.cfg", R_OK) != 0 && waited < 40)
     {
       usleep(1000 * 1000);
       waited++;
     }
 
-  cfg_apply_from_file(false);
+  /* WiFi driver is not always ready at the exact boot instant.  Retry a few
+   * times; once association succeeds, cfg_apply also configures the server
+   * and registration/heartbeat can start. */
+
+  for (attempt = 0; attempt < 6; attempt++)
+    {
+      if (attempt > 0)
+        {
+          wifi_manager_disconnect();
+          usleep(500 * 1000);
+        }
+
+      cfg_apply_from_file(false);
+      if (wifi_manager_is_connected())
+        {
+          break;
+        }
+
+      usleep(5 * 1000 * 1000);
+    }
   return NULL;
 }
 
@@ -559,6 +587,8 @@ static void diag_verdict(uint32_t ns)
     }
 }
 
+
+
 static int cmd_voice(int argc, char *argv[])
 {
   int ret;
@@ -566,6 +596,32 @@ static int cmd_voice(int argc, char *argv[])
   if (argc < 3)
     {
       goto usage;
+    }
+
+#ifdef CONFIG_PLANT_UI
+  if(strcmp(argv[2],"ui")==0)
+    {
+      extern void screen_voice_status(void);
+      screen_voice_status();
+      return 0;
+    }
+#endif
+
+  if(strcmp(argv[2],"tonebench")==0)
+    {
+      if(voice_service_busy())return -EBUSY;
+      return ai_voice_local_tone_benchmark();
+    }
+  if(strcmp(argv[2],"state")==0)
+    {
+      printf("[VoiceState] state=%d busy=%d error=%d\n",
+          voice_service_get_state(),voice_service_busy(),voice_service_last_error());
+      return 0;
+    }
+  if(strcmp(argv[2],"heard")==0)
+    {
+      char heard[401];voice_service_copy_heard(heard,sizeof(heard));
+      printf("[VoiceHeard] %s\n",heard);return 0;
     }
 
   /* plant voice i2ctest                    - I2C link to codecs */
@@ -624,7 +680,8 @@ static int cmd_voice(int argc, char *argv[])
               return 0;
             }
 
-          voice_agent_set_dac_volume((uint8_t)v);
+          int rc = voice_agent_set_dac_volume((uint8_t)v);
+          if (rc < 0) return rc;
         }
 
       printf("[Voice] DAC 音量 REG32=0x%02X (%u)"
@@ -1664,6 +1721,53 @@ usage:
 
 /* plant cfg：开机配置（SD plant.cfg）查看/保存/清空/立即恢复 */
 
+/* plant sn [<新序列号>]：查看 / 设置设备序列号（写 SD 卡 plant.cfg 的 sn=）。
+ * 设备号决定云端身份，多块板卡必须各不相同；改完重启生效。 */
+
+static int cmd_sn(int argc, char *argv[])
+{
+  const char *sn;
+  int i;
+  int rc;
+
+  if (argc < 3)
+    {
+      printf("[SN] 当前设备序列号: %s\n", server_bridge_device_sn());
+      printf("     用法: plant sn <新序列号>   （写入 SD 配置，重启后生效）\n");
+      return 0;
+    }
+
+  sn = argv[2];
+  if (strlen(sn) < 3 || strlen(sn) > 31)
+    {
+      printf("[SN] 序列号长度需 3~31 个字符\n");
+      return -EINVAL;
+    }
+
+  for (i = 0; sn[i] != '\0'; i++)
+    {
+      char c = sn[i];
+
+      if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+            (c >= '0' && c <= '9') || c == '-' || c == '_'))
+        {
+          printf("[SN] 只能用字母、数字、'-' 和 '_'\n");
+          return -EINVAL;
+        }
+    }
+
+  rc = device_cfg_save_sn(sn);
+  if (rc < 0)
+    {
+      printf("[SN] 写入失败: %d（SD 卡挂载了吗？）\n", rc);
+      return rc;
+    }
+
+  printf("[SN] 已写入 %s 到 /data/plant.cfg；重启后生效"
+         "（重启前仍按旧编号上云）\n", sn);
+  return 0;
+}
+
 static int cmd_cfg(int argc, char *argv[])
 {
   if (argc < 3)
@@ -1827,6 +1931,29 @@ usage:
  ****************************************************************************/
 
 #ifdef CONFIG_PLANT_CAMERA_CAPTURE
+
+static void cam_cli_pins_take(void)
+{
+#ifdef CONFIG_PLANT_SOIL_SENSOR
+  sensor_service_stop();
+  soil_sensor_set_paused(true);
+#endif
+}
+
+static void cam_cli_pins_release(void)
+{
+  (void)camera_shutdown();
+
+#ifdef CONFIG_PLANT_SOIL_SENSOR
+  {
+    extern void esp32s3_uart0_reclaim_pins(void);
+    esp32s3_uart0_reclaim_pins();
+  }
+  soil_sensor_set_paused(false);
+  sensor_service_start(3000, NULL, NULL);
+#endif
+}
+
 static int cmd_cam(int argc, char *argv[])
 {
   /* 传感器是否已配置为 RGB565（capture 不再每次软复位重配，
@@ -1837,8 +1964,47 @@ static int cmd_cam(int argc, char *argv[])
   if (argc < 3)
     {
       printf("Usage: plant cam probe | cfg | rgb565 | reg | capture | "
-             "swap [on|off] | diag | off\n");
+             "stats | jpeg [w h] | jpegdiag [w h] | jpegq w h [qs] [mode] [pclk] | satlevel [-4..4] | ae [-5..5] | explos [lines] | rd <hex> | wr <hex> <val> | gamma default|local | "
+             "jpgupload | "
+             "sde on|off | desat on|off | swap [on|off] | diag | off\n");
       return -1;
+    }
+
+  if (strcmp(argv[2], "phase") == 0)
+    {
+#ifdef CONFIG_ESP32S3_CAM_DVP
+      extern int camera_dvp_phase_test(unsigned samples);
+      extern int camera_preview_phase_audit(bool enable);
+      if (argc >= 5 && strcmp(argv[3], "live") == 0)
+        return camera_preview_phase_audit(strcmp(argv[4], "on") == 0);
+#ifdef CONFIG_PLANT_SOIL_SENSOR
+      sensor_service_stop();
+      soil_sensor_set_paused(true);
+#endif
+      unsigned samples = argc > 3 ? strtoul(argv[3], NULL, 0) : 60;
+      if (samples < 1 || samples > 300) samples = 60;
+      int result = camera_dvp_phase_test(samples);
+#ifdef CONFIG_PLANT_SOIL_SENSOR
+      extern void esp32s3_uart0_reclaim_pins(void);
+      esp32s3_uart0_reclaim_pins();
+      soil_sensor_set_paused(false);
+      sensor_service_start(3000, NULL, NULL);
+#endif
+      return result;
+#else
+      return -ENOTSUP;
+#endif
+    }
+
+  /* Lightweight LCD completion status; do not sample pins or dump DMA. */
+  if (strcmp(argv[2], "previewstate") == 0)
+    {
+#ifdef CONFIG_ESP32S3_CAM_DVP
+      camera_preview_dump_status();
+      return 0;
+#else
+      return -ENOTSUP;
+#endif
     }
 
   if (strcmp(argv[2], "diag") == 0)
@@ -1846,6 +2012,7 @@ static int cmd_cam(int argc, char *argv[])
 #ifdef CONFIG_ESP32S3_CAM_DVP
       extern void esp32s3_cam_dvp_diag(void);
       esp32s3_cam_dvp_diag();
+      camera_preview_dump_status();
       return 0;
 #else
       printf("[Cam] diag not compiled (CONFIG_ESP32S3_CAM_DVP)\n");
@@ -1981,6 +2148,680 @@ static int cmd_cam(int argc, char *argv[])
       return camera_dump_regs();
     }
 
+  if (strcmp(argv[2], "sat") == 0)
+    {
+      /* SDE 手动饱和度：0x5580[1]=1, 0x5588[6]=1,
+       * 0x5583=U, 0x5584=V。用于实时扫参数，找到正确值后再固化。 */
+
+      int u = (argc >= 4) ? (int)strtol(argv[3], NULL, 0) : 0x30;
+      int v = (argc >= 5) ? (int)strtol(argv[4], NULL, 0) : u;
+      int ret;
+      uint8_t rb;
+
+      if (u < 0 || u > 0xff || v < 0 || v > 0xff)
+        {
+          printf("Usage: plant cam sat [U V]  (hex or dec, 0..255)\n");
+          return -1;
+        }
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      /* SDE may be register-latched while enabled.  Drop SDE first, latch
+       * manual saturation, set fixed U/V, then re-enable SDE+scale. */
+
+      board_camera_sccb_write(0x5001, 0x23);  /* SDE off, scale+CMX+AWB on */
+      usleep(1000);
+      board_camera_sccb_write(0x5588, 0x40);  /* manual saturation adjust */
+      usleep(1000);
+      board_camera_sccb_read(0x5588, &rb);
+      printf("[Cam] 0x5588 with SDE off=0x%02x\n", rb);
+
+      board_camera_sccb_write(0x5583, (uint8_t)u);
+      board_camera_sccb_write(0x5584, (uint8_t)v);
+      board_camera_sccb_write(0x5580, 0x06);  /* saturation+contrast enable */
+      usleep(1000);
+      board_camera_sccb_read(0x5588, &rb);
+      printf("[Cam] 0x5588 before SDE on=0x%02x\n", rb);
+
+      board_camera_sccb_write(0x5001, 0xa3);  /* SDE+scale+CMX+AWB */
+
+      printf("[Cam] saturation -> U=0x%02x V=0x%02x\n", u, v);
+
+      board_camera_sccb_read(0x5580, &rb);
+      printf("[Cam] 0x5580=0x%02x\n", rb);
+      board_camera_sccb_read(0x5588, &rb);
+      printf("[Cam] 0x5588=0x%02x\n", rb);
+      board_camera_sccb_read(0x5583, &rb);
+      printf("[Cam] 0x5583=0x%02x\n", rb);
+      board_camera_sccb_read(0x5584, &rb);
+      printf("[Cam] 0x5584=0x%02x\n", rb);
+      return 0;
+    }
+
+  if (strcmp(argv[2], "explos") == 0)
+    {
+      int lines = (argc >= 4) ? atoi(argv[3]) : -1;
+      int now = camera_set_preview_ae_max_lines(lines);
+
+      printf("[Cam] preview AE max lines = %d (下次配置取景时生效)",
+             now);
+      printf("\n");
+      return 0;
+    }
+
+  if (strcmp(argv[2], "rd") == 0 && argc >= 4)
+    {
+      uint8_t v = 0;
+      int r = (int)strtoul(argv[3], NULL, 16);
+
+      if (camera_peek_reg(r, &v) < 0)
+        {
+          printf("[Cam] rd 0x%04x failed\n", r);
+          return -1;
+        }
+
+      printf("[Cam] 0x%04x = 0x%02x\n", r, v);
+      return 0;
+    }
+
+  if (strcmp(argv[2], "wr") == 0 && argc >= 5)
+    {
+      int r = (int)strtoul(argv[3], NULL, 16);
+      int v = (int)strtoul(argv[4], NULL, 16);
+      uint8_t rb = 0;
+
+      if (camera_poke_reg(r, v) < 0)
+        {
+          printf("[Cam] wr 0x%04x failed\n", r);
+          return -1;
+        }
+
+      usleep(1000);
+      camera_peek_reg(r, &rb);
+      printf("[Cam] 0x%04x <- 0x%02x (readback 0x%02x)\n", r, v, rb);
+      return 0;
+    }
+
+  if (strcmp(argv[2], "satlevel") == 0)
+    {
+      int level = (argc >= 4) ? atoi(argv[3]) : -1;
+      int ret = camera_init();
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      ret = camera_set_saturation(level);
+      if (ret == 0)
+        {
+          uint8_t rb;
+          board_camera_sccb_read(0x5381, &rb);
+          printf("[Cam] 0x5381=0x%02x\n", rb);
+          board_camera_sccb_read(0x5385, &rb);
+          printf("[Cam] 0x5385=0x%02x\n", rb);
+          board_camera_sccb_read(0x5388, &rb);
+          printf("[Cam] 0x5388=0x%02x\n", rb);
+        }
+
+      return ret;
+    }
+
+  if (strcmp(argv[2], "profile") == 0)
+    {
+      int ret = camera_init();
+      int level;
+      if (ret < 0) return ret;
+      if (argc < 4)
+        {
+          printf("[Cam] ae=%d flipped=%d; profiles: day=2 indoor=3 night=5\n",
+                 camera_get_ae_level(), camera_get_flipped());
+          return 0;
+        }
+      if (!strcmp(argv[3], "day")) level = 2;
+      else if (!strcmp(argv[3], "indoor")) level = 3;
+      else if (!strcmp(argv[3], "night")) level = 5;
+      else return -EINVAL;
+      return camera_store_ae_level(level);
+    }
+
+  if (strcmp(argv[2], "flip") == 0)
+    {
+      int ret = camera_init();
+      if (ret < 0) return ret;
+      if (argc < 4)
+        {
+          printf("[Cam] flipped=%d\n", camera_get_flipped());
+          return 0;
+        }
+      if (strcmp(argv[3], "0") && strcmp(argv[3], "1")) return -EINVAL;
+      return camera_set_flipped(argv[3][0] - '0');
+    }
+
+  if (strcmp(argv[2], "ae") == 0)
+    {
+      int level = (argc >= 4) ? atoi(argv[3]) : -1;
+      int ret = camera_init();
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      if(argc<4){printf("[Cam] ae=%d\n",camera_get_ae_level());return 0;}
+      return camera_store_ae_level(level);
+    }
+
+  if (strcmp(argv[2], "stats") == 0)
+    {
+      const uint8_t *fb = NULL;
+      size_t flen = 0;
+      int ret;
+
+      cam_cli_pins_take();
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          goto out_stats;
+        }
+
+      if (!s_cam_rgb565_ready)
+        {
+          ret = camera_config_rgb565_qvga();
+          if (ret < 0)
+            {
+              goto out_stats;
+            }
+
+          s_cam_rgb565_ready = true;
+        }
+
+      ret = camera_mode_photo();
+      if (ret < 0)
+        {
+          goto out_stats;
+        }
+
+      ret = camera_photo_capture(&fb, &flen);
+      if (ret < 0)
+        {
+          goto out_stats;
+        }
+
+      printf("[Cam] stats done: %u bytes (%p)\n",
+             (unsigned)flen, (void *)fb);
+      ret = 0;
+
+out_stats:
+      s_cam_rgb565_ready = false;
+      cam_cli_pins_release();
+      return ret;
+    }
+
+  if (strcmp(argv[2], "jpeg") == 0)
+    {
+      int w = (argc >= 4) ? atoi(argv[3]) : 1024;
+      int h = (argc >= 5) ? atoi(argv[4]) : 768;
+      size_t len = 0;
+      int ret;
+
+      if (w <= 0 || h <= 0 || w > 2048 || h > 1536)
+        {
+          printf("Usage: plant cam jpeg [w h]  (max 2048x1536)\n");
+          return -1;
+        }
+
+      cam_cli_pins_take();
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          goto out_jpeg;
+        }
+
+      ret = camera_config_jpeg_wh((uint16_t)w, (uint16_t)h);
+      if (ret < 0)
+        {
+          goto out_jpeg;
+        }
+
+      ret = camera_jpeg_capture_to_sd("/mnt/sd/photo.jpg", &len);
+      if (ret < 0)
+        {
+          goto out_jpeg;
+        }
+
+      printf("[Cam] JPEG POC done: %dx%d %u bytes\n",
+             w, h, (unsigned)len);
+      ret = 0;
+
+out_jpeg:
+      s_cam_rgb565_ready = false;
+      cam_cli_pins_release();
+      return ret;
+    }
+
+  if (strcmp(argv[2], "jpegdiag") == 0 || strcmp(argv[2], "jpegcheck") == 0)
+    {
+#ifdef CONFIG_PLANT_AI_MODULE
+      int w = (argc >= 4) ? atoi(argv[3]) : 1024;
+      int h = (argc >= 5) ? atoi(argv[4]) : 768;
+      bool check_only=strcmp(argv[2],"jpegcheck")==0;
+      int divider=(check_only&&argc>=6)?atoi(argv[5]):-1;
+      int quant=(check_only&&argc>=7)?atoi(argv[6]):-1;
+      if(check_only&&((divider!=-1&&(divider<2||divider>31))||quant>63||quant< -1))return -EINVAL;
+      const uint8_t *fb = NULL;
+      size_t len = 0;
+      struct sb_diag_result_s diag;
+      int ret;
+      bool display_quiet=false;
+
+      if (w <= 0 || h <= 0 || w > 2048 || h > 1536)
+        {
+          printf("Usage: plant cam jpegdiag [w h]  (max 2048x1536)\n");
+          return -1;
+        }
+
+      unsigned xclk=(check_only&&argc>=8)?(unsigned)atoi(argv[7]):20;
+      if(xclk!=16&&xclk!=20)return -EINVAL;
+      cam_cli_pins_take();
+      extern int board_camera_xmclk_set(unsigned hz);
+      ret=board_camera_xmclk_set(xclk*1000000U);
+      if(ret<0)goto out_jpegdiag;
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          goto out_jpegdiag;
+        }
+
+      ret = camera_config_jpeg_wh((uint16_t)w, (uint16_t)h);
+      if (ret < 0)
+        {
+          goto out_jpegdiag;
+        }
+
+      if(divider!=-1){ret=board_camera_sccb_write(0x3824,(uint8_t)divider);if(ret<0)goto out_jpegdiag;}
+      if(quant!=-1){ret=board_camera_sccb_write(0x4407,(uint8_t)quant);if(ret<0)goto out_jpegdiag;}
+      if(divider!=-1||quant!=-1)usleep(300000);
+#ifdef CONFIG_PLANT_UI
+      if(check_only&&argc>=9&&atoi(argv[8])==1){
+        ret=ui_app_render_pause(true);if(ret<0)goto out_jpegdiag;
+        display_quiet=true;
+      }
+#endif
+      ret = camera_jpeg_capture(&fb, &len);
+#ifdef CONFIG_PLANT_UI
+      if(display_quiet){ui_app_render_pause(false);display_quiet=false;}
+#endif
+      if (ret < 0 || fb == NULL || len == 0)
+        {
+          ret = (ret < 0) ? ret : -ENODATA;
+          goto out_jpegdiag;
+        }
+
+      if(check_only){
+        printf("[Cam-Check] xclk=%uMHz divider=%d quant=%d\n",xclk,divider,quant);
+        ret=camera_jpeg_check(fb,len);
+        goto out_jpegdiag;
+      }
+
+      printf("[Cam] JPEG diag: upload %ux%u %u bytes...\n",
+             w, h, (unsigned)len);
+      ret = server_bridge_image_diagnose(fb, len, &diag);
+      if (ret == 0)
+        {
+          printf("[Cam] JPEG diag result: %s / %s match=%d health=%d\n",
+                 diag.name, diag.latin, diag.match, diag.health_score);
+        }
+
+out_jpegdiag:
+#ifdef CONFIG_PLANT_UI
+      if(display_quiet)ui_app_render_pause(false);
+#endif
+      s_cam_rgb565_ready = false;
+      cam_cli_pins_release();
+      return ret;
+#else
+      printf("jpegdiag requires CONFIG_PLANT_AI_MODULE\n");
+      return -1;
+#endif
+    }
+
+  if (strcmp(argv[2], "jpegq") == 0)
+    {
+#ifdef CONFIG_PLANT_AI_MODULE
+      /* 参数扫描：camera_config_jpeg_wh 之后覆盖压缩相关寄存器再抓帧上传。
+       * 用于定位 2048x1536 末段 MCU 截断的敏感参数。
+       *   plant cam jpegq <w> <h> [qs] [mode] [pclk] [c4400] [c4401]
+       * qs: 0x4407 量化系数; mode: 0x4713 压缩模式; pclk: 0x3824 PCLK 分频;
+       * c4400: 0x4400 整字节 (bit7=0 YUV420 / 1 YUV422, bit[6:0] JFIFO 读速);
+       * c4401: 0x4401 整字节 (SFIFO 速度)。抓帧后回读 0x4417 JFIFO overflow
+       * 与 0x4414-16 压缩长度，并打印帧字节 FNV 哈希用于上传完整性比对。 */
+
+      int w = (argc >= 4) ? atoi(argv[3]) : 2048;
+      int h = (argc >= 5) ? atoi(argv[4]) : 1536;
+      int qs = (argc >= 6) ? (int)strtol(argv[5], NULL, 0) : -1;
+      int mode = (argc >= 7) ? (int)strtol(argv[6], NULL, 0) : -1;
+      int pclk = (argc >= 8) ? (int)strtol(argv[7], NULL, 0) : -1;
+      int c4400 = (argc >= 9) ? (int)strtol(argv[8], NULL, 0) : -1;
+      int c4401 = (argc >= 10) ? (int)strtol(argv[9], NULL, 0) : -1;
+      uint32_t xreg1 = (argc >= 11) ? strtoul(argv[10], NULL, 0) : 0;
+      uint32_t xreg2 = (argc >= 12) ? strtoul(argv[11], NULL, 0) : 0;
+      const uint8_t *fb = NULL;
+      size_t len = 0;
+      struct sb_diag_result_s diag;
+      int ret;
+
+      if (w <= 0 || h <= 0 || w > 2048 || h > 1536)
+        {
+          printf("Usage: plant cam jpegq <w> <h> [qs] [mode] [pclk] [c4400] [c4401] [xreg1] [xreg2]\n");
+          return -1;
+        }
+
+      cam_cli_pins_take();
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          goto out_jpegq;
+        }
+
+      ret = camera_config_jpeg_wh((uint16_t)w, (uint16_t)h);
+      if (ret < 0)
+        {
+          goto out_jpegq;
+        }
+
+      if (qs >= 0)
+        {
+          board_camera_sccb_write(0x4407, (uint8_t)qs);
+        }
+
+      if (mode >= 0)
+        {
+          board_camera_sccb_write(0x4713, (uint8_t)mode);
+        }
+
+      if (pclk > 0)
+        {
+          board_camera_sccb_write(0x3824, (uint8_t)pclk);
+        }
+
+      if (c4400 >= 0)
+        {
+          board_camera_sccb_write(0x4400, (uint8_t)c4400);
+        }
+
+      if (c4401 >= 0)
+        {
+          board_camera_sccb_write(0x4401, (uint8_t)c4401);
+        }
+
+      /* 打包寄存器直写：xreg = (reg << 16) | val，0 表示跳过。
+       * 覆盖数据手册里有、固定参数没有的寄存器（0x4722 垂直结束偏移、
+       * 0x4600 bit5 固定高度、0x460C dummy pad 速度等）。
+       * NSH argv 上限 12：plant cam jpegq + 9 参数刚好打满。 */
+
+      if (xreg1 != 0)
+        {
+          board_camera_sccb_write((uint16_t)(xreg1 >> 16),
+                                  (uint8_t)(xreg1 & 0xff));
+        }
+
+      if (xreg2 != 0)
+        {
+          board_camera_sccb_write((uint16_t)(xreg2 >> 16),
+                                  (uint8_t)(xreg2 & 0xff));
+        }
+
+      if (qs >= 0 || mode >= 0 || pclk > 0 || c4400 >= 0 || c4401 >= 0 ||
+          xreg1 != 0 || xreg2 != 0)
+        {
+          printf("[Cam] jpegq overrides: qs=0x%02x mode=0x%02x pclk=0x%02x "
+                 "c4400=0x%02x c4401=0x%02x xreg=%08lx/%08lx\n",
+                 qs, mode, pclk, c4400, c4401,
+                 (unsigned long)xreg1, (unsigned long)xreg2);
+          usleep(300 * 1000);
+        }
+
+      ret = camera_jpeg_capture(&fb, &len);
+      if (ret < 0 || fb == NULL || len == 0)
+        {
+          ret = (ret < 0) ? ret : -ENODATA;
+          goto out_jpegq;
+        }
+
+      /* 同一份字节先落盘 SD：上传链路或服务器判失败时，仍可取回
+       * 传感器原始字节做 MCU 审计。 */
+
+      {
+        FILE *fp = fopen("/mnt/sd/photo.jpg", "wb");
+
+        if (fp != NULL)
+          {
+            extern void esp32s3_cam_dvp_invalidate(const void *addr,
+                                                   size_t len);
+            esp32s3_cam_dvp_invalidate(fb, len);
+            if (fwrite(fb, 1, len, fp) == len)
+              {
+                printf("[Cam] jpegq: saved /mnt/sd/photo.jpg (%u bytes)\n",
+                       (unsigned)len);
+              }
+
+            fclose(fp);
+          }
+      }
+
+      {
+        uint32_t hash = 2166136261u;
+        size_t i;
+        uint8_t v;
+        uint32_t clen;
+
+        for (i = 0; i < len; i++)
+          {
+            hash ^= fb[i];
+            hash *= 16777619u;
+          }
+
+        board_camera_sccb_read(0x4417, &v);
+        clen = 0;
+        board_camera_sccb_read(0x4414, &v);
+        clen = (uint32_t)v << 16;
+        board_camera_sccb_read(0x4415, &v);
+        clen |= (uint32_t)v << 8;
+        board_camera_sccb_read(0x4416, &v);
+        clen |= v;
+        board_camera_sccb_read(0x4417, &v);
+        printf("[Cam] jpegq: fnv=%08x len=%u complen=%u jfifo_ovf=%d\n",
+               (unsigned)hash, (unsigned)len, (unsigned)clen, v & 1);
+      }
+
+      printf("[Cam] jpegq: upload %ux%u %u bytes...\n", w, h, (unsigned)len);
+      ret = server_bridge_image_diagnose(fb, len, &diag);
+      if (ret == 0)
+        {
+          printf("[Cam] jpegq result: %s / %s match=%d health=%d\n",
+                 diag.name, diag.latin, diag.match, diag.health_score);
+        }
+
+out_jpegq:
+      s_cam_rgb565_ready = false;
+      cam_cli_pins_release();
+      return ret;
+#else
+      printf("jpegq requires CONFIG_PLANT_AI_MODULE\n");
+      return -1;
+#endif
+    }
+
+  if (strcmp(argv[2], "jpgupload") == 0)
+    {
+#ifdef CONFIG_PLANT_AI_MODULE
+      const char *path = "/mnt/sd/photo.jpg";
+      struct sb_diag_result_s diag;
+      uint8_t *buf;
+      long sz;
+      FILE *fp;
+      int ret;
+
+      fp = fopen(path, "rb");
+      if (fp == NULL)
+        {
+          printf("[Cam] jpgupload: fopen %s failed\n", path);
+          return -errno;
+        }
+
+      if (fseek(fp, 0, SEEK_END) != 0 ||
+          (sz = ftell(fp)) <= 0 ||
+          sz > (1024 * 1024) ||
+          fseek(fp, 0, SEEK_SET) != 0)
+        {
+          fclose(fp);
+          printf("[Cam] jpgupload: bad file size\n");
+          return -EINVAL;
+        }
+
+      buf = malloc((size_t)sz);
+      if (buf == NULL)
+        {
+          fclose(fp);
+          return -ENOMEM;
+        }
+
+      if (fread(buf, 1, (size_t)sz, fp) != (size_t)sz)
+        {
+          fclose(fp);
+          free(buf);
+          printf("[Cam] jpgupload: short read\n");
+          return -EIO;
+        }
+
+      fclose(fp);
+
+      {
+        size_t off;
+
+        for (off = 0; off + 1 < (size_t)sz; off++)
+          {
+            if (buf[off] == 0xff && buf[off + 1] == 0xd8)
+              {
+                break;
+              }
+          }
+
+        if (off + 1 >= (size_t)sz)
+          {
+            printf("[Cam] jpgupload: SOI not found\n");
+            free(buf);
+            return -EINVAL;
+          }
+
+        printf("[Cam] jpgupload: %s %ld bytes SOI=%u -> server\n",
+               path, sz, (unsigned)off);
+        ret = server_bridge_image_diagnose(buf + off, (size_t)sz - off,
+                                           &diag);
+      }
+
+      if (ret == 0)
+        {
+          printf("[Cam] jpgupload result: %s / %s match=%d health=%d\n",
+                 diag.name, diag.latin, diag.match, diag.health_score);
+        }
+
+      free(buf);
+      return ret;
+#else
+      printf("jpgupload requires CONFIG_PLANT_AI_MODULE\n");
+      return -1;
+#endif
+    }
+
+  if (strcmp(argv[2], "gamma") == 0)
+    {
+      int ret;
+
+      if (argc < 4)
+        {
+          printf("Usage: plant cam gamma default|local\n");
+          return -1;
+        }
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      if (strcmp(argv[3], "default") == 0)
+        {
+          return camera_set_gamma_default();
+        }
+      else if (strcmp(argv[3], "local") == 0)
+        {
+          return camera_set_gamma_local();
+        }
+
+      printf("Usage: plant cam gamma default|local\n");
+      return -1;
+    }
+
+  if (strcmp(argv[2], "sde") == 0)
+    {
+      int ret;
+
+      if (argc < 4)
+        {
+          printf("Usage: plant cam sde on|off\n");
+          return -1;
+        }
+
+      ret = camera_init();
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      if (strcmp(argv[3], "on") == 0)
+        {
+          return camera_set_sde(true);
+        }
+      else if (strcmp(argv[3], "off") == 0)
+        {
+          return camera_set_sde(false);
+        }
+
+      printf("Usage: plant cam sde on|off\n");
+      return -1;
+    }
+
+  if (strcmp(argv[2], "desat") == 0)
+    {
+      if (argc < 4)
+        {
+          printf("Usage: plant cam desat on|off\n");
+          return -1;
+        }
+
+      if (strcmp(argv[3], "on") == 0)
+        {
+          camera_set_highlight_desat(true);
+          return 0;
+        }
+      else if (strcmp(argv[3], "off") == 0)
+        {
+          camera_set_highlight_desat(false);
+          return 0;
+        }
+
+      printf("Usage: plant cam desat on|off\n");
+      return -1;
+    }
+
   if (strcmp(argv[2], "capture") == 0)
     {
       size_t jpeg_len = 0;
@@ -1994,10 +2835,12 @@ static int cmd_cam(int argc, char *argv[])
         esp32s3_cam_dvp_set_swap(true);
       }
 
+      cam_cli_pins_take();
       ret = camera_init();
       if (ret < 0)
         {
           printf("[Cam] camera_init failed: %d\n", ret);
+          cam_cli_pins_release();
           return ret;
         }
 
@@ -2010,6 +2853,7 @@ static int cmd_cam(int argc, char *argv[])
       if (ret < 0)
         {
           printf("[Cam] preview mode failed: %d\n", ret);
+          cam_cli_pins_release();
           return ret;
         }
 
@@ -2049,6 +2893,7 @@ static int cmd_cam(int argc, char *argv[])
           }
       }
 
+      cam_cli_pins_release();
       return ret;
     }
 
@@ -2077,9 +2922,11 @@ static int cmd_cam(int argc, char *argv[])
 
       esp32s3_cam_dvp_set_swap(true);
 
+      cam_cli_pins_take();
       ret = camera_init();
       if (ret < 0)
         {
+          cam_cli_pins_release();
           return ret;
         }
 
@@ -2089,6 +2936,7 @@ static int cmd_cam(int argc, char *argv[])
           if (ret < 0)
             {
               printf("[Cam] rgb565 config failed: %d\n", ret);
+              cam_cli_pins_release();
               return ret;
             }
 
@@ -2152,11 +3000,571 @@ static int cmd_cam(int argc, char *argv[])
       esp32s3_cam_dvp_set_stream(false);
       lcd_put_rgb565_set_sharpen(true);
       printf("[Cam] preview done: %d frames\n", i);
+      cam_cli_pins_release();
       return 0;
     }
 
-  printf("Usage: plant cam probe | cfg | rgb565 | reg | capture | "
-         "preview [N] | bar | swap [on|off] | diag\n");
+  if (strcmp(argv[2], "rgbshot") == 0)
+    {
+      /* RGB565 任意尺寸单帧 raw 落盘：config -> capture -> /mnt/sd/photo.rgb
+       * 用于离线分析接缝/饱和度/帧完整性（预览不上屏）。 */
+
+      int w = (argc >= 4) ? atoi(argv[3]) : 640;
+      int h = (argc >= 5) ? atoi(argv[4]) : 480;
+      volatile bool eoi = false;
+      const char *path = "/mnt/sd/photo.rgb";
+      uint8_t *fb;
+      FILE *fp;
+      int ret;
+
+      extern void esp32s3_cam_dvp_set_swap(bool on);
+      extern int esp32s3_cam_dvp_init(void);
+      extern int esp32s3_cam_dvp_start(void);
+      extern int esp32s3_cam_dvp_stop(void);
+      extern int esp32s3_cam_dvp_capture(void (*sink)(const uint8_t *,
+                                                      size_t, void *),
+                                         void *, volatile bool *);
+      extern uint8_t *esp32s3_cam_dvp_get_frame(void);
+      extern void esp32s3_cam_dvp_invalidate(const void *buf, size_t len);
+
+      if (w <= 0 || h <= 0 || w > 640 || h > 480)
+        {
+          printf("Usage: plant cam rgbshot [w h] (max 640x480)\n");
+          return -1;
+        }
+
+      esp32s3_cam_dvp_set_swap(true);
+      cam_cli_pins_take();
+
+      ret = camera_init();
+      if (ret == 0)
+        {
+          ret = camera_config_rgb565_wh((uint16_t)w, (uint16_t)h);
+        }
+
+      if (ret == 0)
+        {
+          s_cam_rgb565_ready = true;
+          esp32s3_cam_dvp_init();
+          esp32s3_cam_dvp_start();
+          ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+          esp32s3_cam_dvp_stop();
+        }
+
+      if (ret <= 0)
+        {
+          printf("[Cam] rgbshot capture failed: %d\n", ret);
+          cam_cli_pins_release();
+          return ret < 0 ? ret : -ENODATA;
+        }
+
+      fb = esp32s3_cam_dvp_get_frame();
+      printf("[Cam] rgbshot: %d bytes, head %02x %02x %02x %02x "
+             "%02x %02x %02x %02x\n",
+             ret, fb[0], fb[1], fb[2], fb[3], fb[4], fb[5], fb[6], fb[7]);
+
+      /* get_frame 在 RGB 模式返回 shadow（CPU memcpy 产物，只在 cache
+       * 里）。invalidate 会把脏行直接丢弃 → SD 落盘全零（v60 实测）。
+       * 经 4KB DRAM bounce 拷贝再写：CPU 读命中 cache 拿到真数据。 */
+
+      fp = fopen(path, "wb");
+      if (fp == NULL)
+        {
+          printf("[Cam] rgbshot: fopen failed\n");
+          cam_cli_pins_release();
+          return -errno;
+        }
+
+      {
+        static uint8_t s_bounce[4096];
+        int off;
+
+        for (off = 0; off < ret; off += (int)sizeof(s_bounce))
+          {
+            int n = ret - off;
+
+            if (n > (int)sizeof(s_bounce))
+              {
+                n = (int)sizeof(s_bounce);
+              }
+
+            memcpy(s_bounce, fb + off, (size_t)n);
+            fwrite(s_bounce, 1, (size_t)n, fp);
+          }
+      }
+
+      fclose(fp);
+      printf("[Cam] rgbshot: saved %s (%d bytes)\n", path, ret);
+      cam_cli_pins_release();
+      return 0;
+    }
+
+  if (strcmp(argv[2], "shadowshot") == 0)
+    {
+      /* 把流式预览当前显示的 shadow 帧原样落盘（v62b 排障：
+       * 用户报预览"油膜花纹"，需要看消费端真实像素而不是 freeze 单帧）。 */
+
+      extern uint8_t *esp32s3_cam_dvp_get_shadow(void);
+      extern size_t esp32s3_cam_dvp_get_shadow_size(void);
+      const char *path = "/mnt/sd/shadow.rgb";
+      uint8_t *sh;
+      size_t n;
+      FILE *fp;
+
+      /* 必须停线程（join），不能只冻结：相机 DMA 活着时 SD 多块写
+       * 实测会把 NSH 卡死在 fwrite 里（v63 踩坑），整机拖到 3Hz。 */
+
+      camera_preview_take();
+      camera_preview_stop();
+      usleep(150 * 1000);
+
+      sh = esp32s3_cam_dvp_get_shadow();
+      n = esp32s3_cam_dvp_get_shadow_size();
+      if (sh == NULL || n == 0)
+        {
+          printf("[Cam] shadowshot: no shadow frame\n");
+          return -ENODATA;
+        }
+
+      if (n > 640ul * 480ul * 2ul)
+        {
+          n = 640ul * 480ul * 2ul;
+        }
+
+      printf("[Cam] shadowshot: %u bytes, head %02x %02x %02x %02x\n",
+             (unsigned)n, sh[0], sh[1], sh[2], sh[3]);
+
+      fp = fopen(path, "wb");
+      if (fp == NULL)
+        {
+          return -errno;
+        }
+
+        {
+          static uint8_t s_bounce[4096];
+          size_t off;
+
+          for (off = 0; off < n; off += sizeof(s_bounce))
+            {
+              size_t c = n - off;
+
+              if (c > sizeof(s_bounce))
+                {
+                  c = sizeof(s_bounce);
+                }
+
+              memcpy(s_bounce, sh + off, c);
+              fwrite(s_bounce, 1, c, fp);
+            }
+        }
+
+      fclose(fp);
+      printf("[Cam] shadowshot: saved %s (%u bytes)\n", path,
+             (unsigned)n);
+      printf("[Cam] shadowshot: 预览已停，重进相机页恢复\n");
+      return 0;
+    }
+
+
+
+  if (strcmp(argv[2], "aligncheck") == 0)
+    {
+      /* 真实数据：在与取景相同的采集路径上连抓 N 帧 640x480 RGB565，
+       * 逐对做全帧 2D 配准（±16 像素 / 1024 采样点）并统计逐行差异。
+       * 输出：每对的 best(dx,dy)、SAD(0,0)/SAD(best)、异常行数。 */
+
+      extern int camera_config_rgb565_wh(uint16_t w, uint16_t h);
+      extern void esp32s3_cam_dvp_set_swap(bool on);
+      extern void esp32s3_cam_dvp_set_stream(bool on);
+      extern int esp32s3_cam_dvp_init(void);
+      extern int esp32s3_cam_dvp_start(void);
+      extern int esp32s3_cam_dvp_stop(void);
+      extern int esp32s3_cam_dvp_capture(void (*sink)(const uint8_t *,
+                                                     size_t, void *),
+                                         void *, volatile bool *);
+      extern uint8_t *esp32s3_cam_dvp_get_frame(void);
+
+      int n = (argc >= 4) ? atoi(argv[3]) : 6;
+      int W = (argc >= 6) ? atoi(argv[4]) : 640;
+      int H = (argc >= 6) ? atoi(argv[5]) : 480;
+      const size_t FS = (size_t)W * (size_t)H * 2u;
+      uint8_t *prev = (uint8_t *)esp32s3_psram_static_alloc(FS);
+      uint8_t *cur = NULL;
+      volatile bool eoi = false;
+      int k;
+      int ret;
+
+      if (prev == NULL)
+        {
+          printf("[Align] psram alloc failed");
+          printf("\n");
+          return -ENOMEM;
+        }
+
+      cam_cli_pins_take();
+      if (camera_init() < 0)
+        {
+          printf("[Align] camera_init failed");
+          printf("\n");
+          cam_cli_pins_release();
+          return -EIO;
+        }
+
+      if (camera_config_rgb565_wh(W, H) < 0)
+        {
+          printf("[Align] config failed");
+          printf("\n");
+          cam_cli_pins_release();
+          return -EIO;
+        }
+
+      int use_freeze = (argc >= 7 && strcmp(argv[6], "freeze") == 0);
+
+      esp32s3_cam_dvp_set_swap(true);
+      esp32s3_cam_dvp_set_stream(!use_freeze);
+      esp32s3_cam_dvp_init();
+      if (!use_freeze)
+        {
+          esp32s3_cam_dvp_start();
+        }
+
+      for (k = 0; k < n; k++)
+        {
+          if (use_freeze)
+            {
+              ret = esp32s3_cam_dvp_start();
+              if (ret == 0)
+                {
+                  ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+                }
+
+              esp32s3_cam_dvp_stop();
+            }
+          else
+            {
+              ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+            }
+          if (ret <= 0)
+            {
+              printf("[Align] frame %d capture failed: %d", k, ret);
+              printf("\n");
+              continue;
+            }
+
+          cur = esp32s3_cam_dvp_get_frame();
+          if (cur == NULL)
+            {
+              continue;
+            }
+
+          if (k > 0)
+            {
+              int dx;
+              int dy;
+              int bdx = 0;
+              int bdy = 0;
+              uint32_t bsad = 0xffffffffu;
+              uint32_t sad0 = 0;
+              uint32_t badrows = 0;
+              int y;
+
+              for (dy = -16; dy <= 16; dy++)
+                {
+                  for (dx = -16; dx <= 16; dx++)
+                    {
+                      uint32_t sad = 0;
+                      int si;
+
+                      for (si = 0; si < 1024; si++)
+                        {
+                          int px = ((si * 61) % (W - 64)) + 32;
+                          int py = ((si * 149) % (H - 64)) + 32;
+                          const uint8_t *a =
+                            cur + ((size_t)(py + dy) * W + (px + dx)) * 2u;
+                          const uint8_t *b =
+                            prev + ((size_t)py * W + px) * 2u;
+                          int d0 = (int)a[0] - (int)b[0];
+                          int d1 = (int)a[1] - (int)b[1];
+                          uint16_t va = (uint16_t)(a[0] | (a[1] << 8));
+                          uint16_t vb = (uint16_t)(b[0] | (b[1] << 8));
+                          int l0 = (int)(((va >> 11) & 31) * 8) -
+                                   (int)(((vb >> 11) & 31) * 8);
+                          int l1 = (int)(((va >> 5) & 63) * 4) -
+                                   (int)(((vb >> 5) & 63) * 4);
+                          int l2 = (int)((va & 31) * 8) -
+                                   (int)((vb & 31) * 8);
+
+                          sad += (uint32_t)((l0 < 0 ? -l0 : l0) +
+                                            (l1 < 0 ? -l1 : l1) +
+                                            (l2 < 0 ? -l2 : l2));
+                          (void)d0;
+                          (void)d1;
+                        }
+
+                      if (dx == 0 && dy == 0)
+                        {
+                          sad0 = sad;
+                        }
+
+                      if (sad < bsad)
+                        {
+                          bsad = sad;
+                          bdx = dx;
+                          bdy = dy;
+                        }
+                    }
+                }
+
+              for (y = 0; y < H; y++)
+                {
+                  uint32_t rsum = 0;
+                  int x;
+
+                  for (x = 0; x < W; x += 16)
+                    {
+                      const uint8_t *a = cur + ((size_t)y * W + x) * 2u;
+                      const uint8_t *b = prev + ((size_t)y * W + x) * 2u;
+                      uint16_t va = (uint16_t)(a[0] | (a[1] << 8));
+                      uint16_t vb = (uint16_t)(b[0] | (b[1] << 8));
+                      int l0 = (int)(((va >> 11) & 31) * 8) -
+                               (int)(((vb >> 11) & 31) * 8);
+                      int l1 = (int)(((va >> 5) & 63) * 4) -
+                               (int)(((vb >> 5) & 63) * 4);
+                      int l2 = (int)((va & 31) * 8) - (int)((vb & 31) * 8);
+
+                      rsum += (uint32_t)((l0 < 0 ? -l0 : l0) +
+                                         (l1 < 0 ? -l1 : l1) +
+                                         (l2 < 0 ? -l2 : l2));
+                    }
+
+                  if (rsum / (W / 16u) > 120u)
+                    {
+                      badrows++;
+                    }
+                }
+
+              printf("[Align] %s %dx%d %d->%d: best=(%d,%d) sad0=%lu sadbest=%lu "
+                     "badrows=%lu/%d", use_freeze ? "freeze" : "stream", W, H,
+                     k - 1, k, bdx, bdy, (unsigned long)(sad0 / 1024u),
+                     (unsigned long)(bsad / 1024u),
+                     (unsigned long)badrows, H);
+              printf("\n");
+            }
+
+          memcpy(prev, cur, FS);
+        }
+
+      esp32s3_cam_dvp_stop();
+      esp32s3_cam_dvp_set_stream(false);
+      cam_cli_pins_release();
+      return 0;
+    }
+
+  if (strcmp(argv[2], "rgbdiag") == 0)
+    {
+      /* v67 数据采集：连抓 N 帧流式 RGB565，逐帧统计
+       *   - clip%   : 任一通道顶满(R=31/G=63/B=31)的像素占比（"超量程"）
+       *   - banddiff: 与上一帧逐 32 行带平均绝对差的最大值（瞬态花斑定位）
+       *   - short   : 驱动层丢字节短帧计数（v66 拦截到的）
+       * 最差帧（banddiff 最大）落盘 /mnt/sd/rgbworst.rgb 供离线分析。 */
+
+      int n = (argc >= 4) ? atoi(argv[3]) : 30;
+      volatile bool eoi = false;
+      extern void esp32s3_cam_dvp_set_swap(bool on);
+      extern void esp32s3_cam_dvp_set_stream(bool on);
+      extern int esp32s3_cam_dvp_init(void);
+      extern int esp32s3_cam_dvp_start(void);
+      extern int esp32s3_cam_dvp_stop(void);
+      extern int esp32s3_cam_dvp_capture(void (*sink)(const uint8_t *,
+                                                      size_t, void *),
+                                         void *, volatile bool *);
+      extern uint8_t *esp32s3_cam_dvp_get_shadow(void);
+      extern uint32_t esp32s3_cam_dvp_get_short_frames(void);
+      static uint8_t *s_prev;
+      static uint8_t *s_worst;
+      uint8_t *sh;
+      int ret;
+      int i;
+
+      if (n <= 0 || n > 200)
+        {
+          printf("Usage: plant cam rgbdiag [N<=200]\n");
+          return -1;
+        }
+
+      if (s_prev == NULL)
+        {
+          s_prev = (uint8_t *)esp32s3_psram_static_alloc(640ul * 480ul * 2ul);
+          s_worst = (uint8_t *)esp32s3_psram_static_alloc(640ul * 480ul * 2ul);
+        }
+
+      if (s_prev == NULL || s_worst == NULL)
+        {
+          printf("[Cam] rgbdiag: psram alloc failed\n");
+          return -ENOMEM;
+        }
+
+      esp32s3_cam_dvp_set_swap(true);
+      cam_cli_pins_take();
+
+      ret = camera_init();
+      if (ret == 0)
+        {
+          ret = camera_config_rgb565_wh(640, 480);
+        }
+
+      if (ret < 0)
+        {
+          cam_cli_pins_release();
+          return ret;
+        }
+
+      s_cam_rgb565_ready = true;
+      esp32s3_cam_dvp_init();
+      esp32s3_cam_dvp_start();
+      esp32s3_cam_dvp_set_stream(true);
+
+        {
+          int worst_diff = -1;
+          int worst_idx = -1;
+          int captured = 0;
+          uint32_t short0 = esp32s3_cam_dvp_get_short_frames();
+
+          for (i = 0; i < n; i++)
+            {
+              ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+              if (ret <= 0)
+                {
+                  printf("[Cam] rgbdiag frame %d failed: %d\n", i, ret);
+                  continue;
+                }
+
+              sh = esp32s3_cam_dvp_get_shadow();
+
+                {
+                  const uint16_t *px = (const uint16_t *)sh;
+                  const uint16_t *pv = (const uint16_t *)s_prev;
+                  uint32_t clip = 0;
+                  uint32_t sum = 0;
+                  int band;
+                  int maxdiff = 0;
+                  int maxband = -1;
+                  int y;
+                  int x;
+
+                  for (band = 0; band < 480 / 32; band++)
+                    {
+                      uint32_t bclip = 0;
+                      uint32_t bsum = 0;
+                      uint64_t bdiff = 0;
+
+                      for (y = band * 32; y < band * 32 + 32; y++)
+                        {
+                          const uint16_t *row = px + y * 640;
+                          const uint16_t *prow = pv + y * 640;
+
+                          for (x = 0; x < 640; x++)
+                            {
+                              uint16_t v = row[x];
+                              int rr = (v >> 11) & 31;
+                              int gg = (v >> 5) & 63;
+                              int bb = v & 31;
+
+                              if (rr == 31 || gg == 63 || bb == 31)
+                                {
+                                  bclip++;
+                                }
+
+                              bsum += (rr + gg + bb) / 3;
+                              if (captured > 0)
+                                {
+                                  int d0 = (int)row[x] - (int)prow[x];
+
+                                  if (d0 < 0)
+                                    {
+                                      d0 = -d0;
+                                    }
+
+                                  bdiff += (uint32_t)d0;
+                                }
+                            }
+                        }
+
+                      clip += bclip;
+                      sum += bsum;
+                      if (captured > 0)
+                        {
+                          int bd = (int)(bdiff / (32ul * 640ul));
+
+                          if (bd > maxdiff)
+                            {
+                              maxdiff = bd;
+                              maxband = band;
+                            }
+                        }
+                    }
+
+                  printf("[Cam] rgbdiag #%d: clip=%lu.%lu%% mean=%lu "
+                         "banddiff=%d @band%d\n",
+                         i,
+                         (unsigned long)(clip * 100 / (640ul * 480ul)),
+                         (unsigned long)((clip * 1000 / (640ul * 480ul)) %
+                                         10),
+                         (unsigned long)(sum / (640ul * 480ul)),
+                         maxdiff, maxband);
+
+                  if (captured > 0 && maxdiff > worst_diff)
+                    {
+                      worst_diff = maxdiff;
+                      worst_idx = i;
+                      memcpy(s_worst, sh, 640ul * 480ul * 2ul);
+                    }
+
+                  memcpy(s_prev, sh, 640ul * 480ul * 2ul);
+                  captured++;
+                }
+            }
+
+          esp32s3_cam_dvp_stop();
+          esp32s3_cam_dvp_set_stream(false);
+
+          printf("[Cam] rgbdiag: %d/%d captured, short_frames %u->%u, "
+                 "worst=#%d banddiff=%d\n",
+                 captured, n, (unsigned)short0,
+                 (unsigned)esp32s3_cam_dvp_get_short_frames(),
+                 worst_idx, worst_diff);
+
+          if (worst_idx >= 0)
+            {
+              FILE *fp = fopen("/mnt/sd/rgbworst.rgb", "wb");
+
+              if (fp != NULL)
+                {
+                  static uint8_t s_b[4096];
+                  size_t off;
+
+                  for (off = 0; off < 640ul * 480ul * 2ul;
+                       off += sizeof(s_b))
+                    {
+                      memcpy(s_b, s_worst + off, sizeof(s_b));
+                      fwrite(s_b, 1, sizeof(s_b), fp);
+                    }
+
+                  fclose(fp);
+                  printf("[Cam] rgbdiag: worst -> /mnt/sd/rgbworst.rgb\n");
+                }
+            }
+        }
+
+      cam_cli_pins_release();
+      return 0;
+    }
+
+  printf("Usage: plant cam probe | cfg | rgb565 | reg | capture | rgbshot | shadowshot | rgbdiag | "
+         "stats | jpeg [w h] | jpegdiag [w h] | jpegq | preview [N] | bar | "
+         "satlevel [-4..4] | ae [-5..5] | explos [lines] | "
+         "gamma default|local | sde on|off | desat on|off | "
+         "swap [on|off] | diag\n");
   return -1;
 }
 #endif
@@ -2267,6 +3675,7 @@ static int cmd_mem(int argc, char *argv[])
         printf("sd: not mounted\n");
       }
   }
+
 #endif
 
   printf("=== MEM DIAG END ===\n");
@@ -2570,6 +3979,11 @@ static int cmd_nav(int argc, char *argv[])
 
   printf("[Nav] switch to %s (%d)...\n", names[tab], tab);
 
+  /* 若当前停在拍照页，先正常离开（停预览 + 关摄像头），
+   * 否则预览线程会继续往新页面上刷相机画面。 */
+
+  screen_camera_leave_if_active();
+
   if (ui_app_nav_to(tab) != 0)
     {
       printf("[Nav] rejected (UI not ready)\n");
@@ -2684,6 +4098,52 @@ static int cmd_tap(int argc, char *argv[])
 }
 
 /****************************************************************************
+ * cmd_scroll — 调试：注入一次垂直滑动（plant scroll <x> <y> <dy> <steps>）
+ ****************************************************************************/
+
+static int cmd_scroll(int argc, char *argv[])
+{
+  int x;
+  int y;
+  int dy;
+  int steps;
+  int waited;
+  int ret;
+
+  if (argc < 6)
+    {
+      printf("Usage: plant scroll <x> <y> <dy> <steps>\n");
+      return -1;
+    }
+
+  x = atoi(argv[2]);
+  y = atoi(argv[3]);
+  dy = atoi(argv[4]);
+  steps = atoi(argv[5]);
+
+  ret = ui_app_scroll_at(x, y, dy, steps);
+  if (ret != 0)
+    {
+      printf("[SynScroll] start failed: %d\n", ret);
+      return -1;
+    }
+
+  for (waited = 0; waited < 3000; waited += 20)
+    {
+      if (ui_app_scroll_left() < 0)
+        {
+          printf("[SynScroll] completed\n");
+          return 0;
+        }
+
+      usleep(20 * 1000);
+    }
+
+  printf("[SynScroll] timeout\n");
+  return -1;
+}
+
+/****************************************************************************
  * cmd_tdiag — 调试：真实触摸双端诊断（plant tdiag [on|off]）
  *
  * GT911 驱动侧计数（polls/down/up/i2c err）在板级 gt911_diag_snapshot()，
@@ -2721,6 +4181,39 @@ static int cmd_tdiag(int argc, char *argv[])
  ****************************************************************************/
 
 #ifdef CONFIG_PLANT_SD_CARD
+/* Framed, checksummed RLE export of a previously captured RGB565 BMP.
+ * Serial status messages may interleave; the host rejects incomplete frames. */
+static int cmd_uiexport(const char *name)
+{
+  char path[96];
+  if(!name||strlen(name)>48)return -1;
+  for(const char *q=name;*q;q++)if(!isalnum((unsigned char)*q)&&*q!='_')return -1;
+  snprintf(path,sizeof(path),"/data/%s.bmp",name);
+  FILE *fp=fopen(path,"rb");if(!fp)return -1;
+  uint16_t *row=malloc(960);uint8_t *runs=malloc(1920);char *line=malloc(1200);
+  if(!row||!runs||!line){free(row);free(runs);free(line);fclose(fp);return -1;}
+  int result=0;
+  if(fseek(fp,66,SEEK_SET)!=0)result=-1;
+  for(int y=0;y<320&&!result;y++){
+    if(fread(row,1,960,fp)!=960){result=-1;break;}
+    int n=0;
+    for(int x=0;x<480;){
+      int count=1;while(x+count<480&&row[x+count]==row[x])count++;
+      runs[n++]=count&255;runs[n++]=count>>8;runs[n++]=row[x]&255;runs[n++]=row[x]>>8;x+=count;
+    }
+    for(int off=0;off<n;off+=256){
+      int size=n-off;if(size>256)size=256;
+      uint32_t crc=2166136261u;
+      int len=snprintf(line,1200,"UICAP:%03d:%04d:%04d:",y,off,n);
+      for(int i=0;i<size;i++){crc=(crc^runs[off+i])*16777619u;len+=snprintf(line+len,1200-len,"%02x",runs[off+i]);}
+      snprintf(line+len,1200-len,":%08lx\n",(unsigned long)crc);
+      printf("%s",line);
+    }
+  }
+  free(row);free(runs);free(line);fclose(fp);
+  printf("UICAP_END:%d\n",result);return result;
+}
+
 static int cmd_cap(int argc, char *argv[])
 {
   static const uint32_t cap_bufsize = 480 * 320 * 2u + 512u;
@@ -2752,7 +4245,7 @@ static int cmd_cap(int argc, char *argv[])
       return -1;
     }
 
-  snprintf(path, sizeof(path), "/mnt/sd/%s.bmp", name);
+  snprintf(path, sizeof(path), "/data/%s.bmp", name);
 
   buf = (uint8_t *)malloc(cap_bufsize);
   if (buf == NULL)
@@ -2830,6 +4323,30 @@ static int cmd_capa(int argc, char *argv[])
 
   printf("[Capa] OK\n");
   return 0;
+}
+
+static int cmd_ink(int argc, char *argv[])
+{
+  int x;
+  int y;
+  int w;
+  int h;
+  int ink;
+
+  if (argc < 6)
+    {
+      printf("Usage: plant ink <x> <y> <w> <h>\n");
+      return -1;
+    }
+
+  x = atoi(argv[2]);
+  y = atoi(argv[3]);
+  w = atoi(argv[4]);
+  h = atoi(argv[5]);
+  ink = ui_app_capture_ink(x, y, w, h);
+
+  printf("[Ink] result=%d\n", ink);
+  return ink < 0 ? -1 : 0;
 }
 #endif /* CONFIG_PLANT_UI */
 
@@ -2961,7 +4478,207 @@ int main(int argc, char *argv[])
     }
 #endif
 
+  if (argc >= 2 && strcmp(argv[1], "lcddma") == 0)
+    {
+      /* v174：取景写屏走 GDMA 试验开关。
+       * 开后 >64B 的 SPI 块走 DMA（轮询路径实测只有 1.85MB/s）。
+       * 历史上"DMA 误开 → 整屏花屏"属于全局误用，这里可随时关回。 */
+
+      extern void esp32s3_spi_set_dma_preview(bool on);
+      extern bool esp32s3_spi_get_dma_preview(void);
+      bool on = (argc >= 3) && strcmp(argv[2], "on") == 0;
+
+      esp32s3_spi_set_dma_preview(on);
+      printf("[Lcd] SPI DMA(preview) = %s\n",
+             esp32s3_spi_get_dma_preview() ? "on" : "off");
+      return 0;
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "lcdrd") == 0)
+    {
+      extern int st7789_read_bytes(uint8_t cmd, uint8_t *buf, int n);
+      uint8_t buf[8];
+      uint8_t cmd = (uint8_t)strtoul(argv[2], NULL, 16);
+      int n = (argc >= 4) ? atoi(argv[3]) : 3;
+      int i;
+      int ret;
+
+      if (n > 8)
+        {
+          n = 8;
+        }
+
+      for (i = 0; i < n; i++)
+        {
+          buf[i] = 0;
+        }
+
+      ret = st7789_read_bytes(cmd, buf, n);
+      printf("[LcdRd] cmd=0x%02x ret=%d:", cmd, ret);
+
+      for (i = 0; i < n; i++)
+        {
+          printf(" %02x", buf[i]);
+        }
+
+      printf("\n");
+      return 0;
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "lcdfreq") == 0)
+    {
+      /* 调试：设置 LCD SPI 时钟（Hz 或 MHz 整数）。80MHz 超出 ST7789
+       * 规格（写时序 ~62.5MHz），怀疑偶发错位/花屏与超频有关。 */
+
+      extern void st7789_set_spi_freq(uint32_t hz);
+      uint32_t v = (argc >= 3) ? (uint32_t)strtoul(argv[2], NULL, 10)
+                               : 80000000u;
+
+      if (v < 1000)
+        {
+          v *= 1000000u;   /* 按 MHz 解释 */
+        }
+
+      st7789_set_spi_freq(v);
+      return 0;
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "lcdfps") == 0)
+    {
+      /* 面板扫描率实时调整（ST7789 0xC6 FRCTRL2，RTNA[4:0]）：
+       * 写屏行速 63us/行 vs 面板 52us/行 的差距是撕裂根因，
+       * 把面板调到 ~45-50Hz 可让两者接近 → 错位带大幅减小。 */
+
+      extern void st7789_write_cmd1(uint8_t cmd, uint8_t data);
+      uint8_t v = (argc >= 3) ? (uint8_t)strtoul(argv[2], NULL, 16) : 0x0f;
+
+      st7789_write_cmd1(0xc6, v);
+      printf("[Lcd] 0xC6(FRCTRL2) <- 0x%02x", v);
+      printf("\n");
+      return 0;
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "prevverify") == 0)
+    {
+      camera_preview_set_verify(argc >= 3 && strcmp(argv[2], "on") == 0);
+      return 0;
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "prevhold") == 0)
+    {
+      camera_preview_set_hold(argc >= 3 && strcmp(argv[2], "on") == 0);
+      return 0;
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "prevms") == 0)
+    {
+      int ms = (argc >= 3) ? atoi(argv[2]) : -1;
+
+      if (ms >= 0)
+        {
+          camera_preview_set_min_interval_ms(ms);
+        }
+      else
+        {
+          camera_preview_set_min_interval_ms(0);
+        }
+
+      printf("[Cam] preview min interval now %d ms",
+             camera_preview_set_min_interval_ms_get());
+      printf("\n");
+      return 0;
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "lcdbar") == 0)
+    {
+      /* 已知彩条直接写屏（8 竖条：白/黄/青/绿/品红/红/蓝/黑），
+       * 用于判断"屏+写屏格式"是否正确（与 UI 渲染分开定位）。 */
+
+      static const uint16_t bars[8] = {
+        0xFFFF, 0xFFE0, 0x07FF, 0x07E0, 0xF81F, 0xF800, 0x001F, 0x0000
+      };
+      static const char *names[8] = {
+        "white", "yellow", "cyan", "green", "magenta", "red", "blue", "black"
+      };
+      uint8_t *buf;
+      struct lcddev_area_s area;
+      int fd;
+      int x;
+      int y;
+      int i;
+
+      buf = (uint8_t *)malloc(480ul * 320ul * 2ul);
+      if (buf == NULL)
+        {
+          printf("[LcdBar] malloc failed");
+          printf("\n");
+          return -ENOMEM;
+        }
+
+      for (y = 0; y < 320; y++)
+        {
+          for (x = 0; x < 480; x++)
+            {
+              uint16_t v = bars[x / 60];
+              uint8_t *d = buf + ((size_t)y * 480u + (size_t)x) * 2u;
+
+              d[0] = (uint8_t)(v & 0xff);
+              d[1] = (uint8_t)(v >> 8);
+            }
+        }
+
+      fd = open("/dev/lcd0", O_WRONLY);
+      if (fd < 0)
+        {
+          printf("[LcdBar] open failed: %d", fd);
+          printf("\n");
+          free(buf);
+          return -1;
+        }
+
+      memset(&area, 0, sizeof(area));
+      area.col_start = 0;
+      area.col_end = 479;
+      area.row_start = 0;
+      area.row_end = 319;
+      area.data = buf;
+
+      ioctl(fd, LCDDEVIO_PUTAREA, (unsigned long)&area);
+      close(fd);
+      free(buf);
+
+      printf("[LcdBar] 已写 8 条竖彩条（左->右）：");
+      for (i = 0; i < 8; i++)
+        {
+          printf(" %s", names[i]);
+        }
+
+      printf("\n");
+      return 0;
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "scanline") == 0)
+    {
+      extern int st7789_read_scanline(uint8_t *raw);
+      uint8_t raw[4];
+      int n = (argc >= 3) ? atoi(argv[2]) : 16;
+      int i;
+
+      for (i = 0; i < n; i++)
+        {
+          int v = st7789_read_scanline(raw);
+
+          printf("[Scan] %d: %d raw=%02x %02x %02x %02x", i, v,
+                 raw[0], raw[1], raw[2], raw[3]);
+          printf("\n");
+          usleep(3000);
+        }
+
+      return 0;
+    }
+
 #ifdef CONFIG_PLANT_CAMERA_CAPTURE
+  if (argc >= 2 && strcmp(argv[1], "cam") == 0)
   if (argc >= 2 && strcmp(argv[1], "cam") == 0)
     {
       return cmd_cam(argc, argv);
@@ -2972,6 +4689,11 @@ int main(int argc, char *argv[])
   if (argc >= 2 && strcmp(argv[1], "sd") == 0)
     {
       return cmd_sd(argc, argv);
+    }
+
+  if (argc >= 2 && strcmp(argv[1], "sn") == 0)
+    {
+      return cmd_sn(argc, argv);
     }
 
   if (argc >= 2 && strcmp(argv[1], "cfg") == 0)
@@ -3080,6 +4802,62 @@ int main(int argc, char *argv[])
     }
 #endif
 #ifdef CONFIG_PLANT_UI
+  if(argc>=2 && strcmp(argv[1],"power")==0){
+    if(argc>=3){
+      if(!strcmp(argv[2],"off"))box_power_request(BOX_POWER_OFF);
+      else if(!strcmp(argv[2],"eco"))box_power_request(BOX_POWER_ECO);
+      else if(!strcmp(argv[2],"normal"))box_power_request(BOX_POWER_NORMAL);
+      else if(!strcmp(argv[2],"hold"))box_power_request(BOX_POWER_HOLD);
+      else if(!strcmp(argv[2],"wake"))box_power_activity();
+      else if(!strcmp(argv[2],"battery")){
+#ifdef CONFIG_PLANT_SYSTEM_MONITOR
+        int raw=-1,mv=-1;int rr=battery_read_raw(&raw),mr=battery_read_mv(&mv);
+        printf("[PowerBattery] adc_pin_mv_sample=%d pin_rc=%d pack_mv_estimate=%d pack_rc=%d calibrated=0 external_power=unknown auto_low_battery=disabled\n",raw,rr,mv,mr);
+#endif
+      }
+      else if(strcmp(argv[2],"status"))return -EINVAL;
+    }
+    box_power_status();return 0;
+  }
+  if(argc>=2 && strcmp(argv[1],"hf")==0){
+
+    if(argc>=3 && strcmp(argv[2],"heard")==0){handsfree_service_dump_heard();return 0;}
+    if(argc>=4 && strcmp(argv[2],"mic")==0){if(strcmp(argv[3],"on")&&strcmp(argv[3],"off"))return -EINVAL;handsfree_service_microphone(!strcmp(argv[3],"on"));return 0;}
+    if(argc>=4 && strcmp(argv[2],"trace")==0){handsfree_service_trace_wake(atoi(argv[3]));return 0;}
+    if(argc>=4 && strcmp(argv[2],"threshold")==0)return box_phrase_set_threshold(atoi(argv[3]));
+    if(argc>=3 && strcmp(argv[2],"math")==0){extern int box_voice_math_selftest(void);return box_voice_math_selftest();}
+    /* Read-only production maintenance; disabled during normal operation. */
+    if(argc>=3 && strcmp(argv[2],"pair")==0){
+      extern void hal_i2s_rx_pair_trace(bool);extern void hal_i2s_rx_pair_dump(void);
+      if(argc>=4)hal_i2s_rx_pair_trace(atoi(argv[3])!=0);
+      hal_i2s_rx_pair_dump();return 0;
+    }
+    if(argc>=3 && strcmp(argv[2],"off")==0)handsfree_service_enable(0);
+    else if(argc>=3 && strcmp(argv[2],"on")==0){handsfree_service_enable(1);handsfree_service_start();}
+    else if(argc>=4 && strcmp(argv[2],"text")==0){
+      char text[512]={0};size_t n=0;
+      for(int i=3;i<argc;i++){int wrote=snprintf(text+n,sizeof(text)-n,"%s%s",i==3?"":" ",argv[i]);if(wrote<0||(size_t)wrote>=sizeof(text)-n)return -EINVAL;n+=wrote;}
+      int rc=handsfree_service_inject(text);printf("[HFTest] queued=%d text_only=1\n",rc);return rc;
+    }else if(argc>=4 && strcmp(argv[2],"localpcm")==0){
+      if(handsfree_service_enabled()||handsfree_service_capturing()||handsfree_service_processing())return -EBUSY;
+      return box_phrase_test_command_file(argv[3]);
+    }else if(argc>=4 && strcmp(argv[2],"pcm")==0)return argc>=5?box_phrase_test_file_at(argv[3],(size_t)strtoul(argv[4],NULL,10)):box_phrase_test_file(argv[3]);
+    handsfree_service_status();return 0;
+  }
+  if (argc >= 3 && strcmp(argv[1], "uiexport") == 0)
+    {
+      return cmd_uiexport(argv[2]);
+    }
+
+  if (argc >= 3 && strcmp(argv[1], "uifixture") == 0)
+    {
+      extern int sensor_present_fixture_set(int mode);
+      int mode=atoi(argv[2]);
+      int rc=sensor_present_fixture_set(mode);
+      printf("[UIFixture] mode=%d rc=%d UI only; real telemetry unchanged\n",mode,rc);
+      return rc;
+    }
+
   if (argc >= 2 && strcmp(argv[1], "nav") == 0)
     {
       return cmd_nav(argc, argv);
@@ -3090,6 +4868,13 @@ int main(int argc, char *argv[])
   if (argc >= 2 && strcmp(argv[1], "tap") == 0)
     {
       return cmd_tap(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_UI
+  if (argc >= 2 && strcmp(argv[1], "scroll") == 0)
+    {
+      return cmd_scroll(argc, argv);
     }
 #endif
 
@@ -3111,6 +4896,13 @@ int main(int argc, char *argv[])
   if (argc >= 2 && strcmp(argv[1], "cap") == 0)
     {
       return cmd_cap(argc, argv);
+    }
+#endif
+
+#ifdef CONFIG_PLANT_UI
+  if (argc >= 2 && strcmp(argv[1], "ink") == 0)
+    {
+      return cmd_ink(argc, argv);
     }
 #endif
 
@@ -3195,6 +4987,7 @@ int main(int argc, char *argv[])
   printf("  sd    mount                  Mount SD card to /mnt/sd\n");
   printf("  sd    umount                 Unmount SD card\n");
   printf("  cfg   save|show|connect|clear  开机配置存 SD/恢复（防重启丢配置）\n");
+  printf("  sn    [<编号>]               查看/设置设备序列号（写 SD，重启生效）\n");
 #endif
   printf("  demo                        Run full peripheral demo\n");
   printf("  mem                         Memory/storage diagnostics\n");

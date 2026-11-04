@@ -101,7 +101,7 @@ dl_matrix2d_t *dl_matrix_slice(const dl_matrix2d_t *src, int x, int y, int w, in
  * @brief select a range of items from an existing matrix and flatten them into one dimension.
  *
  * @Warning The results are flattened in row-major order.
- *   
+ *
  * @param x     X-offset of the origin of the returned matrix within the sliced matrix
  * @param y     Y-offset of the origin of the returned matrix within the sliced matrix
  * @param w     Width of the resulting matrix
@@ -229,7 +229,7 @@ int dl_matrix_same_shape(const dl_matrix2d_t *a, const dl_matrix2d_t *b);
  * @param y     Row address
  * @return Value in that position
  */
-inline static fptp_t dl_matrix_get(const dl_matrix2d_t *m, const int x, const int y) { 
+inline static fptp_t dl_matrix_get(const dl_matrix2d_t *m, const int x, const int y) {
     return DL_ITM(m, x, y);
 }
 
@@ -243,7 +243,7 @@ inline static fptp_t dl_matrix_get(const dl_matrix2d_t *m, const int x, const in
  * @param y     Row address
  * @param val   Value to write to that position
  */
-inline static void dl_matrix_set(dl_matrix2d_t *m, const int x, const int y, fptp_t val) { 
+inline static void dl_matrix_set(dl_matrix2d_t *m, const int x, const int y, fptp_t val) {
     DL_ITM(m, x, y)=val;
 }
 
@@ -254,4 +254,3 @@ void matrix_get_range(const dl_matrix2d_t *m, fptp_t *rmin, fptp_t *rmax);
 #endif
 
 #endif
-

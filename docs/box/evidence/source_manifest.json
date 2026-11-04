@@ -1,0 +1,1417 @@
+[
+  {
+    "path": "app/plant-companion/ai_module/ai_chat/ai_chat.c",
+    "bytes": 6777,
+    "sha256": "026b60e80e1cf67d41f8241c9893e67668e9a13ecad9ef953a10e96251edcc42"
+  },
+  {
+    "path": "app/plant-companion/ai_module/ai_chat/ai_chat.h",
+    "bytes": 1945,
+    "sha256": "845573a091dbe202b8cdeb8320c0af8fe26c868f569de226b74ffef1cbc13dca"
+  },
+  {
+    "path": "app/plant-companion/ai_module/ai_common.c",
+    "bytes": 4374,
+    "sha256": "184e4a590f4e5c03cab71a96f5eacb9c339a68e2457f095e579310cb37fcbea5"
+  },
+  {
+    "path": "app/plant-companion/ai_module/ai_common.h",
+    "bytes": 1840,
+    "sha256": "1ee13c9d2491f50334c681e892a814da564ed24c127ec9e2c8253451060b7867"
+  },
+  {
+    "path": "app/plant-companion/ai_module/ai_engine/ai_engine.c",
+    "bytes": 3637,
+    "sha256": "e8a3fec68208ae75ec9f98382214148d65a1b228613819ef702e7402290db0b3"
+  },
+  {
+    "path": "app/plant-companion/ai_module/ai_engine/ai_engine.h",
+    "bytes": 1505,
+    "sha256": "6f80814b11b7517ad592ab1a300b854f25c649c57cb2b50014cf64898d9ce195"
+  },
+  {
+    "path": "app/plant-companion/ai_module/ai_image/ai_image.c",
+    "bytes": 7295,
+    "sha256": "9e53c8995f9ff9723b7010a202b9cba2107b2aa6a6e8eb165b17f015ad17a80f"
+  },
+  {
+    "path": "app/plant-companion/ai_module/ai_image/ai_image.h",
+    "bytes": 1461,
+    "sha256": "1d27cc9041fbd200236e821321170469a723b2daa7fbac1ae44d68dd67687c4a"
+  },
+  {
+    "path": "app/plant-companion/ai_module/ai_voice/ai_ns.c",
+    "bytes": 4359,
+    "sha256": "64c5c07cf02c8d8fcdbdbe821ff4e68ca29613bf94966a694a1b25cfc957394a"
+  },
+  {
+    "path": "app/plant-companion/ai_module/ai_voice/ai_ns.h",
+    "bytes": 873,
+    "sha256": "5fda76be0047f7ac8a65df065b93917d8604ce4accc1753140c46c43b51c10be"
+  },
+  {
+    "path": "app/plant-companion/ai_module/ai_voice/ai_voice.c",
+    "bytes": 83656,
+    "sha256": "c1774508f1ea45fb409bddca4da1a86b5faeb0866e2dd7e33546466fc403da67"
+  },
+  {
+    "path": "app/plant-companion/ai_module/ai_voice/ai_voice.h",
+    "bytes": 6050,
+    "sha256": "865e846f2be65619502f47b7110679c00255869510974943c8b96cd4e06a877a"
+  },
+  {
+    "path": "app/plant-companion/ai_module/ai_voice/box_voice_tone.h",
+    "bytes": 842,
+    "sha256": "62b5699f2100444e719e2711aabeb04c764908d471863e6acdaf503630772595"
+  },
+  {
+    "path": "app/plant-companion/ai_module/Kconfig",
+    "bytes": 1303,
+    "sha256": "8daae7ec1ed55642e2890243be5525930258ee4abcb1440f86e3714e90b9adf1"
+  },
+  {
+    "path": "app/plant-companion/ai_module/Makefile",
+    "bytes": 689,
+    "sha256": "a852a6fff1669eeac9865daa0c66760a02433d7fb4930217f5a5100a5679d6e8"
+  },
+  {
+    "path": "app/plant-companion/app/ai_engine.h",
+    "bytes": 432,
+    "sha256": "51664fadbf5ff42a0b6f172fc429cff540fdea7aa76add0371d4b132f96f5788"
+  },
+  {
+    "path": "app/plant-companion/app/app_task.h",
+    "bytes": 652,
+    "sha256": "94ac94463a4ac16e4e467c0655f74146fe9179a451ff8b4bceae344afc6315f6"
+  },
+  {
+    "path": "app/plant-companion/communication/cloud_client/cloud_client.h",
+    "bytes": 569,
+    "sha256": "4c9a9ef67dab213015ff915db04ca6f49512c7cda2ef1d43c549d35fd41c6a1b"
+  },
+  {
+    "path": "app/plant-companion/communication/wifi_manager/wifi_manager.c",
+    "bytes": 25509,
+    "sha256": "a748578c34951463da33ed49c018d6fe0d6d74daae973932e04a1bd0819c2025"
+  },
+  {
+    "path": "app/plant-companion/communication/wifi_manager/wifi_manager.h",
+    "bytes": 4308,
+    "sha256": "4aeb88d278884ce600cced39ee5d40c51bd36ff30a2087beb47a8b08fb73ddf6"
+  },
+  {
+    "path": "app/plant-companion/components/box_aec/box_aec.c",
+    "bytes": 7583,
+    "sha256": "fac79ed4b06e3b34b482dee92dd5faca65ad1042aaf8a0c7d05b3a60249961c1"
+  },
+  {
+    "path": "app/plant-companion/components/box_aec/box_aec.h",
+    "bytes": 580,
+    "sha256": "b725263916f16a2589b18c9ef2b7ad205a0859a51cb33bd7ef5c946032041ad8"
+  },
+  {
+    "path": "app/plant-companion/components/box_aec/math_compat.c",
+    "bytes": 2396,
+    "sha256": "b57fff36aba71565c71a0103690b4b9d01b0fb5a6b7cc5e9becb8050eab6000f"
+  },
+  {
+    "path": "app/plant-companion/components/box_aec/math_vectors.h",
+    "bytes": 63375,
+    "sha256": "c4be04c654ec842cd04357cac4a0d2a2e30b7154a05400c6f1e1152e01ee22d1"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/box_local_commands.h",
+    "bytes": 2888,
+    "sha256": "fb376adb40b6b2a2b0ee4d60a6e2714d0519e485c3c2d820d03ac924b6dd2722"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/box_phrase.c",
+    "bytes": 18719,
+    "sha256": "bf37789407137e5d1cf1deacb4970e79e54f9abda7421a8db5fd03dd40a72da7"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/box_phrase.h",
+    "bytes": 1635,
+    "sha256": "d110224b605e91ebd244a7ee3d4645bc0da93aabb27106f39856bebbcb3dcd3a"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/model_data.c",
+    "bytes": 5267862,
+    "sha256": "267e4c5da8dc9335874f7370662c5bcc761f551d39d9b18cdad489fc9e42e927"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/model_provenance.json",
+    "bytes": 333,
+    "sha256": "63086637087679f7705907b2ffd677651340f2d07f5232cbf244bef8246dcb41"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/AEC_PROVENANCE.json",
+    "bytes": 902,
+    "sha256": "82328e290bb82fef33aca81839062a713aa25e618bfccd05b5fbb249f531c8f9"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/c_speech_features_config.h",
+    "bytes": 596,
+    "sha256": "905b0469ccfd4f0f97f66566837c85b4470699e624f5c963bd0b2c6736b95394"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/cJSON.c",
+    "bytes": 80692,
+    "sha256": "607e756460fa0de37d20a7a9181f2de29c97bfb7ce5a0e6c2f548243836cd852"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/cJSON.h",
+    "bytes": 16393,
+    "sha256": "d9c41617543b7ade8d5e7b8f66f82b00fa70e4063c396f2d628849efce3ef109"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dl_lib.h",
+    "bytes": 16814,
+    "sha256": "8f86d182b9d334f7427b795c4d40801d3ed6d6a4ebe976dbc468784e7c1dcf66"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dl_lib_coefgetter_if.h",
+    "bytes": 3056,
+    "sha256": "e484cd16c986e00ef472c5feacee173fe502e8b0b91178f2c69ffcb46d7c520b"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dl_lib_conv_queue.h",
+    "bytes": 6856,
+    "sha256": "3cc63ca322868c6a29c14f686cc642df77c853c105b1311a5e196c29548020b6"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dl_lib_convq8_queue.h",
+    "bytes": 13503,
+    "sha256": "89651c649d961e3f93965c7b7c6032faa2f92ba251619949139339b963670176"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dl_lib_convq_queue.h",
+    "bytes": 16732,
+    "sha256": "53e9b63165d400c5456584d4aa4d0acf9ef45dd159f57df5a97d6b00e61d18ab"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dl_lib_matrix.h",
+    "bytes": 8319,
+    "sha256": "4956736945a184e308b4249e8032a7bb0c41c6edb74886b39a9b5d1aacec6d70"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dl_lib_matrixq.h",
+    "bytes": 15937,
+    "sha256": "00a18b81bb6df83b28421939be575de5c6ebc61b4f8fcd9c2b7640a1d67ed977"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dl_lib_matrixq8.h",
+    "bytes": 2224,
+    "sha256": "d5006b2d8d34c9b51607b5a19ceb62415a48f99f7f64d86d89a385cb432a6132"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsp_common.h",
+    "bytes": 96,
+    "sha256": "88a0d08d4bff6a2060ecd3853fdc2ce1081cd98cd5d1b769ded34940cd0a41e6"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsp_compat.c",
+    "bytes": 869,
+    "sha256": "0e9d480db36ff2eb92219e7c7b3c9b15f6b2f2749dd357fe5f56e2e83cc74548"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsp_err.h",
+    "bytes": 752,
+    "sha256": "a3f4d7382e0214db6b84881181913d5e8f78f874895adda836bb1fd38ee29256"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsp_err_codes.h",
+    "bytes": 1228,
+    "sha256": "949c15c39cad0e26ed510c0e45c05e77524f343c98a11eb6d779ef579423e90a"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsp_platform.h",
+    "bytes": 950,
+    "sha256": "37594e49cae1460f237a799fd91d49b126a2a68026f436842a1db290de5f8ccf"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsp_tests.h",
+    "bytes": 1389,
+    "sha256": "0075aa6dc32694221aef7cc896f30457e06d755cbc3bd46d724596f5eb928f61"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsp_types.h",
+    "bytes": 880,
+    "sha256": "dff758fc9d1898357042456771b34f9d8b42cb6aa8842d22aa144c573a4ba1fc"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsps_fft2r.h",
+    "bytes": 9036,
+    "sha256": "48a6c9b0d1ff7a3afbcee89c279104af6ac50e16bb1efd73effb86bde1862462"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsps_fft2r_bitrev_tables_fc32.c",
+    "bytes": 55509,
+    "sha256": "5aeffab252b3d597e33c51eee072fac51ac1d1e83187c6a4ae1c89f2cedd7386"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsps_fft2r_fc32_ansi.c",
+    "bytes": 10474,
+    "sha256": "101f1fad27db9bcc259588fe99dd8f0f25451c17e287bd0d41b61d006f485d4a"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsps_fft2r_platform.h",
+    "bytes": 83,
+    "sha256": "3914745cbd9c692ec893d2d855590f1f846f59b2ddba02725509a16a6cea3cc3"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsps_fft4r.h",
+    "bytes": 6733,
+    "sha256": "80ccbf1ee36ff6e135350fa5da30f0bffd7ea0535ab9debc955d0e3332d8ff81"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsps_fft4r_bitrev_tables_fc32.c",
+    "bytes": 38087,
+    "sha256": "b46bc5b5d3d0532fb586734bca2e56c58cc3a4d65169fa8085d1891d93406a63"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsps_fft4r_fc32_ansi.c",
+    "bytes": 10216,
+    "sha256": "bebc2d5729de5a64055d7eceb8ab4105d729435366ad9f18798613c7b1a22c50"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsps_fft4r_platform.h",
+    "bytes": 83,
+    "sha256": "3914745cbd9c692ec893d2d855590f1f846f59b2ddba02725509a16a6cea3cc3"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/dsps_fft_tables.h",
+    "bytes": 2909,
+    "sha256": "6aef7ca9d1f674770c9f646b725b752c4bb246c5d5ea8880dbd4821208f37a76"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_aec.h",
+    "bytes": 3713,
+    "sha256": "75c1a38e295d021c88fd0d516dfa36317d8938579984ae41e2c164a1a4d79905"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_afe_aec.h",
+    "bytes": 2531,
+    "sha256": "f99214243a95536e20d71dc13d4a7ee9b91c1414e5f54195c7184628ca2d655e"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_afe_config.h",
+    "bytes": 11790,
+    "sha256": "c145ea08a4aaec0785c6cf2da0faf31625bb11f7efeae2a493eff5980128037b"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_afe_doa.h",
+    "bytes": 1425,
+    "sha256": "8a8d5281c04e37543a2de4195d9bb197f68d08c044e6080216f4a9244cf36227"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_afe_sr_iface.h",
+    "bytes": 9537,
+    "sha256": "1b0e6dc5479fd75ddda757f36851213c87173f181010c7ee6297810f979998fc"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_afe_sr_models.h",
+    "bytes": 190,
+    "sha256": "ecec7a7d28458924f2a08769acd391aeda0f3215ff1f3e2dbf27fcc39db48c7f"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_agc.h",
+    "bytes": 1839,
+    "sha256": "e013b9b2f21cb2c78557e4a60f5671ea4f81033c4eeba8b12bee2efce8c3d4d6"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_attr.h",
+    "bytes": 49,
+    "sha256": "cf951cc87f3425b4cea0f470b5555c77fea3a3c29d615186d99d1df5a744f96e"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_doa.h",
+    "bytes": 1178,
+    "sha256": "096958044df9f92a7de235b19ca832110182fee7b994c22967171b38a466f176"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_dsp.h",
+    "bytes": 1419,
+    "sha256": "65820c1c0a90c7db7db217176f31acc4652d59e6f0e310c33c416882215aa7f0"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/ESP_DSP_LICENSE",
+    "bytes": 11358,
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_err.h",
+    "bytes": 172,
+    "sha256": "70ef8f447933b262d2047801266e29ae681d327b2cc3da0686cb1e981d64f484"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_heap_caps.h",
+    "bytes": 230,
+    "sha256": "831227145f943f55fdf60ce021a20e98d23544517921310db316128cefffd7b9"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_log.h",
+    "bytes": 230,
+    "sha256": "2386036cd95c479510b7d702ece183b25ab6442231ebf0e35d523bef213723d3"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_mase.h",
+    "bytes": 2606,
+    "sha256": "efac265d56a594cb361d5d8df3a88db21b676eed58e01b0f79822cdcc9336e75"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_mfcc_iface.h",
+    "bytes": 3806,
+    "sha256": "9e82754f83d1b3002615eaa6fb03fdcc3942ad07d0fa61ec89e7e17cafe927ed"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_mfcc_models.h",
+    "bytes": 1186,
+    "sha256": "d2654a4ca11aed7f496b7c438e2ea9bb504b8574d8f71c154c037d113bae788a"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_mn_iface.h",
+    "bytes": 7909,
+    "sha256": "9d4e24a2253bbbea8613dd7b0a3b026740f55dc95cdcabe97ecf28d469bcecd3"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_mn_models.h",
+    "bytes": 1574,
+    "sha256": "9c18bb550e2ce22d2ca9b4e68e51dee285f2d7cd5bea417ddd79483d669b5a81"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_mn_speech_commands.c",
+    "bytes": 13780,
+    "sha256": "b1c2842cd076932a0014481e9237584cb60cca473a2853378f7a751764a81e9c"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_mn_speech_commands.h",
+    "bytes": 5533,
+    "sha256": "8214b58f4d452b8b0b90b867c5c9285e9ed365ccfc7ebca1588add08ab92d880"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_ns.h",
+    "bytes": 2261,
+    "sha256": "64b986427ab179754fd1140e26e264ed8e9b5284f3cdde1d4882c888cd72e652"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_nsn_iface.h",
+    "bytes": 2108,
+    "sha256": "97e979cd5188c867846f34f085aaeaaca57892659b5a7f0e88aedbfe9e408e68"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_nsn_models.h",
+    "bytes": 330,
+    "sha256": "342767d8625a0cb3a2dc04b9070f1d0377a29c20abf0d79d2d81ca1f83198828"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_speech_features.h",
+    "bytes": 1763,
+    "sha256": "0554a7b568a6e2301ef5563911bcd265e34fe65293327e765698cee719b6c7a6"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/ESP_SR_LICENSE",
+    "bytes": 1187,
+    "sha256": "7d916fb00bc0742c47cafb0d0144b67f826d76779730b1cb8796045ea6ba1b9a"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_sr_webrtc.h",
+    "bytes": 2537,
+    "sha256": "1d319609af7904198bc5b4f58d751b5a226897a329dfc0360eba7ea889ebcc7e"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_vad.h",
+    "bytes": 5075,
+    "sha256": "afa170ef12dac8eab504055ba8b38a9bfc9c4f41d6aec8fe3268f8ac0d46cf4b"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_vadn_iface.h",
+    "bytes": 5341,
+    "sha256": "e123a2d62fbfbd2e25c99e0112be6847c7b1586350ed47324301ec1a065ce61e"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_vadn_models.h",
+    "bytes": 444,
+    "sha256": "fa51824735313f7cac3bec8e5d36d0f14bb9ba5079ea7da35d28c0a0ebb83c58"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_wn_iface.h",
+    "bytes": 7393,
+    "sha256": "b2380865d1456944b86a912e361ad804d56b97508b38b80ec92790d32bb8c453"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/esp_wn_models.h",
+    "bytes": 1212,
+    "sha256": "72facf857823712a5fbab87394a4f7b605ad14b0eb6364b671c6b1a9ac1c1c4d"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/flite_g2p.h",
+    "bytes": 497,
+    "sha256": "e8ac922612a434f64dfc1904b8571d52fc759607d0694eb502af9d80f6cbf8c6"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/lib/libc_speech_features.a",
+    "bytes": 518600,
+    "sha256": "e8ed227939536ed6b89209a46b479d08a19b10bbb74871a0e80a4832f18bf59f"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/lib/libdl_lib.a",
+    "bytes": 3572708,
+    "sha256": "ae415e7d78c09c6d3a143fcee7a829f6941bda44c459e56b26c9cd52d8b4dc51"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/lib/libflite_g2p.a",
+    "bytes": 1950374,
+    "sha256": "1ad8ae88e0cdbedf5391bd114c9bd0d49507a87196d5fdf7d60b5c7627b74bed"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/lib/libfst.a",
+    "bytes": 456422,
+    "sha256": "11bd30eff2f8c08a71c7afbe4d7ff84c34d5028385b778d3d702bf3802bed729"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/lib/libhufzip.a",
+    "bytes": 200032,
+    "sha256": "c359c70690abefabd14ce572e4e3cbdeca7a5f6046b8f7c20774ea95773d8c47"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/lib/libmultinet.a",
+    "bytes": 1849530,
+    "sha256": "1afe0ec970a1ebc845406ab9c1bab9faf79eb8efb0288046c54e6f9a58645888"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/lib/libnewlib_setjmp.a",
+    "bytes": 4464,
+    "sha256": "2a53a817497ffad5b8f6c8468cdd03d5267d250b146af146eb290ac888b684af"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/lib/libplant_box_aec.a",
+    "bytes": 946872,
+    "sha256": "6e4648c2b7a5c5736b161eb2fc468f713cf519fb4ac3ebb8756db82d9604543e"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/lib/libplant_wake_math.a",
+    "bytes": 337458,
+    "sha256": "42c00757bbf0e3db89655ed3535bf446d17261dea47e17c0bde7dc77993fba07"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/LICENSE.newlib",
+    "bytes": 63070,
+    "sha256": "bc1fbe427c6165ae8d06203f65af8c9f5fd5463788f2e8f56bceb50eeda19449"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/model_registry.c",
+    "bytes": 8161,
+    "sha256": "0274715bd458265bfa171fcc483922abff84f22e14b3cc6d50d33e9425378691"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/NEWLIB_LICENSE",
+    "bytes": 63070,
+    "sha256": "bc1fbe427c6165ae8d06203f65af8c9f5fd5463788f2e8f56bceb50eeda19449"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/puff.c",
+    "bytes": 37882,
+    "sha256": "5b9d75aeb5baf3575415bc6ade3f2a02e50b6b971b3f8b4fda2b03543bc6e52f"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/puff.h",
+    "bytes": 1415,
+    "sha256": "969b7be2a930db0cdcb19b0e5b29ae6741f5a8f663b6dba6d647e12ec60cfa8e"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/runtime.c",
+    "bytes": 2546,
+    "sha256": "786fa1ce3950b990bd4451ed211574590ebeb9334d049d334767b417d9410730"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/sdkconfig.h",
+    "bytes": 81,
+    "sha256": "0264f625a66453b3f957f398c3529ba04e11b9f24b5cfecc78a669258382aa81"
+  },
+  {
+    "path": "app/plant-companion/components/box_phrase/vendor/WAKE_MATH_PROVENANCE.json",
+    "bytes": 24619,
+    "sha256": "503fae8be7f240a4ebb3e24d91b4d9a78b1e6c03e588b8893f0ea45b8cbaf1af"
+  },
+  {
+    "path": "app/plant-companion/components/camera_capture/camera_capture.c",
+    "bytes": 175115,
+    "sha256": "9427f7109dd9ed848b7c225f0856a2c85a56cc8731aee74a8543256d93ea30b0"
+  },
+  {
+    "path": "app/plant-companion/components/camera_capture/camera_capture.h",
+    "bytes": 9403,
+    "sha256": "2849b60e441ae280bf6744c607fca979bdbfda3d81d2d800a2ef7ea322afc359"
+  },
+  {
+    "path": "app/plant-companion/components/camera_capture/tjpgd/tjpgd.c",
+    "bytes": 50533,
+    "sha256": "b3593c6b3b1739fb426bc0851f791088a821b491906e63ad7a0b847d452f2296"
+  },
+  {
+    "path": "app/plant-companion/components/camera_capture/tjpgd/tjpgd.h",
+    "bytes": 3994,
+    "sha256": "a92af55b45756ccc884b667d58c815c908e9854e47f36a082326e748a688e97e"
+  },
+  {
+    "path": "app/plant-companion/components/camera_capture/tjpgd/tjpgdcnf.h",
+    "bytes": 864,
+    "sha256": "fe074f301b7b0fd372d8256a64ca67930fce0ec41fd056f001c1ba82d3dfbab3"
+  },
+  {
+    "path": "app/plant-companion/components/gesture_sensor/gesture_sensor.c",
+    "bytes": 4152,
+    "sha256": "07cd9cd2b617d5051096497aafcfce11826ab1bbb33e02db3986c8a5964760a3"
+  },
+  {
+    "path": "app/plant-companion/components/gesture_sensor/gesture_sensor.h",
+    "bytes": 1768,
+    "sha256": "c6684bea3d7d29a987ce273e4ccb9e3da207ed1e8423a265a40de8f78ae92b37"
+  },
+  {
+    "path": "app/plant-companion/components/gesture_sensor/Kconfig",
+    "bytes": 148,
+    "sha256": "5b3df8ae06690afc889d08c14780554d68b0fad83db21b23de4f0b3c7358d7d9"
+  },
+  {
+    "path": "app/plant-companion/components/gesture_sensor/Make.defs",
+    "bytes": 331,
+    "sha256": "7185f4dd04a8999e58bc79e63c823f281e50e0b1f8dda32ab98915d7698b94d7"
+  },
+  {
+    "path": "app/plant-companion/components/sensor_driver/Kconfig",
+    "bytes": 534,
+    "sha256": "90ab62b27efec18dc46270e55b90a019debfa5895a47e5643f29846d2204703d"
+  },
+  {
+    "path": "app/plant-companion/components/sensor_driver/sensor_driver.h",
+    "bytes": 457,
+    "sha256": "9c17e97c1097d41c5dfaf61031a73be7d24248e703b2448cd862ed875a628eaa"
+  },
+  {
+    "path": "app/plant-companion/components/sensor_driver/soil_sensor.c",
+    "bytes": 16812,
+    "sha256": "f94a54dd246789e0ebe22c57a556727863031e218eabb12f39b8afd11c907602"
+  },
+  {
+    "path": "app/plant-companion/components/sensor_driver/soil_sensor.h",
+    "bytes": 2226,
+    "sha256": "f10a43754b213a37e98217300356d859ac94259e17e665f2de04a865caf06f7f"
+  },
+  {
+    "path": "app/plant-companion/components/system_monitor/battery_monitor.c",
+    "bytes": 2700,
+    "sha256": "5fb3e467fb857c9ab1c0c3d61c2886fee14aa89d894eda154387aaa8cc5755f3"
+  },
+  {
+    "path": "app/plant-companion/components/system_monitor/battery_monitor.h",
+    "bytes": 936,
+    "sha256": "78503634a4930121e2e223d8d65243213180592d6d34eff3f5b2d12cbe02e892"
+  },
+  {
+    "path": "app/plant-companion/components/system_monitor/device_cfg.c",
+    "bytes": 6433,
+    "sha256": "5a9460cb897bd1ae9233ceab4bb14cd484b292b0c82b884e46cb22937b5fa0f8"
+  },
+  {
+    "path": "app/plant-companion/components/system_monitor/device_cfg.h",
+    "bytes": 2576,
+    "sha256": "2a4e98b0c77bf4c09466226af9f549b6e06034765705d6faf818ba4f8e8d0eb0"
+  },
+  {
+    "path": "app/plant-companion/components/system_monitor/sd_card.c",
+    "bytes": 9330,
+    "sha256": "6577c9a11c4fd6d8a0112d09b16f946c940de295e83f878b0f0e9001b6c08257"
+  },
+  {
+    "path": "app/plant-companion/components/system_monitor/sd_card.h",
+    "bytes": 1737,
+    "sha256": "431609207bb8bfd0637a0ca4bcb8550f0ad9d012d0b26f3277d3ad88595ee8ed"
+  },
+  {
+    "path": "app/plant-companion/components/system_monitor/user_preferences.h",
+    "bytes": 1839,
+    "sha256": "3fe422eb2998337525e318be935105bc97ebb5a384de447783cffa5e1f664851"
+  },
+  {
+    "path": "app/plant-companion/components/ui_panel/lcd_st7796.c",
+    "bytes": 1282,
+    "sha256": "9c8a8e73415a8bdc67b8f574f06ee05cbce65ccf8f0c4484d7d187fea2c6cf4a"
+  },
+  {
+    "path": "app/plant-companion/components/ui_panel/lcd_st7796.h",
+    "bytes": 417,
+    "sha256": "65272c95595b8616307e569a89943ae70ccca93a1395b91a469bdceee35ef1aa"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/es7210.c",
+    "bytes": 15323,
+    "sha256": "81c9d6e5e0b9a553c1089ba0cb40b9cc7ee90e5eb26fd396aeb8ee39847ee67d"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/es7210.h",
+    "bytes": 3615,
+    "sha256": "877a9d3967c36447bf0a0339d6cb1ea585c478e76d3f8847a3371bbdaa89eb8d"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/es8311.c",
+    "bytes": 11542,
+    "sha256": "7729a4a5f8afa7551f0443d5efca36589475748ac9a59202dfa737061de5c4d5"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/es8311.h",
+    "bytes": 3660,
+    "sha256": "095d0b2ded6c14f488aa4f3a0769d4f23ec072adc7f63ce5adf0fa0c0ebe93b6"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/cjson/cJSON.c",
+    "bytes": 80692,
+    "sha256": "607e756460fa0de37d20a7a9181f2de29c97bfb7ce5a0e6c2f548243836cd852"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/cjson/cJSON.h",
+    "bytes": 16393,
+    "sha256": "d9c41617543b7ade8d5e7b8f66f82b00fa70e4063c396f2d628849efce3ef109"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/esp_sr_shim.c",
+    "bytes": 10478,
+    "sha256": "16140e8656960fa468f83956c0ad0af3eaa1f5ea46a8b9ff470d725bdf9d407d"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/c_speech_features_config.h",
+    "bytes": 596,
+    "sha256": "905b0469ccfd4f0f97f66566837c85b4470699e624f5c963bd0b2c6736b95394"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/dl_lib.h",
+    "bytes": 16814,
+    "sha256": "8f86d182b9d334f7427b795c4d40801d3ed6d6a4ebe976dbc468784e7c1dcf66"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/dl_lib_coefgetter_if.h",
+    "bytes": 3056,
+    "sha256": "e484cd16c986e00ef472c5feacee173fe502e8b0b91178f2c69ffcb46d7c520b"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/dl_lib_conv_queue.h",
+    "bytes": 6856,
+    "sha256": "3cc63ca322868c6a29c14f686cc642df77c853c105b1311a5e196c29548020b6"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/dl_lib_convq8_queue.h",
+    "bytes": 13503,
+    "sha256": "89651c649d961e3f93965c7b7c6032faa2f92ba251619949139339b963670176"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/dl_lib_convq_queue.h",
+    "bytes": 16732,
+    "sha256": "53e9b63165d400c5456584d4aa4d0acf9ef45dd159f57df5a97d6b00e61d18ab"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/dl_lib_matrix.h",
+    "bytes": 8319,
+    "sha256": "4956736945a184e308b4249e8032a7bb0c41c6edb74886b39a9b5d1aacec6d70"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/dl_lib_matrixq.h",
+    "bytes": 15937,
+    "sha256": "00a18b81bb6df83b28421939be575de5c6ebc61b4f8fcd9c2b7640a1d67ed977"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/dl_lib_matrixq8.h",
+    "bytes": 2224,
+    "sha256": "d5006b2d8d34c9b51607b5a19ceb62415a48f99f7f64d86d89a385cb432a6132"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_aec.h",
+    "bytes": 3713,
+    "sha256": "75c1a38e295d021c88fd0d516dfa36317d8938579984ae41e2c164a1a4d79905"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_afe_aec.h",
+    "bytes": 2531,
+    "sha256": "f99214243a95536e20d71dc13d4a7ee9b91c1414e5f54195c7184628ca2d655e"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_afe_config.h",
+    "bytes": 11790,
+    "sha256": "c145ea08a4aaec0785c6cf2da0faf31625bb11f7efeae2a493eff5980128037b"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_afe_doa.h",
+    "bytes": 1425,
+    "sha256": "8a8d5281c04e37543a2de4195d9bb197f68d08c044e6080216f4a9244cf36227"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_afe_sr_iface.h",
+    "bytes": 9537,
+    "sha256": "1b0e6dc5479fd75ddda757f36851213c87173f181010c7ee6297810f979998fc"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_afe_sr_models.h",
+    "bytes": 190,
+    "sha256": "ecec7a7d28458924f2a08769acd391aeda0f3215ff1f3e2dbf27fcc39db48c7f"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_agc.h",
+    "bytes": 1839,
+    "sha256": "e013b9b2f21cb2c78557e4a60f5671ea4f81033c4eeba8b12bee2efce8c3d4d6"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_doa.h",
+    "bytes": 1178,
+    "sha256": "096958044df9f92a7de235b19ca832110182fee7b994c22967171b38a466f176"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_mase.h",
+    "bytes": 2606,
+    "sha256": "efac265d56a594cb361d5d8df3a88db21b676eed58e01b0f79822cdcc9336e75"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_mfcc_iface.h",
+    "bytes": 3806,
+    "sha256": "9e82754f83d1b3002615eaa6fb03fdcc3942ad07d0fa61ec89e7e17cafe927ed"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_mfcc_models.h",
+    "bytes": 1186,
+    "sha256": "d2654a4ca11aed7f496b7c438e2ea9bb504b8574d8f71c154c037d113bae788a"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_mn_iface.h",
+    "bytes": 8066,
+    "sha256": "790e985d1744b0b672efa594bde6dd3082b2486c6b98426cdc9b392b2e6f4904"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_mn_models.h",
+    "bytes": 1574,
+    "sha256": "9c18bb550e2ce22d2ca9b4e68e51dee285f2d7cd5bea417ddd79483d669b5a81"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_ns.h",
+    "bytes": 2261,
+    "sha256": "64b986427ab179754fd1140e26e264ed8e9b5284f3cdde1d4882c888cd72e652"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_nsn_iface.h",
+    "bytes": 2108,
+    "sha256": "97e979cd5188c867846f34f085aaeaaca57892659b5a7f0e88aedbfe9e408e68"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_nsn_models.h",
+    "bytes": 330,
+    "sha256": "342767d8625a0cb3a2dc04b9070f1d0377a29c20abf0d79d2d81ca1f83198828"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_speech_features.h",
+    "bytes": 1763,
+    "sha256": "0554a7b568a6e2301ef5563911bcd265e34fe65293327e765698cee719b6c7a6"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_sr_webrtc.h",
+    "bytes": 2537,
+    "sha256": "1d319609af7904198bc5b4f58d751b5a226897a329dfc0360eba7ea889ebcc7e"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_vad.h",
+    "bytes": 5075,
+    "sha256": "afa170ef12dac8eab504055ba8b38a9bfc9c4f41d6aec8fe3268f8ac0d46cf4b"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_vadn_iface.h",
+    "bytes": 5341,
+    "sha256": "e123a2d62fbfbd2e25c99e0112be6847c7b1586350ed47324301ec1a065ce61e"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_vadn_models.h",
+    "bytes": 444,
+    "sha256": "fa51824735313f7cac3bec8e5d36d0f14bb9ba5079ea7da35d28c0a0ebb83c58"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_wn_iface.h",
+    "bytes": 7742,
+    "sha256": "f0dc340b57b281d52ab836a9bb340bf8c23b7ab033a405b82a71112136ac4b43"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/esp_wn_models.h",
+    "bytes": 1212,
+    "sha256": "72facf857823712a5fbab87394a4f7b605ad14b0eb6364b671c6b1a9ac1c1c4d"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/include/flite_g2p.h",
+    "bytes": 497,
+    "sha256": "e8ac922612a434f64dfc1904b8571d52fc759607d0694eb502af9d80f6cbf8c6"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/model_data/srmodels_data.c",
+    "bytes": 2084194,
+    "sha256": "ac8e17b1593d048625d639e618efdfa09727a011ef2aa05196f49be90d2bb524"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/model_data/srmodels_data.h",
+    "bytes": 162,
+    "sha256": "f27e76fe29ca7c9b1d63bcb0678cb4bc04564da874f758ff3a85257bd0721dc8"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/srmodel_shim.c",
+    "bytes": 8629,
+    "sha256": "b6fc428a882c55a4c4a174bca77bb8d976a4a428365dffa469e9160f80c8238b"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/esp_sr/srmodel_shim.h",
+    "bytes": 254,
+    "sha256": "8efe7b4dad4365c14240805dcdcf2074ac61f6d5e6e60a9972d2fded95bc6aeb"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/voice_agent.c",
+    "bytes": 7403,
+    "sha256": "17b5298267e6e00d7a37c88ef2d125c7bb862ced284d07b8a8054c4ec7cdc893"
+  },
+  {
+    "path": "app/plant-companion/components/voice_agent/voice_agent.h",
+    "bytes": 1392,
+    "sha256": "4e1b4f40461e8a77e7cf370565d7c190419467ce3b8ef399604f21c03a7fdb53"
+  },
+  {
+    "path": "app/plant-companion/hal/hal_camera.h",
+    "bytes": 2260,
+    "sha256": "e625061249746c990e85e12f744fcefac38c922c8c906a9a63c5e97a596d57e9"
+  },
+  {
+    "path": "app/plant-companion/hal/hal_camera_dvp.c",
+    "bytes": 8206,
+    "sha256": "85a0b893191d61e7d36e6c2f6d8794bc570f8e04f98b61a245f31ea7e5b0c911"
+  },
+  {
+    "path": "app/plant-companion/hal/hal_delay.h",
+    "bytes": 925,
+    "sha256": "a1bb2576eee51009eac1b0dd1b7bcdc7ec04ec6a9a4862657a40086725891780"
+  },
+  {
+    "path": "app/plant-companion/hal/hal_gpio.h",
+    "bytes": 1458,
+    "sha256": "85d347b4f65545d802de082d95a3266074e80803be5261255bbb3b11653ad5fd"
+  },
+  {
+    "path": "app/plant-companion/hal/hal_i2c.h",
+    "bytes": 3290,
+    "sha256": "c0b4fee66f916228688685995de7be090c5e8b63024312747f510955d4d63d9d"
+  },
+  {
+    "path": "app/plant-companion/hal/hal_i2s.h",
+    "bytes": 5359,
+    "sha256": "8e031823a78f7a755bcd0898cfffd160e7a88d70a8667d424118a55d5c5fda1b"
+  },
+  {
+    "path": "app/plant-companion/hal/hal_log.h",
+    "bytes": 676,
+    "sha256": "cb3dfba93eb313c7c5ab383fe93651843693d41a17d25bee47507ee758c7949c"
+  },
+  {
+    "path": "app/plant-companion/hal/hal_spi.h",
+    "bytes": 1375,
+    "sha256": "b4b48ae03ead461211d4b4337d0ee00db6ca184286f4521b32cc15bdabbb4336"
+  },
+  {
+    "path": "app/plant-companion/Kconfig",
+    "bytes": 7528,
+    "sha256": "42b85a4f5d15ff08c159cdf35c139adce4029b85ccb5c06b312e86cf6d025514"
+  },
+  {
+    "path": "app/plant-companion/main/app_main.c",
+    "bytes": 147908,
+    "sha256": "f46e4284d1c72f63e919b777c41cdc5db9c43fe0ab74fe19949e6fbcd39e491a"
+  },
+  {
+    "path": "app/plant-companion/Make.defs",
+    "bytes": 345,
+    "sha256": "7be4bb3855b44b9a58fe9bd00d8e3c868cdabc5f9d56d3fee077bfd36d05ab24"
+  },
+  {
+    "path": "app/plant-companion/Makefile",
+    "bytes": 8939,
+    "sha256": "5872a79ea8c553f9e6d97a0e50bff6df679488368d083b8d1f43efa8f1c7b31e"
+  },
+  {
+    "path": "app/plant-companion/ota/ota.c",
+    "bytes": 43344,
+    "sha256": "434e9e064f48017e393e07c5ffb8ce2977e0cd70672c507b13d1af6ecd132eb3"
+  },
+  {
+    "path": "app/plant-companion/ota/ota.h",
+    "bytes": 8388,
+    "sha256": "4a250f99679c97430d051773260d6d7b07943b75089086e01959b1abcacc345e"
+  },
+  {
+    "path": "app/plant-companion/ota/ota_manager.h",
+    "bytes": 453,
+    "sha256": "78bd381e76e40965150e55f936ae6908a5229f8db24a1af2f8ebbd30d2ee032c"
+  },
+  {
+    "path": "app/plant-companion/README.md",
+    "bytes": 658,
+    "sha256": "2c654928f7fce07b4be59bd364b35bbd605010d2fc3cbb31d13a3cbe82bb33c9"
+  },
+  {
+    "path": "app/plant-companion/services/actuator_service.c",
+    "bytes": 10595,
+    "sha256": "c3d3cd0721323f538df9122c071869702777e187ef22035d5960236e3588de22"
+  },
+  {
+    "path": "app/plant-companion/services/actuator_service.h",
+    "bytes": 2321,
+    "sha256": "3ee496a4b5fed1ca2d61162b8d93fa5126b06416e9be94b9a8182d5ee82db1a0"
+  },
+  {
+    "path": "app/plant-companion/services/ai_service.c",
+    "bytes": 8659,
+    "sha256": "d23c23599e55d1099a21bc54000677096081220dca61ab7a19b62614267c7250"
+  },
+  {
+    "path": "app/plant-companion/services/ai_service.h",
+    "bytes": 3162,
+    "sha256": "93b68b60dc907363d188fbb2fdc874f4eee0f009a7190cdad46b04b72d0d6ee4"
+  },
+  {
+    "path": "app/plant-companion/services/box_http_chunks.h",
+    "bytes": 1880,
+    "sha256": "fb0b1b83dc3e1bec1b9883152d7d636e5fb309e4ed2e79865d3a0402efb319e1"
+  },
+  {
+    "path": "app/plant-companion/services/handsfree_audio_gate.h",
+    "bytes": 2800,
+    "sha256": "d0cb256c9cf4a2df102c8ae1af6441806c39cae8c2026cfaf94d244ca30d56cc"
+  },
+  {
+    "path": "app/plant-companion/services/handsfree_capture_window.h",
+    "bytes": 1231,
+    "sha256": "b81b6b0139761960307f7a2a87c73fbb0f6f433ba274b1ae72270846bbe90194"
+  },
+  {
+    "path": "app/plant-companion/services/handsfree_command.c",
+    "bytes": 10899,
+    "sha256": "44dea7ed24711918c1a1ccbaba00401ccf81a39919c1e59a4fa3b2770e5c08d4"
+  },
+  {
+    "path": "app/plant-companion/services/handsfree_command.h",
+    "bytes": 1191,
+    "sha256": "07dd4bca86576d7142b5812577c1e06b3b5e56ef4df83b8bf984d32f603083c5"
+  },
+  {
+    "path": "app/plant-companion/services/handsfree_interrupt.h",
+    "bytes": 1254,
+    "sha256": "6e0cde78bc8b031df3cdfe921148860f41cc9ba093966fff14bf430284873411"
+  },
+  {
+    "path": "app/plant-companion/services/handsfree_interrupt_queue.c",
+    "bytes": 4491,
+    "sha256": "582f5c54dacd7ddf7590ea5dc3e5d9de35b698d7965e4fff81a4a79192ccfd58"
+  },
+  {
+    "path": "app/plant-companion/services/handsfree_interrupt_queue.h",
+    "bytes": 634,
+    "sha256": "d9594e80217d7c8520b5bf390b6438b5f793e4bd38920d5e902a45ea9a8ad8ef"
+  },
+  {
+    "path": "app/plant-companion/services/handsfree_service.c",
+    "bytes": 27784,
+    "sha256": "63f0a2c29369140f4285be41c5724f464411d2d3fe114f566f9d4d687b988124"
+  },
+  {
+    "path": "app/plant-companion/services/handsfree_service.h",
+    "bytes": 1124,
+    "sha256": "53037ef0f06e67282383aee1849a1b6274a6f6a26c370d821095868de644ca56"
+  },
+  {
+    "path": "app/plant-companion/services/ota_service.c",
+    "bytes": 6552,
+    "sha256": "cbe3867bdc32651ffd818621160dd72ec38233ba77efc284bf2b3a1e8df3010d"
+  },
+  {
+    "path": "app/plant-companion/services/ota_service.h",
+    "bytes": 2709,
+    "sha256": "5db4492ee7807d8b2479e376146b9004b69323a0b528f5dbc5599f0a710bd456"
+  },
+  {
+    "path": "app/plant-companion/services/plant_state.c",
+    "bytes": 4151,
+    "sha256": "f568bbf88e874a81b601eb6d19a5539cebfa559cc3768f664fd8046c80e7db27"
+  },
+  {
+    "path": "app/plant-companion/services/plant_state.h",
+    "bytes": 1863,
+    "sha256": "62780729bd8ed4de9dfaefe205c3316a6743d6d51174591e57602af238e69158"
+  },
+  {
+    "path": "app/plant-companion/services/pokedex_service.c",
+    "bytes": 4907,
+    "sha256": "3755cc2272e97f478b9d71bd88b6a04016de724bef10bd191817a45e53249da6"
+  },
+  {
+    "path": "app/plant-companion/services/pokedex_service.h",
+    "bytes": 1916,
+    "sha256": "05c559e4ff76b5f0fbff4965ba1dcce2937b8d85e65ec0f615e4b612d1a43fd0"
+  },
+  {
+    "path": "app/plant-companion/services/power_policy.c",
+    "bytes": 1569,
+    "sha256": "7b139ea02122d2f3a345eed1c10e3d950fc1649e3ca14e7e624543c7c01975d8"
+  },
+  {
+    "path": "app/plant-companion/services/power_policy.h",
+    "bytes": 838,
+    "sha256": "1a63209415d6f5fa92cd0eddb7a36d81b4f9dbc8c479b313c7897ae4013c8d0f"
+  },
+  {
+    "path": "app/plant-companion/services/power_service.c",
+    "bytes": 2416,
+    "sha256": "846f98c9d4d541696f24ea785b33dff9612ae07a5f3ce138958102ce4fb94dde"
+  },
+  {
+    "path": "app/plant-companion/services/power_service.h",
+    "bytes": 475,
+    "sha256": "b84c20ae95524c621873e8da693ab3d7208a3a5aa0ae464499b8f857bdf09895"
+  },
+  {
+    "path": "app/plant-companion/services/record_service.c",
+    "bytes": 10199,
+    "sha256": "eb60f88270ffc52c29c69f3182d1d2c66fd4721ac60f5c14bb0b1d0c7b4e07c8"
+  },
+  {
+    "path": "app/plant-companion/services/record_service.h",
+    "bytes": 2426,
+    "sha256": "47f6131ff9990997605234858bf27a47c18c58464192592a59cbdff94211df32"
+  },
+  {
+    "path": "app/plant-companion/services/record_text_utf8.h",
+    "bytes": 914,
+    "sha256": "7dcb3aa05ac678d964814a6d30e4a072121ff05ec482da505d79160796a642b6"
+  },
+  {
+    "path": "app/plant-companion/services/sample_time.h",
+    "bytes": 792,
+    "sha256": "ffdcbf11ceb196103475657110b9e2f48a4ac4aa7dfd74b5fe3f66d551cae6ed"
+  },
+  {
+    "path": "app/plant-companion/services/sd_write.h",
+    "bytes": 2161,
+    "sha256": "b71efdc6418c7b41e050a611da9b49a2067a28a1f91b9ed54a06a2d60d94da05"
+  },
+  {
+    "path": "app/plant-companion/services/sensor_presentation.c",
+    "bytes": 7403,
+    "sha256": "a896c9679b85815e9ef16872d809dd3c2a91bf5f6a3bc738ff5ac63aec49d16f"
+  },
+  {
+    "path": "app/plant-companion/services/sensor_presentation.h",
+    "bytes": 1571,
+    "sha256": "f0ed3ef1351c1c54991449dcea47c77380c3197c3986412102b8b0cbab53f545"
+  },
+  {
+    "path": "app/plant-companion/services/sensor_service.c",
+    "bytes": 13342,
+    "sha256": "a964a84acf1151fc09114381469536ab36496906df611757588f1bd0ad09e698"
+  },
+  {
+    "path": "app/plant-companion/services/sensor_service.h",
+    "bytes": 3616,
+    "sha256": "28823a977102c7656f70ae54ffa2b5248048db445eebfdb86e4acb74665940ec"
+  },
+  {
+    "path": "app/plant-companion/services/server_bridge.c",
+    "bytes": 79241,
+    "sha256": "b148a8589f795aef50aa66e404b42965e028ba7050c5a69b32b09873a73eb510"
+  },
+  {
+    "path": "app/plant-companion/services/server_bridge.h",
+    "bytes": 11809,
+    "sha256": "68a76eaab9a924120fca20fa7b157e082ad04aad3c3395b804ef7d6d79b7f184"
+  },
+  {
+    "path": "app/plant-companion/services/server_ipv4_resolver.h",
+    "bytes": 1053,
+    "sha256": "e582b22524568e16bd2c9bfe7e9d2b24280bda4c3fdd038c164b888b35d754a8"
+  },
+  {
+    "path": "app/plant-companion/services/voice_pcm_window.h",
+    "bytes": 1039,
+    "sha256": "5f2e8bbb768d694cabfe21eb0b5944a707a9eb67a2c60d1c472dec5f1050c1e4"
+  },
+  {
+    "path": "app/plant-companion/services/voice_service.c",
+    "bytes": 22896,
+    "sha256": "d0533a82b1bca5ea5e05b9245d234cb5a312c9d8ec95ccd8343cbb3bc067a1f0"
+  },
+  {
+    "path": "app/plant-companion/services/voice_service.h",
+    "bytes": 3665,
+    "sha256": "d7fff4fe86bcec1c04ed922cd41ab09e1ed690785e68a23f8381e77d7061fe39"
+  },
+  {
+    "path": "app/plant-companion/tools/generate_font_bin.py",
+    "bytes": 6468,
+    "sha256": "c4ecc147e2330e67774e25ff1a954caa47f86b89830abbc43e5c27a518ad6ae4"
+  },
+  {
+    "path": "app/plant-companion/tools/merge_box_sr_libs.py",
+    "bytes": 1545,
+    "sha256": "68b72593275a040a27d6171c4194d828eff10a780422925cc4c821a01f6523f4"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/companion_art.c",
+    "bytes": 956564,
+    "sha256": "f0ae3e3b9f168cca8b78b6ab4889928121b620b2e1f4531bb5552adaf0f195cf"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/lv_font_companion_16.c",
+    "bytes": 259392,
+    "sha256": "cf6995e18ce74edbd10627c4b3a57194bc80ac0c0d1f0cd6bda91d5184316925"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/lv_font_companion_22.c",
+    "bytes": 430160,
+    "sha256": "3b1eb55194445fa22c4554185b04f0ffa0d97ed0ab918e67b5f10adf20f82a4d"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/lv_font_companion_30.c",
+    "bytes": 719877,
+    "sha256": "d86ad0a249c4fe7b16dbae4180c7b6884a6ae83b5166a85bc814a0c8350b10ed"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/lv_font_emoji_16.c",
+    "bytes": 35313,
+    "sha256": "f1cebe747a430b3265762d9f488bdc79eda075d281c39e259563f1f4464078a6"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/lv_font_emoji_20.c",
+    "bytes": 49897,
+    "sha256": "fdf6fe6304d8ed5e7cc59b6312a59f98e7816ecfda5204d20bf38ed9a4ede3b9"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/lv_font_emoji_24.c",
+    "bytes": 66805,
+    "sha256": "37c247cc8d23923e377b24a5b3ad9c455455c85a525c89ceae1b597708943cb2"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/lv_font_emoji_32.c",
+    "bytes": 110620,
+    "sha256": "d99080045ba50938ce2b72c5e777f6f46975ccf0c3679c53b02f65b98bdb1ff0"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/lv_font_plant_zh_12.c",
+    "bytes": 348875,
+    "sha256": "c84356db2ce9e349321cfa15211739feffccfd3301b4ef196e8d954d5ba63800"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/lv_font_plant_zh_16.c",
+    "bytes": 520066,
+    "sha256": "ae5c99f301b55d5632465c62c6aa72ae05e3447a8297435d02877fd19dddd497"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/lv_font_plant_zh_19.c",
+    "bytes": 694114,
+    "sha256": "37817bcb1b50ef4b71f0ecac60de5bf4cc105f461756bfb6e6e570322f0f3d83"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/lv_font_plant_zh_25.c",
+    "bytes": 1077049,
+    "sha256": "c297a962ece459ed93d47d7206bdfc64c8fe1fb6a7f0c2719b7f5a3ff607f3a1"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/package-lock.json",
+    "bytes": 2938,
+    "sha256": "5aef0539dc7f350977e0a708170ef1c8587a58cd48aa5781c985aeb3922e77a7"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/package.json",
+    "bytes": 57,
+    "sha256": "0e2600925c9b24d8d75369423a351381f1e2ab0bdcbb3ca6c7af717e4f7cfb5b"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/README.md",
+    "bytes": 512,
+    "sha256": "4046ddaac134779726dae7194f3ae6084ba29685b8d34e3ca54089c9d1e55e58"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/symbols.txt",
+    "bytes": 1015,
+    "sha256": "e5de8046a706861dc1689f0e60737e43e1fce5de9c321894abee6f01b42de58d"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/zh_font.c",
+    "bytes": 39891,
+    "sha256": "795904e742f6f2bb740ff2b3ac394f33a3c135e5cb422dc18784c58e45609c2e"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/fonts/zh_font.h",
+    "bytes": 4149,
+    "sha256": "8077b68d68a592c76e26484abb8d484f95c5356decb72a795504584ca9b6afd2"
+  },
+  {
+    "path": "app/plant-companion/ui/assets/voice_pea_art.c",
+    "bytes": 852619,
+    "sha256": "cf9311d35feeb4a2ce88931858505ed34a8062b667d07196efb8dc5a44b60260"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_camera.c",
+    "bytes": 42037,
+    "sha256": "88aea81cfc9fd8128b2e1de3a5a1f478f9d2a6c4b225f98416adb0343d700c9d"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_camera.h",
+    "bytes": 1160,
+    "sha256": "5724800fd1fcec6020da0addcc41ad7ee7ea31c3b991644a4f7e7c63e6f66631"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_data.c",
+    "bytes": 8355,
+    "sha256": "358965f98dc4ff28a8e6ad10485f3cb38c0467bcf864df6932d235e1b88800b6"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_data.h",
+    "bytes": 1358,
+    "sha256": "91763535ef222b1e21cd232b661022f2ce6de607d7a8e3066f90f8ce56ca5cac"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_diagnose.c",
+    "bytes": 15958,
+    "sha256": "6e554c99eef241d3f5666e0e5fc02254939651f5068f7f86eb0d7d2420d9e1d3"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_diagnose.h",
+    "bytes": 1341,
+    "sha256": "2e2fb0933188d06c736e575869534ecca42baa3ed3f3fab6649d465a06fe0300"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_diary.c",
+    "bytes": 11951,
+    "sha256": "7d5b5be7ba7ff52c6b89e4d3cceee2351692ef75c8eff07950ca423af44e28d8"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_diary.h",
+    "bytes": 865,
+    "sha256": "d72f6b56949909db7fc026a2f0c1b0b807839190e02ae102b732ae486b2c25ee"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_home.c",
+    "bytes": 8851,
+    "sha256": "9964a63739862d1e4c3f4c6b87feff8827ac67b9cfb6c6ed8989dacb339db084"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_home.h",
+    "bytes": 1807,
+    "sha256": "dbc2d63ded2054719c88f19ac2cfd157e483fc1563bc1bd6ee7f9a7c4fd97c48"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_ota.c",
+    "bytes": 11684,
+    "sha256": "040e72682c7e205971a790e00a225227038b52344a29b5d3cb8ec4b395b78474"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_ota.h",
+    "bytes": 1301,
+    "sha256": "4547226dd8ca1d8a5fbcabb296b84ffefcaf25ff8aed60699ae073626a9734a7"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_tasks.c",
+    "bytes": 12254,
+    "sha256": "29c10fba271d08755dfeb0932a1b413ed45023bb8a70e20d6446951d0b1c35b0"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_tasks.h",
+    "bytes": 883,
+    "sha256": "653ce65fc113ff709134aaeab1f53daac3980d3fbfbe2b73df959e5dc595a443"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_voice.c",
+    "bytes": 7132,
+    "sha256": "3484d36922c64a8881a27c6c75d17f6cb69513c9a8a3aea828790a92ca220177"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_voice.h",
+    "bytes": 929,
+    "sha256": "c8522f0f68dc050ea4ac66d8ccf5121324d27b6ea02211edb5b26b7e9d4031ef"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_wifi.c",
+    "bytes": 36738,
+    "sha256": "1349dc75c2719e6554cf33eed7f5067bfe84ec791a771b618a13433ca264477e"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/screen_wifi.h",
+    "bytes": 1283,
+    "sha256": "1b243b36107c93ca40b782f1356dc82218352d3f417982686acb45bcf3fe97df"
+  },
+  {
+    "path": "app/plant-companion/ui/screens/voice_scene.h",
+    "bytes": 969,
+    "sha256": "8a783e04da6e7498fdf6b86f00f3d724a97b7eea7e369c2ecf51d0af57d0c9f0"
+  },
+  {
+    "path": "app/plant-companion/ui/theme/theme_plant.c",
+    "bytes": 4904,
+    "sha256": "2e0ebacb5dc207e3b652612a80e5d68db07cccdb8d77bcba8184775b7401391a"
+  },
+  {
+    "path": "app/plant-companion/ui/theme/theme_plant.h",
+    "bytes": 7698,
+    "sha256": "051d65332c9949410370207fda115c8124ddeda8122a3989d651e5f9f94efdf6"
+  },
+  {
+    "path": "app/plant-companion/ui/ui_app.c",
+    "bytes": 78599,
+    "sha256": "aa51b1edde02bc68f98ae20ae78bc38fc0ba4998142d9b74183a561516f39cf7"
+  },
+  {
+    "path": "app/plant-companion/ui/ui_app.h",
+    "bytes": 5318,
+    "sha256": "362267748bd1835f7b83f3f29a03a1e8e3151a5ee3cfb8abe9289193b2a39919"
+  },
+  {
+    "path": "app/plant-companion/ui/voice_actions.c",
+    "bytes": 13164,
+    "sha256": "8ecd3f5c782c975a221dffeebdd840e442484cc4d00137c4586b829aff5a91c3"
+  },
+  {
+    "path": "app/plant-companion/ui/widgets/companion_art_decoder.c",
+    "bytes": 2845,
+    "sha256": "f7712fd28f5fc0e4e044d4a7566ab0927f5c497a5853c36edb2f7f8f480bf382"
+  },
+  {
+    "path": "app/plant-companion/ui/widgets/companion_art_decoder.h",
+    "bytes": 178,
+    "sha256": "13e6015c6cacddce173a4a1b2762d6a3445618d02795faa9b26c78433225775f"
+  },
+  {
+    "path": "app/plant-companion/ui/widgets/companion_ui.c",
+    "bytes": 2241,
+    "sha256": "4a9a76cab568d15639fed4bb5947b343ea1cd88ac17de5e0485d3c9185f207bf"
+  },
+  {
+    "path": "app/plant-companion/ui/widgets/companion_ui.h",
+    "bytes": 739,
+    "sha256": "12861d416818c5c56215246fbf2fc81d9a744eac1a2189a5ac850aa282c9d0c1"
+  },
+  {
+    "path": "app/plant-companion/ui/widgets/widget_bottomnav.c",
+    "bytes": 8988,
+    "sha256": "ff9a5cad0609f447a543f69933358e266bd5ba10624ff6259672e092d406558f"
+  },
+  {
+    "path": "app/plant-companion/ui/widgets/widget_bottomnav.h",
+    "bytes": 2196,
+    "sha256": "51a54e4aadaba17ea88d1b94ca010090a10c1783768329c89e3cb0f3a28af9cd"
+  },
+  {
+    "path": "app/plant-companion/ui/widgets/widget_topbar.c",
+    "bytes": 3358,
+    "sha256": "d9d46b647895ad286560f505a5a46af51890af55814f28224126e890e5bdc095"
+  },
+  {
+    "path": "app/plant-companion/ui/widgets/widget_topbar.h",
+    "bytes": 1047,
+    "sha256": "a3a55cc9a03362012ea914479d1c988266ca0f45ca65b39db71682aaa28c71fa"
+  }
+]

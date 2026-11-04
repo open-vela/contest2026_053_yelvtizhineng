@@ -1,0 +1,13 @@
+{
+  "session_id": "01a19ac7-39f5-7c80-9677-e71ed247547d",
+  "exported_visible_events": 645,
+  "source_sha256": "34c04a5833d6e4ddd85de26cfdf0e43af3fbb9d6179279118940f6bc6a176330",
+  "source_snapshot_size": 207583050,
+  "workspace_gate_passed": false,
+  "automatic_collection_claimed": false,
+  "nonpublic_channels_and_raw_tools_exported": false,
+  "credential_discovery_values_published": false,
+  "redaction_method": "Official pre-export redact_value with default rules, labelled credential exact-value rules and JWT rule",
+  "source_original_modified": false,
+  "scope": "One explicitly selected BOX thread; no other sessions exported"
+}

@@ -57,10 +57,14 @@ static int adc_read_raw(int *raw)
       return -errno;
     }
 
+  if (ret != sizeof(sample)) return -EIO;
+
+  /* esp32s3_adc.c au_receive() supplies calibrated pin millivolts. */
   *raw = sample.am_data;
   return 0;
 }
 
+/* Legacy name: this returns ADC-pin mV, not SAR counts. */
 int battery_read_raw(int *raw)
 {
   if (!raw) return -EINVAL;
@@ -75,49 +79,22 @@ int battery_read_mv(int *mv)
   int ret = adc_read_raw(&raw);
   if (ret < 0) return ret;
 
-  /* ADC reference = 3.3V, 12-bit = 4095 steps, then ×2 for divider */
-  *mv = (int)((float)raw * 3300.0f / 4095.0f * BAT_DIVIDER);
+  /* The NuttX lower half already converts SAR counts to pin mV using
+   * eFuse calibration. Only compensate the 1:2 board divider here.
+   * The legacy raw*3300/4095 applied a second ADC conversion. */
+  if (raw < 0) return -ERANGE;
+  *mv = (int)((float)raw * BAT_DIVIDER);
+
   return 0;
 }
 
-/* 2026-09-11 电量标定（用户实测定案）。
- *
- * 现象：整机跑在电池上，满电时界面只显示 25%。
- *
- * 原由：旧映射按"3.0V = 0%，4.1V = 100%"（4.2V 满充锂电的口径）线性折算，
- * 而本机电池满电时 ADC 折算出来约 3.3V —— 落在旧区间的下段，自然只有二十几个点。
- *
- * 定案：本机电池满电压按 3.3V 计 → BAT_MV_FULL = 3300 即 100%；
- * 低端沿用 3.0V = 0%。两者之间线性折算。
- *
- * 注意：只改这段"电压 → 百分比"的映射，不动上面 raw → mV 的 ADC 换算
- * （分压是 R82/R83 = 100K+100K 的 1/2，换算本身是对的）。
- * 以后要调表，只改这两个常量。 */
-
-#define BAT_MV_FULL   3300
-#define BAT_MV_EMPTY  3000
-
+/* A voltage reading is available, but the old 3.0-3.3V percent table was
+ * based on the double-converted voltage and must never drive shutdown.
+ * Current device: user reports nominal 3.7V, 2700mAh. An external voltage
+ * cross-check / battery curve is still required before percent is trusted. */
 int battery_read_pct(int *pct)
 {
   if (!pct) return -EINVAL;
-
-  int mv;
-  int ret = battery_read_mv(&mv);
-  if (ret < 0) return ret;
-
-  if (mv >= BAT_MV_FULL)
-    {
-      *pct = 100;
-    }
-  else if (mv <= BAT_MV_EMPTY)
-    {
-      *pct = 0;
-    }
-  else
-    {
-      *pct = (int)((float)(mv - BAT_MV_EMPTY) * 100.0f /
-                   (float)(BAT_MV_FULL - BAT_MV_EMPTY));
-    }
-
-  return 0;
+  *pct = -1;
+  return -ENODATA;
 }

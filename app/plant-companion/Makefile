@@ -6,12 +6,6 @@
 
 include $(APPDIR)/Make.defs
 
-# hal/hal_gpio.h 直接包的是 arch 的 esp32s3_gpio.h（apps 默认不在包含路径里），
-# 自动执行层的继电器驱动要用到，这里把 arch 的 chip 目录加进来。
-ifneq ($(wildcard $(TOPDIR)/arch/xtensa/src/esp32s3),)
-CFLAGS += -I$(TOPDIR)/arch/xtensa/src/esp32s3
-endif
-
 # Main source
 MAINSRC = main/app_main.c
 
@@ -28,28 +22,41 @@ CSRCS += ui/screens/screen_diagnose.c
 CSRCS += ui/screens/screen_voice.c
 CSRCS += ui/screens/screen_tasks.c
 CSRCS += ui/screens/screen_diary.c
+CSRCS += ui/screens/screen_wifi.c
 # 阶段 A：OTA 升级 UI（二级页 + worker 服务），依赖 CONFIG_ESP32S3_WIFI（ota.c）
 ifeq ($(CONFIG_ESP32S3_WIFI),y)
 CSRCS += ui/screens/screen_ota.c
 CSRCS += services/ota_service.c
-# 网络设置页（扫描 SSID + 输密码连接）—— 依赖 wifi_manager
-ifeq ($(CONFIG_PLANT_WIFI_MANAGER),y)
-CSRCS += ui/screens/screen_wifi.c
-endif
 endif
 # 业务服务层
 CSRCS += services/sensor_service.c
+CSRCS += services/sensor_presentation.c
+CSRCS += ui/widgets/companion_ui.c
+CSRCS += ui/widgets/companion_art_decoder.c
+CSRCS += ui/assets/companion_art.c
+CSRCS += ui/assets/voice_pea_art.c
+CSRCS += ui/assets/fonts/lv_font_companion_16.c
+CSRCS += ui/assets/fonts/lv_font_companion_22.c
+CSRCS += ui/assets/fonts/lv_font_companion_30.c
+CSRCS += services/power_policy.c
+CSRCS += services/power_service.c
 CSRCS += services/plant_state.c
 CSRCS += services/record_service.c
+CSRCS += services/actuator_service.c
+CFLAGS += ${INCDIR_PREFIX}$(TOPDIR)/arch/xtensa/src/esp32s3
 ifeq ($(CONFIG_PLANT_AI_MODULE),y)
 CSRCS += services/ai_service.c
 # ⚠️ 3C-2：server_bridge 现在也被图像识别（拍照→服务器→MiMo）使用，
 # 不再只属于语音（AI_VOICE）。AI_MODULE 就够（依赖 WiFi+服务器中转）。
 CSRCS += services/server_bridge.c
-CSRCS += services/actuator_service.c
+CSRCS += services/pokedex_service.c
 endif
 ifeq ($(CONFIG_PLANT_AI_VOICE),y)
 CSRCS += services/voice_service.c
+CSRCS += services/handsfree_command.c
+CSRCS += services/handsfree_service.c
+CSRCS += services/handsfree_interrupt_queue.c
+CSRCS += ui/voice_actions.c
 endif
 # 中文子集字体（lv_font_conv 生成，见 ui/assets/fonts/README）
 CSRCS += ui/assets/fonts/lv_font_plant_zh_12.c
@@ -96,6 +103,9 @@ endif
 
 ifeq ($(CONFIG_PLANT_CAMERA_CAPTURE),y)
 CSRCS += components/camera_capture/camera_capture.c
+CSRCS += hal/hal_camera_dvp.c
+CSRCS += components/camera_capture/tjpgd/tjpgd.c
+CFLAGS += ${INCDIR_PREFIX}$(APPDIR)/plant-companion/components/camera_capture/tjpgd
 endif
 
 ifeq ($(CONFIG_PLANT_SOIL_SENSOR),y)
@@ -135,6 +145,27 @@ PRIORITY = $(CONFIG_PLANT_COMPANION_PRIORITY)
 STACKSIZE = $(CONFIG_PLANT_COMPANION_STACKSIZE)
 MODULE = $(CONFIG_PLANT_COMPANION)
 
+ifeq ($(CONFIG_PLANT_AI_VOICE),y)
+CSRCS += components/box_aec/box_aec.c
+CSRCS += components/box_aec/math_compat.c
+CSRCS += components/box_phrase/box_phrase.c
+CSRCS += components/box_phrase/model_data.c
+CSRCS += $(addprefix components/box_phrase/vendor/,runtime.c model_registry.c esp_mn_speech_commands.c dsp_compat.c dsps_fft2r_fc32_ansi.c dsps_fft4r_fc32_ansi.c dsps_fft2r_bitrev_tables_fc32.c dsps_fft4r_bitrev_tables_fc32.c puff.c cJSON.c)
+CFLAGS += ${INCDIR_PREFIX}$(APPDIR)/plant-companion/components/box_phrase/vendor
+endif
+
+ifneq ($(CONFIG_PLANT_VOICE_NS),y)
+CSRCS := $(filter-out \
+  ai_module/ai_voice/ai_ns.c \
+  components/voice_agent/esp_sr/esp_sr_shim.c \
+  components/voice_agent/esp_sr/srmodel_shim.c \
+  components/voice_agent/esp_sr/cjson/cJSON.c \
+  components/voice_agent/esp_sr/model_data/srmodels_data.c \
+  ,$(CSRCS))
+ESP_SR_LIBS :=
+CFLAGS += -DPLANT_NO_NS=1
+endif
+
 include $(APPDIR)/Application.mk
 
 # ---------------------------------------------------------------------------
@@ -156,16 +187,10 @@ include $(APPDIR)/Application.mk
 # ⚠️ 之前用 make 环境变量 PLANT_NO_NS=1 传递不可靠（build.sh 的子 make
 # 不继承），改用 Kconfig（构建系统标准）。PSRAM 问题解决前默认 n 保证可用。
 # ───────────────────────────────────────────────────────────────────────
-ifneq ($(CONFIG_PLANT_VOICE_NS),y)
-CSRCS := $(filter-out \
-  ai_module/ai_voice/ai_ns.c \
-  components/voice_agent/esp_sr/esp_sr_shim.c \
-  components/voice_agent/esp_sr/srmodel_shim.c \
-  components/voice_agent/esp_sr/cjson/cJSON.c \
-  components/voice_agent/esp_sr/model_data/srmodels_data.c \
-  ,$(CSRCS))
-ESP_SR_LIBS :=
-CFLAGS += -DPLANT_NO_NS=1
+
+
+ifeq ($(CONFIG_PLANT_AI_VOICE),y)
+ESP_SR_LIBS := $(foreach f,libmultinet.a libdl_lib.a libhufzip.a libc_speech_features.a libfst.a libnewlib_setjmp.a libplant_wake_math.a libplant_box_aec.a,$(APPDIR)/plant-companion/components/box_phrase/vendor/lib/$(f))
 endif
 
 ifneq ($(strip $(ESP_SR_LIBS)),)
@@ -176,15 +201,6 @@ ifneq ($(strip $(ESP_SR_LIBS)),)
 # 用同一把 `$(BIN).lock` 锁住，并在合并后 ranlib 刷新符号索引。
 all::
 	@echo "Merge esp_sr prebuilt libs into libapps.a (flock)"
-	$(Q) flock "$(call CONVERT_PATH,$(BIN)).lock" sh -c ' \
-	  if [ -f "$(call CONVERT_PATH,$(BIN))" ]; then \
-	    { echo "open $(call CONVERT_PATH,$(BIN))"; \
-	      for f in $(ESP_SR_LIBS); do echo "addlib $$f"; done; \
-	      echo "save"; echo "end"; } | $(firstword $(AR)) -M; \
-	  else \
-	    { echo "create $(call CONVERT_PATH,$(BIN))"; \
-	      for f in $(ESP_SR_LIBS); do echo "addlib $$f"; done; \
-	      echo "save"; echo "end"; } | $(firstword $(AR)) -M; \
-	  fi'
-	$(Q) flock "$(call CONVERT_PATH,$(BIN)).lock" $(firstword $(AR)) s "$(call CONVERT_PATH,$(BIN))"
+	$(Q) flock "$(call CONVERT_PATH,$(BIN)).lock" python3 "$(APPDIR)/plant-companion/tools/merge_box_sr_libs.py" "$(firstword $(AR))" "$(call CONVERT_PATH,$(BIN))" $(ESP_SR_LIBS)
+
 endif

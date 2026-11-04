@@ -31,8 +31,21 @@ extern "C"
 
 /* 对外视图：UI 直接消费（避免暴露驱动结构体） */
 
+#define SENSOR_SOURCE_NONE 0
+#define SENSOR_SOURCE_LOCAL 1
+#define SENSOR_SOURCE_CLOUD 2
+#define SENSOR_SOURCE_TEST 3
 struct sensor_view_s
 {
+  uint16_t field_mask;
+  uint8_t source;
+  uint32_t version;
+  uint32_t expected_interval_ms;
+  int64_t sample_unix_s;
+  char measured_at[24];
+  char source_id[40];
+  bool moisture_rule_configured;
+  float moisture_dry_below;
   float   moisture;                 /* 土壤水分 % */
   float   temp;                     /* 温度 °C */
   float   ec;                       /* EC (μS/cm) */

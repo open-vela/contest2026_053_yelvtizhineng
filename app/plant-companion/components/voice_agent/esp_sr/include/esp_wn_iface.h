@@ -20,7 +20,7 @@ typedef enum
 } wakenet_state_t;
 
 //Set wake words recognition operating mode
-//The probability of being wake words is increased with increasing mode, 
+//The probability of being wake words is increased with increasing mode,
 //As a consequence also the false alarm rate goes up
 typedef enum {
 	DET_MODE_90 = 0,       // Normal
@@ -34,7 +34,7 @@ typedef enum {
 
 typedef struct {
     int wake_word_num;     //The number of all wake words
-    char **wake_word_list; //The name list of wake words  
+    char **wake_word_list; //The name list of wake words
 } wake_word_info_t;
 
 /**
@@ -69,11 +69,11 @@ typedef int (*esp_wn_iface_op_get_samp_chunksize_t)(model_iface_data_t *model);
 typedef int (*esp_wn_iface_op_get_channel_num_t)(model_iface_data_t *model);
 
 /**
- * @brief Get the start point of wake word when one wake word is detected. 
- * 
- * @Warning: This function should be called when the channel index is verified. 
- * The returned value is the number of samples from start point of wake word to detected point. 
- * 
+ * @brief Get the start point of wake word when one wake word is detected.
+ *
+ * @Warning: This function should be called when the channel index is verified.
+ * The returned value is the number of samples from start point of wake word to detected point.
+ *
  * @param model The model object to query
  * @return The number of samples from start point to detected point (end point)
  */
@@ -108,7 +108,7 @@ typedef int (*esp_wn_iface_op_get_word_num_t)(model_iface_data_t *model);
 typedef char* (*esp_wn_iface_op_get_word_name_t)(model_iface_data_t *model, int word_index);
 
 /**
- * @brief Set the detection threshold to manually abjust the probability 
+ * @brief Set the detection threshold to manually abjust the probability
  *
  * @param model The model object to query
  * @param det_treshold The threshold to trigger wake words, the range of det_threshold is 0.4~0.9999
@@ -118,7 +118,7 @@ typedef char* (*esp_wn_iface_op_get_word_name_t)(model_iface_data_t *model, int 
 typedef int (*esp_wn_iface_op_set_det_threshold_t)(model_iface_data_t *model, float det_threshold, int word_index);
 
 /**
- * @brief Reset the threshold to its initial state  
+ * @brief Reset the threshold to its initial state
  *
  * @param model The model object to query
  * @return 0: setting failed, 1: setting success
@@ -141,7 +141,7 @@ typedef float (*esp_wn_iface_op_get_det_threshold_t)(model_iface_data_t *model, 
  * @Warning The index of wake word start with 1, 0 means no wake words is detected.
  *
  * @param model The model object to query
- * @param samples An array of 16-bit signed audio samples. The array size used can be queried by the 
+ * @param samples An array of 16-bit signed audio samples. The array size used can be queried by the
  *        get_samp_chunksize function.
  * @return The index of wake words, return 0 if no wake word is detected, else the index of the wake words.
  */
