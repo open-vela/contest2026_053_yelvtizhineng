@@ -28,7 +28,7 @@ extern "C" {
 #define COEF_GETTER_HINT_BNVAR (1<<0)
 
 /*
-This struct describes the basic information of model data: 
+This struct describes the basic information of model data:
 word_num: the number of wake words or speech commands
 word_list: the name list of wake words or speech commands
 thres_list: the threshold list of wake words or speech commands

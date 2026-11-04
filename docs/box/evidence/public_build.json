@@ -1,0 +1,21 @@
+{
+  "exit_code": 0,
+  "method": "Clean build from isolated SDK directories; final public application sources and sanitized config; pinned dependency cache and independent mbedTLS checkout",
+  "network_repo_sync": "not performed",
+  "firmware": "not flashed",
+  "date": "2026-11-04",
+  "firmware_bytes": 4188800,
+  "firmware_sha256": "4519469538ba8574bb466e18045688338b54807e6b5d38b0df1f170c69c612c1",
+  "config_api_key_empty": true,
+  "published_compiled_inputs_matched": 261,
+  "heap": {
+    "pass": true,
+    "combined_internal_arena_bytes": 134240,
+    "imem_reserved_bytes": 122880,
+    "bootstrap_heap_bytes": 11360,
+    "minimum_bootstrap_heap_bytes": 9216,
+    "sheap": "0x3fcccab0",
+    "heap_top": "0x3fced710"
+  },
+  "factory_wifi_defaults": "SSID and password intentionally cleared"
+}

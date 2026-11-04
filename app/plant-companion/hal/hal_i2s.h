@@ -136,6 +136,15 @@ void hal_i2s_dump_tx(void);
  * @return 累计丢采样数
  */
 uint32_t hal_i2s_rx_drop_count(void);
+/* Software reference uses the actual DAC PCM and shared RX/TX frame clock.
+ * No second microphone is treated as a reference. CPU-only storage in PSRAM. */
+int hal_i2s_reference_enable(void);
+bool hal_i2s_reference_is_hardware(void);
+int hal_i2s_read_reference(void *mic,void *reference,uint32_t bytes);
+/* Discard old idle/network-wait audio while retaining recent pre-roll.
+ * Intentional trimming is separate from overruns during active capture. */
+uint32_t hal_i2s_rx_keep_latest(uint32_t samples);
+void hal_i2s_rx_discard_pending(void);
 
 #ifdef __cplusplus
 }

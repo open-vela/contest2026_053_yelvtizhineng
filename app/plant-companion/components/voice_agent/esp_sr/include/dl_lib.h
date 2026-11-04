@@ -42,7 +42,7 @@ typedef int padding_state;
 //  * @brief Allocate a chunk of memory which has the given capabilities.
 //  *        Equivalent semantics to libc malloc(), for capability-aware memory.
 //  *        In IDF, malloc(p) is equivalent to heap_caps_malloc(p, MALLOC_CAP_8BIT).
-//  * 
+//  *
 //  * @param size  In bytes, of the amount of memory to allocate
 //  * @param caps  Bitwise OR of MALLOC_CAP_* flags indicating the type of memory to be returned
 //  *              MALLOC_CAP_SPIRAM:   Memory must be in SPI RAM
@@ -59,7 +59,7 @@ typedef int padding_state;
  *        else, allocate memory from PSRAM
  *
  * @param cnt    Number of continuing chunks of memory to allocate
- * @param size   Size, in bytes, of a chunk of memory to allocate     
+ * @param size   Size, in bytes, of a chunk of memory to allocate
  * @param align  Aligned size, in bits
  * @return Pointer to currently allocated heap memory
  */
@@ -69,15 +69,15 @@ void *dl_lib_calloc(int cnt, int size, int align);
  * @brief Always allocate aligned memory from external memory.
  *
  * @param cnt    Number of continuing chunks of memory to allocate
- * @param size   Size, in bytes, of a chunk of memory to allocate     
+ * @param size   Size, in bytes, of a chunk of memory to allocate
  * @param align  Aligned size, in bits
  * @return Pointer to currently aligned heap memory
  */
 void *dl_lib_calloc_psram(int cnt, int size, int align);
 
 /**
- * @brief Free aligned memory allocated by `dl_lib_calloc` or `dl_lib_calloc_psram` 
- * 
+ * @brief Free aligned memory allocated by `dl_lib_calloc` or `dl_lib_calloc_psram`
+ *
  * @param ptr    Pointer to free
  */
 void dl_lib_free(void *ptr);
@@ -187,7 +187,7 @@ void dl_fully_connect_layer(const dl_matrix2d_t *in, const dl_matrix2d_t *weight
  * The sqrtvari matrix depends on the variance and epsilon values, which normally are constant. Hence,
  * this matrix only needs to be calculated once. This function does that.
  *
- * @param 
+ * @param
  * @return
  */
 void dl_batch_normalize_get_sqrtvar(const dl_matrix2d_t *variance, fptp_t epsilon, dl_matrix2d_t *out);
@@ -202,7 +202,7 @@ void dl_batch_normalize_get_sqrtvar(const dl_matrix2d_t *variance, fptp_t epsilo
  * @param sqrtvari  Matrix precalculated using dl_batch_normalize_get_sqrtvar
  * @return
  */
-void dl_batch_normalize(dl_matrix2d_t *m, const dl_matrix2d_t *offset, const dl_matrix2d_t *scale, 
+void dl_batch_normalize(dl_matrix2d_t *m, const dl_matrix2d_t *offset, const dl_matrix2d_t *scale,
                         const dl_matrix2d_t *mean, const dl_matrix2d_t *sqrtvari);
 
 /**
@@ -217,19 +217,19 @@ void dl_batch_normalize(dl_matrix2d_t *m, const dl_matrix2d_t *offset, const dl_
  * @param bias      Bias for the neurons. Can be NULL if no bias is required
  * @return          Output values of the neurons
  */
-dl_matrix2d_t *dl_basic_lstm_layer(const dl_matrix2d_t *in, dl_matrix2d_t *state_c, dl_matrix2d_t *state_h, 
+dl_matrix2d_t *dl_basic_lstm_layer(const dl_matrix2d_t *in, dl_matrix2d_t *state_c, dl_matrix2d_t *state_h,
                 const dl_matrix2d_t *weight, const dl_matrix2d_t *bias);
 
 /**
  * @brief Do a basic LSTM layer pass, partial quantized version.
- * This LSTM function accepts 16-bit fixed-point weights and 32-bit float-point bias. 
+ * This LSTM function accepts 16-bit fixed-point weights and 32-bit float-point bias.
  *
  * @warning Returns state_h pointer, so do not free result.
 
  * @param in		Input vector
  * @param state_c	Internal state of the LSTM network
  * @param state_h	Internal state (previous output values) of the LSTM network
- * @param weights	Weights for the neurons, need to be quantised 
+ * @param weights	Weights for the neurons, need to be quantised
  * @param bias		Bias for the neurons. Can be NULL if no bias is required
  * @return			Output values of the neurons
  */
@@ -274,7 +274,7 @@ dl_matrix2dq_t *dl_basic_lstm_layer_q(const dl_matrix2dq_t *in, dl_matrix2dq_t *
  * @param shift     Number of bits to shift the result back by. See dl_lib_matrixq.h for more info
  * @return
  */
-void dl_batch_normalize_q(dl_matrix2dq_t *m, const dl_matrix2dq_t *offset, const dl_matrix2dq_t *scale, 
+void dl_batch_normalize_q(dl_matrix2dq_t *m, const dl_matrix2dq_t *offset, const dl_matrix2dq_t *scale,
                         const dl_matrix2dq_t *mean, const dl_matrix2dq_t *sqrtvari, int shift);
 
 /**
@@ -374,7 +374,7 @@ void dl_minimum_q(const dl_matrix2dq_t *in, fptp_t clip, dl_matrix2dq_t *out);
  * @Warning This just supports the single channel input image, and the output is single row matrix.
             That is to say, the height of output is 1, and the weight of output is out_channels*out_image_width*out_image_height
  *
- * @param in             Input single channel image 
+ * @param in             Input single channel image
  * @param weight         Weights of the neurons, weight->w = out_channels, weight->h = filter_width*filter_height
  * @param bias           Bias for the CNN layer.
  * @param filter_height  The height of convolution kernel
@@ -386,7 +386,7 @@ void dl_minimum_q(const dl_matrix2dq_t *in, fptp_t clip, dl_matrix2dq_t *out);
  * @param out            The result of CNN layer, out->h=1.
  * @return               The result of CNN layer.
  */
-dl_matrix2d_t *dl_basic_conv_layer(const dl_matrix2d_t *in, const dl_matrix2d_t *weight, const dl_matrix2d_t *bias, int filter_width, int filter_height, 
+dl_matrix2d_t *dl_basic_conv_layer(const dl_matrix2d_t *in, const dl_matrix2d_t *weight, const dl_matrix2d_t *bias, int filter_width, int filter_height,
                                    const int out_channels, const int stride_x, const int stride_y,  padding_state pad, const dl_matrix2d_t* out);
 
 
@@ -396,7 +396,7 @@ dl_matrix2d_t *dl_basic_conv_layer(const dl_matrix2d_t *in, const dl_matrix2d_t 
  * @Warning This just supports the single channel input image, and the output is single row matrix.
             That is to say, the height of output is 1, and the weight of output is out_channels*out_image_width*out_image_height
  *
- * @param in             Input single channel image 
+ * @param in             Input single channel image
  * @param weight         Weights of the neurons, weight->w = out_channels, weight->h = filter_width*filter_height,
  * @param bias           Bias of the neurons.
  * @param filter_height  The height of convolution kernel
@@ -408,7 +408,7 @@ dl_matrix2d_t *dl_basic_conv_layer(const dl_matrix2d_t *in, const dl_matrix2d_t 
  * @param out            The result of CNN layer, out->h=1
  * @return               The result of CNN layer
  */
-dl_matrix2d_t *dl_basic_conv_layer_quantised_weight(const dl_matrix2d_t *in, const dl_matrix2dq_t *weight, const dl_matrix2d_t *bias, int filter_width, int filter_height, 
+dl_matrix2d_t *dl_basic_conv_layer_quantised_weight(const dl_matrix2d_t *in, const dl_matrix2dq_t *weight, const dl_matrix2d_t *bias, int filter_width, int filter_height,
                                                      const int out_channels, const int stride_x, const int stride_y,  padding_state pad, const dl_matrix2d_t* out);
 
 #ifdef __cplusplus

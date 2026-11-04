@@ -11,6 +11,8 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <nuttx/clock.h>
+#include "../../hal/hal_camera.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -20,10 +22,17 @@
 #include <unistd.h>   /* usleep */
 #include <fcntl.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <sys/ioctl.h>
 #include <nuttx/lcd/lcd_dev.h>
+#include <nuttx/clock.h>
 
 #include "camera_capture.h"
+#ifdef CONFIG_PLANT_UI
+#include "../../ui/ui_app.h"
+#endif
+#include "../system_monitor/user_preferences.h"
+#include "tjpgd.h"
 #include "../../services/sd_write.h"
 
 /* board 层导出：SCCB 读写 + XMCLK + 探测 */
@@ -37,7 +46,16 @@ int board_camera_sccb_read(uint16_t reg, uint8_t *val);
 #ifdef CONFIG_ESP32S3_CAM_DVP
 int esp32s3_cam_dvp_set_framesize(uint32_t w, uint32_t h);
 void esp32s3_cam_dvp_get_framesize(uint32_t *w, uint32_t *h);
+void esp32s3_cam_dvp_set_jpeg(bool on);
+void esp32s3_cam_dvp_set_stream_direct(bool on);
+uint8_t *esp32s3_cam_dvp_get_shadow(void);
+size_t esp32s3_cam_dvp_get_shadow_size(void);
+void esp32s3_cam_dvp_invalidate(const void *data, size_t len);
 #endif
+
+/* PSRAM 静态区分配：与摄像头 DMA 缓冲同一套保留区，不能进普通堆。 */
+
+void *esp32s3_psram_static_alloc(size_t size);
 
 /****************************************************************************
  * 寄存器地址（官方 ov3660_regs.h）
@@ -50,6 +68,7 @@ void esp32s3_cam_dvp_get_framesize(uint32_t *w, uint32_t *h);
 #define OV3660_SC_PLLS_CTRL3   0x303d
 #define OV3660_PCLK_RATIO      0x3824
 #define OV3660_VFIFO_CTRL0C    0x460c
+#define OV3660_JPEG_QS         0x04
 #define OV3660_FORMAT_CTRL     0x501f
 #define OV3660_FORMAT_CTRL00   0x4300
 #define OV3660_TIMING_TC_REG20 0x3820
@@ -63,6 +82,10 @@ void esp32s3_cam_dvp_get_framesize(uint32_t *w, uint32_t *h);
 #define OV3660_Y_INCREMENT     0x3815
 #define OV3660_ISP_CONTROL_01  0x5001
 #define OV3660_IMAGE_OPTION    0x4514
+
+/* Keep exposure compensation across preview/JPEG mode changes. */
+static int g_camera_ae_level = 5;
+static bool g_camera_flipped;
 
 #define REGLIST_TAIL 0x0000
 #define REG_DLY      0xffff   /* 官方 ov3660_settings.h：延时标记 */
@@ -119,7 +142,10 @@ static const uint16_t ov3660_default_regs[][2] = {
   {0x3a18, 0x00},
   {0x3a19, 0xf8},
   {0x3000, 0x10},
-  {0x3004, 0xef},
+  /* v132：0x3004 bit2 = 0 —— 关闭 50/60Hz 自动检测（否则传感器会
+   * 持续检测灯光频率并据此动态改变曝光约束 → 行/帧时序微变 → 采集
+   * 画面呈"节拍式"漂移）。灯光频率改为下方固定 50Hz。 */
+  {0x3004, 0xeb},
   {0x6700, 0x05},
   {0x6701, 0x19},
   {0x6702, 0xfd},
@@ -191,22 +217,6 @@ static const uint16_t ov3660_default_regs[][2] = {
   {0x538a, 0x01},
   {0x538b, 0x98},
   {0x5480, 0x01},
-  {0x5481, 0x05},
-  {0x5482, 0x09},
-  {0x5483, 0x10},
-  {0x5484, 0x3a},
-  {0x5485, 0x4c},
-  {0x5486, 0x5a},
-  {0x5487, 0x68},
-  {0x5488, 0x74},
-  {0x5489, 0x80},
-  {0x548a, 0x8e},
-  {0x548b, 0xa4},
-  {0x548c, 0xb4},
-  {0x548d, 0xc8},
-  {0x548e, 0xde},
-  {0x548f, 0xf0},
-  {0x5490, 0x15},
   {0x5000, 0xa7},
   {0x5800, 0x0c},
   {0x5801, 0x09},
@@ -304,6 +314,7 @@ static const uint16_t ov3660_default_regs[][2] = {
 static const uint16_t ov3660_fmt_jpeg[][2] = {
   {OV3660_FORMAT_CTRL, 0x00},      /* YUV422 */
   {OV3660_FORMAT_CTRL00, 0x30},    /* YUYV */
+  {0x4407, OV3660_JPEG_QS},        /* finer JPEG quantization scale */
   {0x3002, 0x00},
   {0x3006, 0xff},
   {0x471c, 0x50},
@@ -423,12 +434,15 @@ enum cam_mode_e
 
 static int  s_sensor_mode;
 static bool s_rgb565_ready;   /* 已跑过完整 RGB565 初始化序列 */
+static bool s_rgb_hd_ready;   /* 640x480 RGB 已配置（切模式/shutdown 复位） */
+static bool s_rgb_qvga_ready; /* 320x240 RGB 取景已配置（撕裂优化：1:1 直写） */
+static bool s_cam_hl_desat;   /* 高光去饱和：仅诊断 A/B，正式链路默认关 */
 
-/* set_image_options（官方第 242-303 行）：RGB565 固定调用。
- * pixformat 非 JPEG → reg21 不带 0x20。
+/* set_image_options（官方第 242-303 行）。
+ * JPEG 模式：reg21 bit5=1（compression enable）。
  * binning 由调用者传入（set_framesize 计算）。 */
 
-static int ov3660_set_image_options(bool binning)
+static int ov3660_set_image_options(bool binning, bool jpeg)
 {
   uint8_t reg20 = 0;
   uint8_t reg21 = 0;
@@ -436,7 +450,10 @@ static int ov3660_set_image_options(bool binning)
   uint8_t reg4514_test = 0;
   int ret;
 
-  /* 非 JPEG：不加 0x20 到 reg21 */
+  if (jpeg)
+    {
+      reg21 |= 0x20;
+    }
 
   if (binning)
     {
@@ -449,12 +466,20 @@ static int ov3660_set_image_options(bool binning)
       reg20 |= 0x40;
     }
 
-  /* 无 vflip / 无 hmirror */
+  /* Both bits and 0x4514 must follow the official image-option table. */
+  if (g_camera_flipped)
+    {
+      reg20 |= 0x06;
+      reg21 |= 0x06;
+      reg4514_test |= 3;
+    }
 
   switch (reg4514_test)
     {
       case 0: reg4514 = 0x88; break;   /* no binning, normal */
+      case 3: reg4514 = 0xbb; break;   /* no binning, both axes */
       case 4: reg4514 = 0xaa; break;   /* binning, normal */
+      case 7: reg4514 = 0xaa; break;   /* binning, both axes */
       default: reg4514 = 0xaa; break;
     }
 
@@ -524,7 +549,7 @@ static int ov3660_set_pll(bool bypass, uint8_t multiplier, uint8_t sys_div,
 /* set_framesize（官方第 311-379 行）：w/h 直接传分辨率，
  * 由 binning 规则判断用哪种 total/offset。 */
 
-static int ov3660_set_framesize(uint16_t w, uint16_t h)
+static int ov3660_set_framesize(uint16_t w, uint16_t h, bool jpeg)
 {
   const struct ov3660_ratio_s *s = &g_ov3660_ratio4x3;
   bool binning;
@@ -534,6 +559,7 @@ static int ov3660_set_framesize(uint16_t w, uint16_t h)
   /* binning = w <= max_w/2 && h <= max_h/2（官方第 326-328 行） */
 
   binning = (w <= (s->max_w / 2) && h <= (s->max_h / 2));
+
 
   /* scale = 不是最大尺寸也不是半尺寸（官方第 327-328 行） */
 
@@ -553,7 +579,32 @@ static int ov3660_set_framesize(uint16_t w, uint16_t h)
 
   if (binning)
     {
-      ret = ov3660_write_addr_reg(OV3660_X_TOTAL_SIZE_H, s->total_x,
+      /* 取景器刷新率改造：binning 行有效像素只有 1024，官方 HTS=2300
+       * 带来 125% 行消隐，是帧率天花板主因（VTS 已是 768+15 极限）。
+       * HTS 收窄到 1600（消隐仍有 56%），16MHz PCLK 下帧长
+       * 112ms -> 78ms（8.9 -> 12.8fps 上限）。行周期变短会改变
+       * 50Hz _band_滤波的行计数，人工光源下取景可能有轻微条纹
+       * （仅取景；2048 快门帧走 QXGA 官方时序不受影响）。
+       *
+       * ⚠️ 2026-09-27 根因修正：收窄 HTS【仅限 RGB565 取景】！
+       * JPEG binning 用 HTS=1600 会杀死传感器的 JPEG 输出链路
+       * （VSYNC 死、DMA 间歇性零字节/全 0xFF 垃圾 —— 困扰两天的
+       * "冷启动 JPEG 锁死"真凶）；jpegq 活体实测 HTS 回到官方
+       * 2300 后首抓即成（50760B 完整帧）。JPEG 分支必须 2300。 */
+
+      /* 2026-09-28 (v69)：RGB 取景 VTS 同步收窄。实测 HTS=1600/VTS=783
+       * 时帧周期 136ms（传感器上限 7.3fps），垂直消隐占 75%。
+       * VTS = h + 80（640x480 -> 560，帧 97ms，10.3fps）；
+       * AEC 曝光上限相应收窄（弱光靠增益补，取景可接受）。
+       * JPEG 分支保持官方 total（动它会杀死 JPEG 输出链路）。 */
+
+      /* 2026-09-28 (v70/v71 试错回退)：VTS 收窄（560）与 HTS 收窄
+       * （1280）均导致传感器停流（capture -110）——binning+scale 模式
+       * 下 VTS=783 已是 768 行内部读出极限，HTS<1600 传感器拒绝。
+       * RGB 取景帧周期 136ms（7.3fps）即传感器硬上限，维持 1600。 */
+
+      ret = ov3660_write_addr_reg(OV3660_X_TOTAL_SIZE_H,
+                                  jpeg ? s->total_x : 1600,
                                   (s->total_y / 2) + 1);
       if (ret < 0) return ret;
       ret = ov3660_write_addr_reg(OV3660_X_OFFSET_H, 8, 2);
@@ -575,7 +626,7 @@ static int ov3660_set_framesize(uint16_t w, uint16_t h)
 
   /* set_image_options（官方第 348-350 行） */
 
-  ret = ov3660_set_image_options(binning);
+  ret = ov3660_set_image_options(binning, jpeg);
   if (ret < 0) return ret;
 
   /* 记下本次选的参数（供写后读回校验） */
@@ -589,7 +640,29 @@ static int ov3660_set_framesize(uint16_t w, uint16_t h)
    *     AEC 曝光积分时序错位 → 曝光/白平衡反复振荡（实测帧值每拍不同）
    * 修正：pclk_div 8→10 → PCLK = 160M/2/10 = 8MHz（与官方调优一致）*/
 
-  if (w * h <= 160 * 120)
+  if (jpeg)
+    {
+      /* Official esp32-camera JPEG PLL for 20MHz XCLK:
+       * 40MHz SYSCLK / 10MHz PCLK（pclk_div=8）。
+       * 2048x1536 帧尾 MCU 截断是输出带宽竞态：PCLK 翻倍（pclk_div=4）
+       * 后实测尾部缺失从数十 MCU 收敛到 0~10 个（配合 0x4400/0x4401/
+       * 0x4722 提速与 HD 环路解码重抓）。pclk_div=2 会出现接收丢字节
+       * （信号完整性），勿再降。1024x768 等小帧保持官方 8 不动，
+       * 避免动到已调好的曝光时序。 */
+
+      /* 2026-09-28 (v58): 1024x768 的 PCLK 从 10MHz 降到 8MHz。
+       * 实测 ~50% 帧中段熵流出现非法字节（如 FFAB，非节点边界，
+       * 块无重复/无空洞）——PCLK 越高，PSRAM 带宽竞争 + 排线信号
+       * 完整性越临界，AFIFO 瞬间排不干就丢字节，Huffman 流即崩。
+       * 8MHz 帧周期 180->225ms（5.5->4.4fps），换取完整率。 */
+
+      uint8_t pclk_div = (w == 2048 && h == 1536) ? 4 : 10;
+
+      ret = ov3660_set_pll(false, 24, 1, 3, false, 0, true, pclk_div);
+      g_pll_mul = 24;
+      g_pll_div = pclk_div;
+    }
+  else if (w * h <= 160 * 120)
     {
       /* framesize < QVGA：40M SYSCLK / 8MHz PCLK（20MHz XCLK 下用 pclk=10） */
 
@@ -599,22 +672,56 @@ static int ov3660_set_framesize(uint16_t w, uint16_t h)
     }
   else if (w * h <= 320 * 240)
     {
-      /* framesize == QVGA：20M SYSCLK / 8MHz PCLK（20MHz XCLK 下 pclk=5） */
+      /* framesize == QVGA：20M SYSCLK，PCLK 8->16MHz（pclk_div 4->2）。
+       * 取景器刷新率改造（目标 ~10Hz）：QVGA binning 帧长
+       * 2300x783 PCLK，8MHz 时 225ms（4.4fps）是取景硬上限；
+       * 16MHz 后 112ms（8.9fps）。只影响 320x240 RGB565 路径，
+       * AEC 闭环自适应（曝光上限减半，弱光靠增益补）。 */
 
-      ret = ov3660_set_pll(false, 8, 1, 0, false, 2, true, 5);
-      g_pll_mul = 8;
-      g_pll_div = 5;
+      ret = ov3660_set_pll(false, 16, 5, 0, false, 0, true, 2);
+      g_pll_mul = 16;
+      g_pll_div = 2;
     }
   else
     {
-      /* framesize >= HVGA：10M SYSCLK / 8MHz PCLK（20MHz XCLK 下 pclk≈2.5，
-       * 取 2 → 10MHz，或 3 → 6.7MHz；未用分支暂保留官方值） */
+      /* framesize >= HVGA（640x480 取景）：官方值按 16MHz XCLK 调优，
+       * 本板 XCLK 20MHz 会使 PCLK 上偏 1.25 倍 → AEC/AWB 积分时序错位
+       * → 曝光/白平衡反复振荡（aligncheck 实测 sad0 145-220、60-93% 行
+       * 帧间大差异）。按 1.25 倍校正：pclk_div 2 → 3（≈6.7MHz，官方
+       * 等效 6.4MHz），与 QVGA 分支 8→10 的校正思路一致。 */
 
-      ret = ov3660_set_pll(false, 4, 1, 0, false, 2, true, 2);
-      g_pll_mul = 4;
+      ret = ov3660_set_pll(false, 16, 5, 0, false, 2, true, 2);
+      g_pll_mul = 16;
       g_pll_div = 2;
     }
 
+  return ret;
+}
+
+/* v171：AEC 最大曝光上限（单位 = 行）。
+ * 默认软件表里 0x3a02/0x3a14 = 0x0930 = 2352 行（VTS 约 783），
+ * 意味着暗光下 AEC 可以把曝光拉到 3 帧长：帧周期
+ * 190ms → 560ms，取景直接从 2.3fps 掉到 1.1fps（实测）。
+ * 压到 768 行（略小于 1 个 VTS）就把帧周期锁在 ~1 VTS：
+ * 暗光靠增益补偿 —— 画面更噪但不变暗，帧率稳定。
+ * 只在 RGB565 取景模式生效；JPEG 拍照模式恢复默认，
+ * 避免照片因曝光上限变暗。 */
+
+#define CAM_AE_MAX_LINES_DEFAULT  0x0930
+
+static uint16_t g_preview_ae_max_lines = CAM_AE_MAX_LINES_DEFAULT;
+
+static int ov3660_set_ae_max_exposure(uint16_t lines)
+{
+  int ret;
+
+  ret = board_camera_sccb_write(0x3a02, (uint8_t)(lines >> 8));
+  if (ret < 0) return ret;
+  ret = board_camera_sccb_write(0x3a03, (uint8_t)(lines & 0xff));
+  if (ret < 0) return ret;
+  ret = board_camera_sccb_write(0x3a14, (uint8_t)(lines >> 8));
+  if (ret < 0) return ret;
+  ret = board_camera_sccb_write(0x3a15, (uint8_t)(lines & 0xff));
   return ret;
 }
 
@@ -691,7 +798,10 @@ int camera_init(void)
       }
   }
 
+  g_camera_ae_level = plant_pref_load_int(PLANT_PREF_AE_PATH, 5, -5, 5);
+  g_camera_flipped = plant_pref_load_int(PLANT_PREF_FLIP_PATH, 0, 0, 1) != 0;
   s_probed = true;
+  printf("[Cam] preferences: ae=%d flipped=%u\n", g_camera_ae_level, (unsigned)g_camera_flipped);
   printf("[Cam] OV3660 detected (PID=0x%04x)\n", pid);
   return 0;
 }
@@ -735,7 +845,7 @@ int camera_config_jpeg_qvga(void)
 
   /* 320×240 + binning + PLL */
 
-  ret = ov3660_set_framesize(320, 240);
+  ret = ov3660_set_framesize(320, 240, true);
   if (ret < 0)
     {
       printf("[Cam] framesize failed: %d\n", ret);
@@ -747,7 +857,166 @@ int camera_config_jpeg_qvga(void)
   ret = board_camera_sccb_write(OV3660_SYSTEM_CTROL0, 0x02);
   if (ret < 0) return ret;
 
+  ov3660_set_ae_max_exposure(CAM_AE_MAX_LINES_DEFAULT);   /* v171: 照片不限曝光 */
+  board_camera_sccb_write(0x3a00, 0x3a);                  /* v173: 照片恢复自动帧率 */
   printf("[Cam] OV3660 configured: JPEG 320x240\n");
+  return 0;
+}
+
+/****************************************************************************
+ * Name: camera_config_jpeg_wh
+ *
+ * 配置 OV3660 输出【指定尺寸】的 JPEG。驱动层进入变长 JPEG 收帧模式，
+ * DMA 缓冲按 CAM_JPEG_BUF_SIZE（当前 2MB）准备，capture 返回实际 EOI 长度。
+ * 1024x768 走这一条；PLL 使用官方 QXGA 分支
+ * （40MHz SYSCLK / 10MHz PCLK @ 20MHz XCLK）。
+ ****************************************************************************/
+
+int camera_config_jpeg_wh(uint16_t w, uint16_t h)
+{
+  int ret;
+
+  /* 2048x1536: 传感器原始字节存在帧尾 MCU 截断竞态（EOI 在、末段熵数据
+   * 缺 0~72 个 MCU，逐帧随机）。下方寄存器组合把完整帧概率从 ~0% 提升到
+   * ~50%；HD 预览环路对解码失败的帧直接重抓，等效达到稳定可用。
+   * （早前"QS=0x04 12288/12288 完整"的样本是服务器二次压缩产物，无效。） */
+
+  if (w > 2048 || h > 1536)
+    {
+      printf("[Cam] JPEG %ux%u unsupported: max size is 2048x1536\n",
+             (unsigned)w, (unsigned)h);
+      return -EINVAL;
+    }
+
+  ret = ov3660_write_regs(ov3660_default_regs);
+  if (ret < 0)
+    {
+      printf("[Cam] jpeg default regs failed: %d\n", ret);
+      return ret;
+    }
+
+  ret = ov3660_set_ae_level0();
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = ov3660_write_regs(ov3660_fmt_jpeg);
+  if (ret < 0)
+    {
+      printf("[Cam] jpeg fmt failed: %d\n", ret);
+      return ret;
+    }
+
+  ret = ov3660_set_framesize(w, h, true);
+  if (ret < 0)
+    {
+      printf("[Cam] jpeg framesize failed: %d\n", ret);
+      return ret;
+    }
+
+  /* OV3660 compression mode 3 transmits JPEG data with a programmable VFIFO
+   * line width.  The reset defaults are 1024x768; leaving them in place while
+   * requesting 2048x1536 makes the compression engine segment the stream for
+   * the wrong geometry and produces horizontal tearing/seams.  Match the
+   * VFIFO geometry to the requested frame, as the Linux OV5640 driver does
+   * for the same register block. */
+
+  /* OV3660 compression mode 3 transmits JPEG data with a programmable VFIFO
+   * line width.  The reset defaults are 1024x768; leaving them in place while
+   * requesting 2048x1536 makes the compression engine segment the stream for
+   * the wrong geometry and produces horizontal tearing/seams.  Match the
+   * VFIFO geometry to the requested frame, as the Linux OV5640 driver does
+   * for the same register block.
+   *
+   * 2026-09-26 复核：这两句对所有分辨率都是必需的——实测把它们限定到
+   * 2048 后，1024x768 冷启动 DMA 零字节（HREF 有突发、VSYNC 死）；
+   * 恢复后冷启动首抓即得完整 81~91KB JPEG。 */
+
+  ret = ov3660_write_reg16(0x4602, w);
+  if (ret < 0)
+    {
+      printf("[Cam] jpeg VFIFO HSIZE failed: %d\n", ret);
+      return ret;
+    }
+
+  ret = ov3660_write_reg16(0x4604, h);
+  if (ret < 0)
+    {
+      printf("[Cam] jpeg VFIFO VSIZE failed: %d\n", ret);
+      return ret;
+    }
+
+  /* 2048x1536 帧尾截断缓解（2026-09-24 寄存器扫描实测）：
+   *   0x4400=0x83  JFIFO 读速度 1->3（bit7 保持 YUV422）
+   *   0x4401=0x03  SFIFO 读速度 1->3
+   *   0x4722=0x0F  垂直结束偏移 0->15（帧尾多留输出时间窗）
+   * 已排除：0x4400>=0x84（中段 Huffman 损坏）、0x4401 bit3/bit2
+   * （blanking 读，反而更糟）、0x4600 bit5 固定高度（2048 直接无输出）。 */
+
+  if (w == 2048 && h == 1536)
+    {
+      board_camera_sccb_write(0x4400, 0x83);
+      board_camera_sccb_write(0x4401, 0x03);
+      board_camera_sccb_write(0x4722, 0x0f);
+    }
+
+#ifdef CONFIG_ESP32S3_CAM_DVP
+  esp32s3_cam_dvp_set_jpeg(true);
+  esp32s3_cam_dvp_set_framesize(w, h);
+#endif
+
+  /* Set input-HREF qualification after programming sensor geometry. */
+  ret = board_camera_sccb_write(0x4402, 0x90);
+  if (ret < 0) return ret;
+
+  /* Use the same root color/exposure baseline as RGB565. */
+
+  camera_set_sde(false);
+  camera_set_gamma_default();
+  camera_set_saturation(-2);
+  camera_set_ae_level(g_camera_ae_level);
+
+  ret = board_camera_sccb_write(OV3660_SYSTEM_CTROL0, 0x02);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  usleep(1000 * 1000);
+
+  {
+    uint8_t v;
+    board_camera_sccb_read(0x3008, &v);
+    printf("[Cam] JPEG 0x3008(stream)=0x%02x\n", v);
+    board_camera_sccb_read(0x460c, &v);
+    printf("[Cam] JPEG 0x460c(PCLK)=0x%02x\n", v);
+    board_camera_sccb_read(0x3002, &v);
+    printf("[Cam] JPEG 0x3002=0x%02x\n", v);
+    board_camera_sccb_read(0x3006, &v);
+    printf("[Cam] JPEG 0x3006=0x%02x\n", v);
+    board_camera_sccb_read(0x471c, &v);
+    printf("[Cam] JPEG 0x471c=0x%02x\n", v);
+  }
+
+  /* v180：这里必须把 **四个** 缓存标志全清掉，尤其是
+   * s_rgb_qvga_ready！
+   * 拍一张照后传感器停在 JPEG 1024x768；回到相机页时
+   * camera_preview_start_rgb() 会看 s_rgb_qvga_ready 决定“要不要重配”。
+   * 它没被清 → 跳过重配 → 取景线程按 320x240 RGB565 去读
+   * JPEG 数据流 → **满屏雪花且永不更新**（用户报：从识别页
+   * 点返回出现雪花屏、卡住）。camera_shutdown() 里四个都清了，
+   * 所以只有“拍照后不退页面”这条路径会中招。 */
+
+  s_rgb565_ready = false;
+  s_rgb_hd_ready = false;
+  s_rgb_qvga_ready = false;
+  s_sensor_mode = CAM_MODE_NONE;
+
+  ov3660_set_ae_max_exposure(CAM_AE_MAX_LINES_DEFAULT);   /* v171: 照片不限曝光 */
+  board_camera_sccb_write(0x3a00, 0x3a);                  /* v173: 照片恢复自动帧率 */
+  printf("[Cam] OV3660 configured: JPEG %ux%u\n",
+         (unsigned)w, (unsigned)h);
   return 0;
 }
 
@@ -802,7 +1071,7 @@ int camera_config_rgb565_wh(uint16_t w, uint16_t h)
 
   /* 帧尺寸 + binning + PLL（必须与驱动层 DMA 回读尺寸一致） */
 
-  ret = ov3660_set_framesize(w, h);
+  ret = ov3660_set_framesize(w, h, false);
   if (ret < 0)
     {
       printf("[Cam] framesize failed: %d\n", ret);
@@ -814,8 +1083,20 @@ int camera_config_rgb565_wh(uint16_t w, uint16_t h)
    * 2026-09-10 实测症状："[Cam] photo captured: 38400 bytes (640x480)"。 */
 
 #ifdef CONFIG_ESP32S3_CAM_DVP
+  esp32s3_cam_dvp_set_jpeg(false);
   esp32s3_cam_dvp_set_framesize(w, h);
 #endif
+
+  /* Root color/exposure baseline:
+   * - SDE off: remove AGC-dependent auto saturation/contrast.
+   * - CMX level -2: official saturation table, not the SDE endpoint hack.
+   * - AE -2: keep highlight headroom so the red channel does not clip first.
+   */
+
+  camera_set_sde(false);
+  camera_set_gamma_default();
+  camera_set_saturation(-2);
+  camera_set_ae_level(g_camera_ae_level);
 
   /* 启动输出 */
 
@@ -836,13 +1117,13 @@ int camera_config_rgb565_wh(uint16_t w, uint16_t h)
       {0x380b, (uint16_t)(h & 0xff)},    /* Y_OUT 低字节 */
       {0x501f, 0x01},   /* RGB */
       {0x4300, 0x61},   /* RGB565 */
-      {0x3820, (uint16_t)(g_pll_binning ? 0x01 : 0x40)},   /* binning/无 */
-      {0x3821, (uint16_t)(g_pll_binning ? 0x01 : 0x00)},   /* binning no-JPEG */
+      {0x3820, (uint16_t)((g_pll_binning ? 0x01 : 0x40) | (g_camera_flipped ? 6 : 0))},   /* binning/无 */
+      {0x3821, (uint16_t)((g_pll_binning ? 0x01 : 0x00) | (g_camera_flipped ? 6 : 0))},   /* binning no-JPEG */
       {0x303b, g_pll_mul},   /* PLL multiplier（当前模式） */
       {0x3824, g_pll_div},   /* PCLK_RATIO（当前模式） */
-      {0x5001, 0xa3},   /* AWB+色彩矩阵+SDE(0x83) | scale(0x20) */
-      {0x5800, 0x0c},   /* gamma 表点（此前缺失 → 默认 0x00 压暗） */
-      {0x583d, 0xcf},   /* gamma 表点 */
+      {0x5001, 0x23},   /* AWB+CMX+scale, SDE off */
+      {0x5800, 0x0c},   /* LENC 表点 */
+      {0x583d, 0xcf},   /* LENC 表点 */
       {0x471c, 0xd0},   /* 非 JPEG 状态（默认序列里应为 0xd0 而非 0x50） */
     };
     int i;
@@ -876,11 +1157,28 @@ int camera_config_rgb565_wh(uint16_t w, uint16_t h)
    * 暗↔亮、绿↔红↔蓝间振荡）。首次配置只等这一次，后续 capture
    * 不再重配/打扰传感器，收敛状态保持。 */
 
+  /* v173：取景帧率的真因：0x3a00 = 0x3a 里 bit5 = 1 是
+   * “AEC 自动帧率控制”——暗光下 AEC 把曝光拉到 2~3 帧长，
+   * 帧周期跟着从 232ms 拉到 559ms（实测：关掉后采集 559→232ms）。
+   * 取景需要稳定帧率 → 关掉（曝光被限在 1 帧内，暗光靠
+   * 增益补偿）；拍照模式再恢复，保证暗光照片不变暗。 */
+
+  board_camera_sccb_write(0x3a00, 0x1a);
+  ov3660_set_ae_max_exposure(g_preview_ae_max_lines);
+  printf("[Cam] preview AE: frame-rate-ctrl OFF, max = %u lines\n",
+         (unsigned)g_preview_ae_max_lines);
+
   usleep(1000 * 1000);
 
   printf("[Cam] OV3660 configured: RGB565 %ux%u\n", (unsigned)w, (unsigned)h);
 
   s_rgb565_ready = true;
+  if (w != 640 || h != 480)
+    {
+      s_rgb_hd_ready = false;
+    }
+
+  s_rgb_qvga_ready = (w == 320 && h == 240);
   s_sensor_mode = (w == CAM_PREVIEW_W && h == CAM_PREVIEW_H) ?
                   CAM_MODE_PREVIEW : CAM_MODE_PHOTO;
   return 0;
@@ -1032,6 +1330,28 @@ int camera_dump_regs(void)
   ret = board_camera_sccb_read(0x538b, &v);
   printf("[Cam] 0x538b(CM11)=0x%02x\n", v);
 
+  /* gamma control points: 0x5480 enable, 0x5481..0x5490 curve. */
+
+  ret = board_camera_sccb_read(0x5480, &v);
+  printf("[Cam] 0x5480(GAMMA_CTRL)=0x%02x\n", v);
+  ret = board_camera_sccb_read(0x5481, &v);
+  printf("[Cam] 0x5481(GAMMA1)=0x%02x\n", v);
+  ret = board_camera_sccb_read(0x5487, &v);
+  printf("[Cam] 0x5487(GAMMA7)=0x%02x\n", v);
+  ret = board_camera_sccb_read(0x5490, &v);
+  printf("[Cam] 0x5490(GAMMA15)=0x%02x\n", v);
+
+  /* SDE saturation/contrast block. */
+
+  ret = board_camera_sccb_read(0x5580, &v);
+  printf("[Cam] 0x5580(SDE_CTRL0)=0x%02x\n", v);
+  ret = board_camera_sccb_read(0x5583, &v);
+  printf("[Cam] 0x5583(SDE_U)=0x%02x\n", v);
+  ret = board_camera_sccb_read(0x5584, &v);
+  printf("[Cam] 0x5584(SDE_V)=0x%02x\n", v);
+  ret = board_camera_sccb_read(0x5588, &v);
+  printf("[Cam] 0x5588(SDE_CTRL8)=0x%02x\n", v);
+
   /* 测试图案检查：0x503d bit0=1 → 彩条已开（排除"纯彩色=测试图案"） */
 
   ret = board_camera_sccb_read(0x503d, &v);
@@ -1064,6 +1384,238 @@ int camera_dump_regs(void)
   return 0;
 }
 
+/* 官方 esp32-camera ov3660_settings.h: sensor_saturation_levels[9][11]。
+ * 11 个值依次写 0x5381..0x538B；这是 CMX 色彩矩阵，不是 SDE 的
+ * 0x5583/0x5584 自动饱和度端点。 */
+
+static const uint8_t g_ov3660_saturation_levels[9][11] =
+{
+  {0x1d, 0x60, 0x03, 0x07, 0x48, 0x4f, 0x4b, 0x40, 0x0b, 0x01, 0x98},
+  {0x1d, 0x60, 0x03, 0x08, 0x54, 0x5c, 0x58, 0x4b, 0x0d, 0x01, 0x98},
+  {0x1d, 0x60, 0x03, 0x0a, 0x60, 0x6a, 0x64, 0x56, 0x0e, 0x01, 0x98},
+  {0x1d, 0x60, 0x03, 0x0b, 0x6c, 0x77, 0x70, 0x60, 0x10, 0x01, 0x98},
+  {0x1d, 0x60, 0x03, 0x0c, 0x78, 0x84, 0x7d, 0x6b, 0x12, 0x01, 0x98},
+  {0x1d, 0x60, 0x03, 0x0d, 0x84, 0x91, 0x8a, 0x76, 0x14, 0x01, 0x98},
+  {0x1d, 0x60, 0x03, 0x0e, 0x90, 0x9e, 0x96, 0x80, 0x16, 0x01, 0x98},
+  {0x1d, 0x60, 0x03, 0x10, 0x9c, 0xac, 0xa2, 0x8b, 0x17, 0x01, 0x98},
+  {0x1d, 0x60, 0x03, 0x11, 0xa8, 0xb9, 0xaf, 0x96, 0x19, 0x01, 0x98},
+};
+
+int camera_set_saturation(int level)
+{
+  int i;
+  int ret = 0;
+  const uint8_t *regs;
+
+  if (level < -4 || level > 4)
+    {
+      printf("[Cam] saturation level out of range (-4..4)\n");
+      return -EINVAL;
+    }
+
+  regs = g_ov3660_saturation_levels[level + 4];
+
+  for (i = 0; i < 11; i++)
+    {
+      ret = board_camera_sccb_write((uint16_t)(0x5381 + i), regs[i]);
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+
+  printf("[Cam] saturation level -> %d\n", level);
+  return 0;
+}
+
+/* v171：CLI 调参用（下次进取景页/重新配置时生效） */
+
+int camera_set_preview_ae_max_lines(int lines)
+{
+  if (lines <= 0)
+    {
+      g_preview_ae_max_lines = CAM_AE_MAX_LINES_DEFAULT;
+    }
+  else
+    {
+      g_preview_ae_max_lines = (uint16_t)lines;
+    }
+
+  return (int)g_preview_ae_max_lines;
+}
+
+/* v172：单寄存器读写（调参用；可在取景跑着时直接改传感器寄存器） */
+
+int camera_peek_reg(int reg, uint8_t *val)
+{
+  return board_camera_sccb_read((uint16_t)reg, val);
+}
+
+int camera_poke_reg(int reg, int val)
+{
+  return board_camera_sccb_write((uint16_t)reg, (uint8_t)val);
+}
+
+int camera_set_ae_level(int level)
+{
+  int target;
+  int level_low;
+  int level_high;
+  int fast_low;
+  int fast_high;
+  int ret;
+
+  if (level < -5 || level > 5)
+    {
+      printf("[Cam] ae level out of range (-5..5)\n");
+      return -EINVAL;
+    }
+
+  target = ((level + 5) * 10) + 5;
+  level_low = target * 23 / 25;
+  level_high = target * 27 / 25;
+  fast_low = level_low >> 1;
+  fast_high = level_high << 1;
+  if (fast_high > 255)
+    {
+      fast_high = 255;
+    }
+
+  ret = board_camera_sccb_write(0x3a0f, (uint8_t)level_high);
+  if (ret < 0) return ret;
+  ret = board_camera_sccb_write(0x3a10, (uint8_t)level_low);
+  if (ret < 0) return ret;
+  ret = board_camera_sccb_write(0x3a1b, (uint8_t)level_high);
+  if (ret < 0) return ret;
+  ret = board_camera_sccb_write(0x3a1e, (uint8_t)level_low);
+  if (ret < 0) return ret;
+  ret = board_camera_sccb_write(0x3a11, (uint8_t)fast_high);
+  if (ret < 0) return ret;
+  ret = board_camera_sccb_write(0x3a1f, (uint8_t)fast_low);
+  if (ret < 0) return ret;
+
+  g_camera_ae_level = level;
+
+  printf("[Cam] ae level -> %d (target=%d high=%d low=%d)\n",
+         level, target, level_high, level_low);
+  return 0;
+}
+
+int camera_store_ae_level(int level)
+{
+  int ret = camera_set_ae_level(level);
+  if (ret < 0) return ret;
+  ret = plant_pref_save_int(PLANT_PREF_AE_PATH, level);
+  printf("[Cam] exposure preference %s: %d\n", ret < 0 ? "save failed" : "saved", level);
+  return ret;
+}
+
+int camera_set_flipped(int enabled)
+{
+  bool old = g_camera_flipped;
+  bool running = camera_preview_is_running();
+  int ret = 0;
+  if (enabled != 0 && enabled != 1) return -EINVAL;
+  if (running)
+    {
+      ret = camera_preview_take();
+      if (ret < 0) { camera_preview_resume(); return ret; }
+    }
+  g_camera_flipped = enabled != 0;
+  /* A stopped preview may mean a shutter worker owns the receiver.
+   * Store the preference without touching SCCB in that case. The next
+   * mode setup applies it through the same image-option function.
+   */
+  if (running)
+    {
+      uint8_t current = 0;
+      ret = board_camera_sccb_read(OV3660_TIMING_TC_REG21, &current);
+      if (ret == 0)
+        ret = ov3660_set_image_options(g_pll_binning, (current & 0x20) != 0);
+    }
+  if (ret < 0) g_camera_flipped = old;
+  else ret = plant_pref_save_int(PLANT_PREF_FLIP_PATH, enabled);
+  s_rgb_qvga_ready = false;
+  s_rgb_hd_ready = false;
+  s_rgb565_ready = false;
+  if (running) camera_preview_resume();
+  printf("[Cam] flipped=%u result=%d\n", (unsigned)g_camera_flipped, ret);
+  return ret;
+}
+
+int camera_get_ae_level(void) { return g_camera_ae_level; }
+int camera_get_flipped(void) { return g_camera_flipped ? 1 : 0; }
+
+/* OV3660 gamma: datasheet defaults vs the extra local override.
+ * Both write 0x5481..0x5490; 0x5480 remains the gamma enable register. */
+
+static const uint8_t g_ov3660_gamma_default[16] =
+{
+  0x26, 0x35, 0x48, 0x63, 0x6e, 0x77, 0x80, 0x88,
+  0x8f, 0x96, 0xa3, 0xaf, 0xc5, 0xd7, 0xe8, 0x0f,
+};
+
+static const uint8_t g_ov3660_gamma_local[16] =
+{
+  0x05, 0x09, 0x10, 0x3a, 0x4c, 0x5a, 0x68, 0x74,
+  0x80, 0x8e, 0xa4, 0xb4, 0xc8, 0xde, 0xf0, 0x15,
+};
+
+static int camera_write_gamma(const uint8_t *gamma, const char *name)
+{
+  int i;
+  int ret;
+
+  for (i = 0; i < 16; i++)
+    {
+      ret = board_camera_sccb_write((uint16_t)(0x5481 + i), gamma[i]);
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+
+  printf("[Cam] gamma -> %s\n", name);
+  return 0;
+}
+
+int camera_set_gamma_default(void)
+{
+  return camera_write_gamma(g_ov3660_gamma_default, "datasheet-default");
+}
+
+int camera_set_gamma_local(void)
+{
+  return camera_write_gamma(g_ov3660_gamma_local, "local-extra");
+}
+
+int camera_set_sde(bool on)
+{
+  int ret;
+
+  ret = board_camera_sccb_write(0x5580, on ? 0x06 : 0x00);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = board_camera_sccb_write(0x5001, on ? 0xa3 : 0x23);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  printf("[Cam] SDE -> %s (0x5001=0x%02x, 0x5580=0x%02x)\n",
+         on ? "on" : "off", on ? 0xa3 : 0x23, on ? 0x06 : 0x00);
+  return 0;
+}
+
+void camera_set_highlight_desat(bool on)
+{
+  s_cam_hl_desat = on;
+  printf("[Cam] highlight desat -> %s\n", on ? "on" : "off");
+}
+
 /****************************************************************************
  * Name: camera_capture_frame
  *
@@ -1079,6 +1631,7 @@ int camera_dump_regs(void)
 
 #ifdef CONFIG_ESP32S3_CAM_DVP
 extern int esp32s3_cam_dvp_init(void);
+extern int esp32s3_cam_dvp_reinit_hw(void);
 extern int esp32s3_cam_dvp_start(void);
 extern int esp32s3_cam_dvp_stop(void);
 extern int esp32s3_cam_dvp_capture(void (*sink)(const uint8_t *data,
@@ -1247,7 +1800,7 @@ int camera_mode_preview(void)
       return 0;   /* 已在该模式：零开销 */
     }
 
-  ret = ov3660_set_framesize(CAM_PREVIEW_W, CAM_PREVIEW_H);
+  ret = ov3660_set_framesize(CAM_PREVIEW_W, CAM_PREVIEW_H, false);
   if (ret < 0)
     {
       printf("[Cam] mode preview: framesize failed %d\n", ret);
@@ -1278,7 +1831,7 @@ int camera_mode_photo(void)
       return 0;
     }
 
-  ret = ov3660_set_framesize(CAM_PHOTO_W, CAM_PHOTO_H);
+  ret = ov3660_set_framesize(CAM_PHOTO_W, CAM_PHOTO_H, false);
   if (ret < 0)
     {
       printf("[Cam] mode photo: framesize failed %d\n", ret);
@@ -1579,15 +2132,15 @@ int camera_photo_capture(const uint8_t **frame, size_t *len_out)
 {
   size_t total = 0;
   uint8_t *fb;
+#ifdef CONFIG_PLANT_CAM_DIAG
   unsigned excess;
   unsigned desat_done;
-  int ret;
-#ifdef CONFIG_PLANT_CAM_DIAG
   unsigned clip;
   unsigned pink;
   unsigned pink_after;
   unsigned luma;
 #endif
+  int ret;
 
   if (frame == NULL || len_out == NULL)
     {
@@ -1621,42 +2174,54 @@ int camera_photo_capture(const uint8_t **frame, size_t *len_out)
   luma = cam_frame_mean_luma(fb, total);
 #endif
 
-  /* 高光去饱和：粉色块 → 中性白。算法内部顺手给出 excess（本来有多少红偏）
-   * 与返回值（真正消掉多少），两者同源，excess >= 返回值 恒成立。 */
-
-  desat_done = cam_highlight_desat(fb, (unsigned)(total / 2), &excess);
-
 #ifdef CONFIG_PLANT_CAM_DIAG
-  printf("[Cam] photo: 粉块嫌疑 %.2f%%，亮部红偏强度 %u，红通道顶格 %.1f%%"
-         "，亮度 %u/255 -> 高光去饱和\n",
-         (double)pink / 10.0, excess, (double)clip / 10.0, luma);
+  /* 高光去饱和：仅保留为诊断 A/B，正式链路默认关闭。 */
 
-  /* 修完立刻在【同一块缓冲】上复测：这一行就是"去饱和有没有进上传帧"的
-   * 铁证。2026-09-10 用户报"时有时无"，只有逐帧量化才说得清 —— 靠肉眼
-   * 看屏幕和看上传图会互相打脸。 */
-
-  pink_after = cam_frame_pink_permille(fb, total);
-  if (excess == 0)
+  if (s_cam_hl_desat)
     {
-      printf("[Cam] photo: 无高光红偏，去饱和无需作用（粉块 %.2f%%）\n",
-             (double)pink / 10.0);
+      desat_done = cam_highlight_desat(fb, (unsigned)(total / 2), &excess);
     }
   else
     {
-      printf("[Cam] photo: 去饱和已生效（亮部红偏 %u -> %u，消掉 %u%%；"
-             "粉块嫌疑 %.2f%% -> %.2f%%）\n",
-             excess, excess - desat_done,
-             (desat_done * 100U) / excess,
-             (double)pink / 10.0, (double)pink_after / 10.0);
+      desat_done = 0;
+      excess = 0;
+    }
+
+  printf("[Cam] photo: 粉块嫌疑 %.2f%%，亮部红偏强度 %u，红通道顶格 %.1f%%"
+         "，亮度 %u/255 -> 高光去饱和 %s\n",
+         (double)pink / 10.0, excess, (double)clip / 10.0, luma,
+         s_cam_hl_desat ? "on" : "off");
+
+  if (!s_cam_hl_desat)
+    {
+      printf("[Cam] photo: 高光去饱和关闭，保留 sensor/ISP 原始色彩\n");
+    }
+  else
+    {
+      /* 修完立刻在同一块缓冲上复测。 */
+
+      pink_after = cam_frame_pink_permille(fb, total);
+      if (excess == 0)
+        {
+          printf("[Cam] photo: 无高光红偏，去饱和无需作用（粉块 %.2f%%）\n",
+                 (double)pink / 10.0);
+        }
+      else
+        {
+          printf("[Cam] photo: 去饱和已生效（亮部红偏 %u -> %u，消掉 %u%%；"
+                 "粉块嫌疑 %.2f%% -> %.2f%%）\n",
+                 excess, excess - desat_done,
+                 (desat_done * 100U) / excess,
+                 (double)pink / 10.0, (double)pink_after / 10.0);
+        }
     }
 
 #else
   /* 正式版：一行说清这一帧做了什么（诊断细节见 CONFIG_PLANT_CAM_DIAG）。 */
 
-  printf("[Cam] photo: %ux%u %u 字节，高光去饱和 红偏 %u -> %u（消掉 %u%%），"
-         "亮度 %u/255\n",
-         CAM_PHOTO_W, CAM_PHOTO_H, (unsigned)total, excess, excess - desat_done,
-         excess ? (desat_done * 100U) / excess : 0U,
+  printf("[Cam] photo: %ux%u %u 字节，高光去饱和 %s，亮度 %u/255\n",
+         CAM_PHOTO_W, CAM_PHOTO_H, (unsigned)total,
+         s_cam_hl_desat ? "on" : "off",
          cam_frame_mean_luma(fb, total));
 #endif
 
@@ -1665,6 +2230,100 @@ int camera_photo_capture(const uint8_t **frame, size_t *len_out)
 
   printf("[Cam] photo captured: %u bytes (%dx%d)\n",
          (unsigned)total, CAM_PHOTO_W, CAM_PHOTO_H);
+  return 0;
+}
+
+/****************************************************************************
+ * Name: camera_jpeg_capture
+ *
+ * 抓一帧变长 JPEG。驱动在 VSYNC EOF 后扫描 EOI（0xFFD9），返回值就是
+ * 实际 JPEG 字节数；帧本体留在驱动 rxbuf，调用方借用读取。
+ ****************************************************************************/
+
+int camera_jpeg_capture(const uint8_t **frame, size_t *len_out)
+{
+  volatile bool eoi = false;
+  int ret;
+
+  if (frame == NULL || len_out == NULL)
+    {
+      return -EINVAL;
+    }
+
+  *frame = NULL;
+  *len_out = 0;
+
+  ret = esp32s3_cam_dvp_init();
+  if (ret < 0)
+    {
+      printf("[Cam] jpeg: dvp init failed %d\n", ret);
+      return ret;
+    }
+
+  ret = esp32s3_cam_dvp_start();
+  if (ret < 0)
+    {
+      printf("[Cam] jpeg: dvp start failed %d\n", ret);
+      return ret;
+    }
+
+  ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+  esp32s3_cam_dvp_stop();
+
+  if (ret < 0)
+    {
+      printf("[Cam] jpeg capture failed: %d\n", ret);
+      return ret;
+    }
+
+  *frame = esp32s3_cam_dvp_get_frame();
+  *len_out = (size_t)ret;
+  printf("[Cam] JPEG captured: %u bytes\n", (unsigned)ret);
+  return 0;
+}
+
+int camera_jpeg_capture_to_sd(const char *path, size_t *len_out)
+{
+  const uint8_t *frame = NULL;
+  size_t len = 0;
+  FILE *fp;
+  int ret;
+
+  ret = camera_jpeg_capture(&frame, &len);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (path == NULL || frame == NULL || len == 0)
+    {
+      return -EINVAL;
+    }
+
+  esp32s3_cam_dvp_invalidate(frame, len);
+
+  fp = fopen(path, "wb");
+  if (fp == NULL)
+    {
+      printf("[Cam] jpeg: fopen %s failed\n", path);
+      return -errno;
+    }
+
+  if (fwrite(frame, 1, len, fp) != len)
+    {
+      printf("[Cam] jpeg: short write to %s\n", path);
+      fclose(fp);
+      return -EIO;
+    }
+
+  fclose(fp);
+
+  if (len_out != NULL)
+    {
+      *len_out = len;
+    }
+
+  printf("[Cam] JPEG saved: %s (%u bytes)\n", path, (unsigned)len);
   return 0;
 }
 
@@ -1820,6 +2479,7 @@ int camera_photo_capture(const uint8_t **frame, size_t *len_out)
 static pthread_t s_preview_tid;
 static volatile bool s_preview_run;
 static volatile bool s_preview_freeze;
+static volatile bool s_preview_idle;   /* v175：线程已真正停在空转点 */
 
 /* 直写预览（= plant cam preview 的逻辑，同步到 UI 拍照页）：
  * 后台线程连续 capture（静默）→ lcd_put_rgb565 直接把每帧画到
@@ -1834,32 +2494,1283 @@ static int s_preview_h;
 
 static volatile uint32_t s_preview_seq;   /* 帧序号：每次 capture 完成 +1 */
 
+static _Atomic uint32_t s_display_epoch=1,s_display_done,s_display_count;
+static _Atomic int s_display_error;
+void camera_preview_invalidate(void){atomic_fetch_add(&s_display_epoch,1);}
+static bool camera_preview_refresh_pending(void)
+{return atomic_load(&s_display_epoch)!=atomic_load(&s_display_done);}
+bool camera_preview_refresh_complete(void)
+{return atomic_load(&s_display_count)>0 && !camera_preview_refresh_pending() && atomic_load(&s_display_error)>=0;}
+void camera_preview_dump_status(void)
+{
+ printf("[CamPreview] running=%d frozen=%d acquired=%lu rendered=%lu error=%d refresh=%d\n",
+ s_preview_run,s_preview_freeze,(unsigned long)s_preview_seq,
+ (unsigned long)atomic_load(&s_display_count),atomic_load(&s_display_error),camera_preview_refresh_pending());
+ if(s_preview_run&&s_rgb_qvga_ready){
+  const uint16_t *fb=(const uint16_t *)esp32s3_cam_dvp_get_frame();
+  if(fb){unsigned low=UINT32_MAX,high=0,white=0;uint32_t sum=0;
+   for(unsigned i=0;i<64;i++){uint16_t p=fb[(size_t)i*320u*240u/64u];
+    unsigned value=((p>>11)&31u)*8u+((p>>5)&63u)*4u+(p&31u)*8u;
+    if(value<low)low=value;if(value>high)high=value;sum+=value;
+    if(((p>>11)&31u)>=30u&&((p>>5)&63u)>=62u&&(p&31u)>=30u)white++;
+   }
+   printf("[CamPreviewPixels] low=%u high=%u mean=%u white=%u/64\n",low,high,(unsigned)(sum/64u),white);
+  }
+ }
+}
+
+/* 高清取景（2026-09-26 回退 1024x768）：2048x1536 帧尾截断竞态 +
+ * 全帧解码耗时让取景只有 2-3fps 且偶发中段损坏（孩子等不了）。
+ * 1024x768 用官方 pclk_div=8 时序（稳定完整），TJpgDec 1/2 解码到
+ * 512x384 后直写 LCD（预览缓冲 384KB，省 1.1MB PSRAM），帧率数倍提升。
+ * 快门仍只冻结当前已显示的这份 JPEG 并原样上传（所见即所传）。 */
+
+#define CAM_HD_JPEG_W       1024
+#define CAM_HD_JPEG_H       768
+#define CAM_HD_JPEG_SCALE   1
+#define CAM_HD_PREVIEW_W    (CAM_HD_JPEG_W >> CAM_HD_JPEG_SCALE)
+#define CAM_HD_PREVIEW_H    (CAM_HD_JPEG_H >> CAM_HD_JPEG_SCALE)
+#define CAM_HD_PREVIEW_BPP  2
+#define CAM_HD_PREVIEW_SIZE (CAM_HD_PREVIEW_W * CAM_HD_PREVIEW_H * \
+                             CAM_HD_PREVIEW_BPP)
+#define CAM_HD_WORK_SIZE    4096
+
+struct cam_hd_jpeg_io_s
+{
+  const uint8_t *data;
+  size_t len;
+  size_t pos;
+};
+
+static uint8_t *s_hd_preview_frame;
+static const uint8_t *s_hd_jpeg;
+static size_t s_hd_jpeg_len;
+static uint8_t s_hd_work[CAM_HD_WORK_SIZE] __attribute__((aligned(8)));
+static bool s_preview_hd;
+static int s_preview_min_ms;   /* 取景最小更新间隔（0=不限速） */
+static bool s_preview_hold;    /* 诊断：停采集、反复写同一帧 */
+static bool s_prev_reframe;    /* 每帧重新对齐（单拍模式）*/
+static bool s_prev_verify = true;  /* 帧校验：错位帧不上屏，避免"晃" */
+static uint32_t s_prev_thresh = 35;  /* 校验阈值（每采样点 SAD 上限） */
+static uint16_t s_frame_w = CAM_PREVIEW_W;  /* RGB 预览源帧几何（运行时） */
+static uint16_t s_frame_h = CAM_PREVIEW_H;
+
+/* ── v166：取景控件「让位」蒙版 ───────────────────────────────────
+ * 取景框铺满整屏后，控制键不再独占底部黑栏，而是“浮”在画面上：它们就是普通
+ * 的 LVGL 对象（像素由 LVGL 自己画），相机线程写屏时把这些区域让开不写——两者
+ * 从此不抢同一批像素，既不闪也不会被盖掉。
+ * 形状用圆角矩形描述：r = w/2 即圆形，r = 0 即直角矩形。
+ * 生命周期：UI 线程建页时注册，预览线程 start 时拷一份快照，运行期只读快照
+ * → 无竞态。 */
+
+#define CAM_MASK_MAX  8
+
+struct cam_mask_s
+{
+  int x;
+  int y;
+  int w;
+  int h;
+  int r;
+};
+
+static struct cam_mask_s s_mask_list[CAM_MASK_MAX];
+static int s_mask_num;
+static struct cam_mask_s s_pv_mask[CAM_MASK_MAX];
+static int s_pv_mask_num;
+
+void camera_preview_mask_clear(void)
+{
+  s_mask_num = 0;
+}
+
+int camera_preview_mask_add(int x, int y, int w, int h, int r)
+{
+  if (s_mask_num >= CAM_MASK_MAX || w <= 0 || h <= 0)
+    {
+      return -1;
+    }
+
+  s_mask_list[s_mask_num].x = x;
+  s_mask_list[s_mask_num].y = y;
+  s_mask_list[s_mask_num].w = w;
+  s_mask_list[s_mask_num].h = h;
+  s_mask_list[s_mask_num].r = r;
+  return s_mask_num++;
+}
+
+static void cam_mask_take_snapshot(void)
+{
+  s_pv_mask_num = s_mask_num;
+  if (s_pv_mask_num > 0)
+    {
+      memcpy(s_pv_mask, s_mask_list,
+             sizeof(s_pv_mask[0]) * (size_t)s_pv_mask_num);
+    }
+}
+
+static int cam_mask_isqrt(int v)
+{
+  int r = 0;
+  int b = 1 << 14;
+
+  while (b > v)
+    {
+      b >>= 2;
+    }
+
+  while (b != 0)
+    {
+      if (v >= r + b)
+        {
+          v -= r + b;
+          r = (r >> 1) + b;
+        }
+      else
+        {
+          r >>= 1;
+        }
+
+      b >>= 2;
+    }
+
+  return r;
+}
+
+static bool cam_mask_row_hit(int sy)
+{
+  int i;
+
+  for (i = 0; i < s_pv_mask_num; i++)
+    {
+      if (sy >= s_pv_mask[i].y && sy < s_pv_mask[i].y + s_pv_mask[i].h)
+        {
+          return true;
+        }
+    }
+
+  return false;
+}
+
+/* 某一屏行上控件占用的 x 区间（局部坐标，已减 dx），成对写进
+ * blocked[]，返回区间个数（已排序合并）。 */
+
+static int cam_mask_blocked_row(int sy, int dx, int dw, int *blocked)
+{
+  int n = 0;
+  int i;
+
+  for (i = 0; i < s_pv_mask_num; i++)
+    {
+      const struct cam_mask_s *m = &s_pv_mask[i];
+      int inset = 0;
+      int x0;
+      int x1;
+
+      if (sy < m->y || sy >= m->y + m->h)
+        {
+          continue;
+        }
+
+      if (m->r > 0)
+        {
+          int r = m->r;
+          int dy;
+
+          if (r > m->w / 2)
+            {
+              r = m->w / 2;
+            }
+
+          if (r > m->h / 2)
+            {
+              r = m->h / 2;
+            }
+
+          dy = sy - m->y;
+          if (dy < r)
+            {
+              int k = r - dy;
+
+              inset = r - cam_mask_isqrt(r * r - (k - 1) * (k - 1));
+            }
+          else if (dy >= m->h - r)
+            {
+              int k = dy - (m->h - r) + 1;
+
+              inset = r - cam_mask_isqrt(r * r - (k - 1) * (k - 1));
+            }
+        }
+
+      if (inset > 0)
+        {
+          /* 曲线行多让 1px：控件边缘是抗锯齿的，宁可多让一点，
+           * 也不能让画面啧掉控件（啧了就是永久的：LVGL 不会重绘）。 */
+
+          inset--;
+        }
+      x0 = m->x - dx + inset;
+      x1 = m->x - dx + m->w - inset;
+
+      if (x0 < 0)
+        {
+          x0 = 0;
+        }
+
+      if (x1 > dw)
+        {
+          x1 = dw;
+        }
+
+      if (x1 <= x0)
+        {
+          continue;
+        }
+
+      blocked[2 * n] = x0;
+      blocked[2 * n + 1] = x1;
+      n++;
+    }
+
+  for (i = 1; i < n; i++)      /* 插入排序（n <= 8） */
+    {
+      int key0 = blocked[2 * i];
+      int key1 = blocked[2 * i + 1];
+      int k = i - 1;
+
+      while (k >= 0 && blocked[2 * k] > key0)
+        {
+          blocked[2 * (k + 1)] = blocked[2 * k];
+          blocked[2 * (k + 1) + 1] = blocked[2 * k + 1];
+          k--;
+        }
+
+      blocked[2 * (k + 1)] = key0;
+      blocked[2 * (k + 1) + 1] = key1;
+    }
+
+  {
+    int out = 0;
+
+    for (i = 0; i < n; i++)
+      {
+        if (out > 0 && blocked[2 * i] <= blocked[2 * out - 1])
+          {
+            if (blocked[2 * i + 1] > blocked[2 * out - 1])
+              {
+                blocked[2 * out - 1] = blocked[2 * i + 1];
+              }
+          }
+        else
+          {
+            blocked[2 * out] = blocked[2 * i];
+            blocked[2 * out + 1] = blocked[2 * i + 1];
+            out++;
+          }
+      }
+
+    n = out;
+  }
+
+  return n;
+}
+
+static size_t cam_hd_jpeg_input(JDEC *jd, uint8_t *buf, size_t nbytes)
+{
+  struct cam_hd_jpeg_io_s *io = (struct cam_hd_jpeg_io_s *)jd->device;
+  size_t remain;
+  size_t n;
+
+  if (io == NULL || io->pos >= io->len)
+    {
+      return 0;
+    }
+
+  remain = io->len - io->pos;
+  n = nbytes < remain ? nbytes : remain;
+  if (buf != NULL)
+    {
+      memcpy(buf, io->data + io->pos, n);
+    }
+
+  io->pos += n;
+  return n;
+}
+
+static unsigned s_hd_decoded_bottom;   /* 本次解码覆盖到的最大输出行 */
+static unsigned s_hd_mono_streak;      /* 连续单色帧计数（镜头被挡/异常帧） */
+
+/* 单色帧检测（2026-09-26）：全蓝异常帧（实测 93% 像素同一蓝色）或
+ * 镜头被手捂住时，JPEG 解码能过但画面没有任何信息量 —— 这种帧不该
+ * 成为快门快照上传给 AI（白等 10s 还得个"看不清"）。
+ * 抽样 1/16 像素，与整幅均值逐通道偏差 ±2（RGB565 步进）内判同质；
+ * 同质率 >98% 即单色帧。真实场景（哪怕一面墙）有纹理/噪声，不会误判。 */
+
+static bool cam_hd_frame_is_mono(void)
+{
+  const uint16_t *p = (const uint16_t *)s_hd_preview_frame;
+  uint32_t sum_r = 0;
+  uint32_t sum_g = 0;
+  uint32_t sum_b = 0;
+  uint32_t n = 0;
+  uint32_t same = 0;
+  uint32_t i;
+  int mr;
+  int mg;
+  int mb;
+
+  for (i = 0; i < (uint32_t)CAM_HD_PREVIEW_W * CAM_HD_PREVIEW_H; i += 16)
+    {
+      uint16_t px = p[i];
+
+      sum_r += (px >> 11) & 0x1f;
+      sum_g += (px >> 5) & 0x3f;
+      sum_b += px & 0x1f;
+      n++;
+    }
+
+  mr = (int)(sum_r / n);
+  mg = (int)(sum_g / n);
+  mb = (int)(sum_b / n);
+
+  for (i = 0; i < (uint32_t)CAM_HD_PREVIEW_W * CAM_HD_PREVIEW_H; i += 16)
+    {
+      uint16_t px = p[i];
+      int dr = (int)((px >> 11) & 0x1f) - mr;
+      int dg = (int)((px >> 5) & 0x3f) - mg;
+      int db = (int)(px & 0x1f) - mb;
+
+      if (dr >= -2 && dr <= 2 && dg >= -2 && dg <= 2 &&
+          db >= -2 && db <= 2)
+        {
+          same++;
+        }
+    }
+
+  return same * 100u > n * 98u;
+}
+
+static int cam_hd_jpeg_output(JDEC *jd, void *bitmap, JRECT *rect)
+{
+  const uint16_t *src = (const uint16_t *)bitmap;
+  uint16_t *dst;
+  unsigned row;
+  unsigned width;
+
+  if (s_hd_preview_frame == NULL || rect == NULL || bitmap == NULL)
+    {
+      return 0;
+    }
+
+  width = (unsigned)(rect->right - rect->left + 1);
+  /* 2026-09-25: TJpgDec (JD_FASTDECODE=1) fabricates 0xFF stuff bits once
+   * the entropy stream stalls at a marker/spurious-FF, and keeps decoding
+   * to the bottom -- so rect->bottom alone CANNOT tell real rows from
+   * fabricated ones.  Only count rows decoded while no marker stall has
+   * been seen; mid-stream-corrupt frames then report their TRUE coverage
+   * and get rejected by the >=760-row acceptance check. */
+  if (jd->marker == 0 && (unsigned)rect->bottom + 1 > s_hd_decoded_bottom)
+    {
+      s_hd_decoded_bottom = (unsigned)rect->bottom + 1;
+    }
+
+  dst = (uint16_t *)s_hd_preview_frame +
+        (unsigned)rect->top * CAM_HD_PREVIEW_W + (unsigned)rect->left;
+
+  for (row = 0; row < (unsigned)(rect->bottom - rect->top + 1); row++)
+    {
+      memcpy(dst, src, width * sizeof(uint16_t));
+      src += width;
+      dst += CAM_HD_PREVIEW_W;
+    }
+
+  return 1;
+}
+
+
+static uint32_t cam_hd_jpeg_hash(const uint8_t *jpeg, size_t len)
+{
+  uint32_t hash = 2166136261u;
+  size_t i;
+
+  for (i = 0; i < len; i++)
+    {
+      hash ^= jpeg[i];
+      hash *= 16777619u;
+    }
+
+  return hash;
+}
+
+static bool s_hd_bad_dumped;
+
+/* 坏帧取证：扫描 SOI/EOI 位置并落盘 /mnt/sd/badframe.jpg。
+ * 只读不写传感器；写文件失败静默（调试用途，不影响预览）。 */
+
+static void cam_hd_dump_bad_frame(const uint8_t *jpeg, size_t len)
+{
+  uint32_t soi = UINT32_MAX;
+  uint32_t eoi = 0;
+  uint32_t k;
+
+  for (k = 0; k + 1 < len; k++)
+    {
+      if (jpeg[k] == 0xff && jpeg[k + 1] == 0xd8 && soi == UINT32_MAX)
+        {
+          soi = k;
+        }
+
+      if (jpeg[k] == 0xff && jpeg[k + 1] == 0xd9)
+        {
+          eoi = k + 2;
+        }
+    }
+
+  printf("[Cam-HD] badframe len=%u soi=%d eoi=%u head=%02x%02x%02x%02x "
+         "tail=%02x%02x%02x%02x\n",
+         (unsigned)len, (int)(soi == UINT32_MAX ? -1 : (int)soi),
+         (unsigned)eoi,
+         jpeg[0], jpeg[1], jpeg[2], jpeg[3],
+         jpeg[len - 4], jpeg[len - 3], jpeg[len - 2], jpeg[len - 1]);
+
+  {
+    FAR FILE *fp = fopen("/mnt/sd/badframe.jpg", "wb");
+
+    if (fp != NULL)
+      {
+        fwrite(jpeg, 1, len, fp);
+        fclose(fp);
+        printf("[Cam-HD] badframe saved /mnt/sd/badframe.jpg\n");
+      }
+  }
+}
+
+static int cam_hd_jpeg_decode(const uint8_t *jpeg, size_t len)
+{
+  struct cam_hd_jpeg_io_s io;
+  JDEC jd;
+  JRESULT rc;
+
+  if (jpeg == NULL || len == 0 || s_hd_preview_frame == NULL)
+    {
+      return -EINVAL;
+    }
+
+  memset(&io, 0, sizeof(io));
+  io.data = jpeg;
+  io.len = len;
+  s_hd_decoded_bottom = 0;
+
+  rc = jd_prepare(&jd, cam_hd_jpeg_input, s_hd_work,
+                  sizeof(s_hd_work), &io);
+  if (rc != JDR_OK)
+    {
+      printf("[Cam-HD] jd_prepare failed: %d len=%u\n",
+             (int)rc, (unsigned)len);
+      return -EIO;
+    }
+
+  if (jd.width != CAM_HD_JPEG_W || jd.height != CAM_HD_JPEG_H)
+    {
+      printf("[Cam-HD] unexpected JPEG size %ux%u\n",
+             (unsigned)jd.width, (unsigned)jd.height);
+      return -EINVAL;
+    }
+
+  rc = jd_decomp(&jd, cam_hd_jpeg_output, CAM_HD_JPEG_SCALE);
+  if (rc != JDR_OK)
+    {
+      /* snapshot is CPU-owned, not a DMA destination. Invalidating it
+       * here would discard dirty copied bytes. Reject any decode error
+       * and let the bounded capture loop acquire a fresh full frame.
+       */
+
+      printf("[Cam-HD] jd_decomp failed: %d %ux%u len=%u\n",
+             (int)rc, (unsigned)jd.width, (unsigned)jd.height,
+             (unsigned)len);
+      return -EIO;
+    }
+
+  return 0;
+}
+
+/* Maintenance validation: the caller owns the stopped camera receiver.
+ * No file writes, upload, or relaxation of the production JPEG checks. */
+int camera_jpeg_check(const uint8_t *jpeg, size_t len)
+{
+  if(s_hd_preview_frame==NULL)
+    s_hd_preview_frame=esp32s3_psram_static_alloc(CAM_HD_PREVIEW_SIZE);
+  if(s_hd_preview_frame==NULL)return -ENOMEM;
+  esp32s3_cam_dvp_invalidate(jpeg,len);
+  int ret=cam_hd_jpeg_decode(jpeg,len);
+  printf("[Cam-Check] result=%d bytes=%u fnv=%08x rows=%u\n",ret,
+         (unsigned)len,(unsigned)cam_hd_jpeg_hash(jpeg,len),s_hd_decoded_bottom);
+  return ret;
+}
+
+/* BOX preview: leased DVP frames, latest-frame mailbox and masked SPI DMA. */
+static pthread_mutex_t s_dvp_lock = PTHREAD_MUTEX_INITIALIZER;
+static hal_camera_lease_t s_dvp_pending;
+static volatile bool s_dvp_display_run;
+static bool s_dvp_drawing;
+static pthread_t s_dvp_display_tid;
+static uint8_t *s_dvp_stage;
+static uint32_t s_dvp_drawn;
+static uint32_t s_dvp_replaced;
+static uint32_t s_dvp_errors;
+static uint32_t s_dvp_window_tick;
+static uint32_t s_dvp_busy_ticks;
+
+static bool camera_dvp_display_idle(void)
+{
+  bool idle;
+  pthread_mutex_lock(&s_dvp_lock);
+  idle = !s_dvp_pending.valid && !s_dvp_drawing;
+  pthread_mutex_unlock(&s_dvp_lock);
+  return idle;
+}
+
+static int camera_dvp_draw(const hal_camera_lease_t *lease, int fd)
+{
+  enum { CAMERA_DMA = 0x4000u };
+  int bounds[2 * CAM_MASK_MAX + 2];
+  int nb = 0;
+  int dw = s_preview_w;
+  int dh = s_preview_h;
+  int sw = s_frame_w;
+  int sh = s_frame_h;
+  int cw = sw;
+  int ch = sh;
+  int cx = 0;
+  int cy = 0;
+  int *mapx = (int *)(s_dvp_stage + 480u * 96u * 2u);
+  int *mapy = mapx + 480;
+  int i;
+
+  if (dw <= 0 || dh <= 0 || dw > 480 || dh > 320 ||
+      lease->length != (size_t)sw * sh * 2u)
+    {
+      return -EINVAL;
+    }
+
+  if (sw * dh > sh * dw)
+    {
+      cw = sh * dw / dh;
+      cx = (sw - cw) / 2;
+    }
+  else
+    {
+      ch = sw * dh / dw;
+      cy = (sh - ch) / 2;
+    }
+
+  for (i = 0; i < dw; i++) mapx[i] = cx + i * cw / dw;
+  for (i = 0; i < dh; i++) mapy[i] = cy + i * ch / dh;
+
+  /* Split at widget rectangle edges. No camera write touches a UI mask;
+   * rounded widget corners use the existing conservative bounding box. */
+  bounds[nb++] = 0;
+  bounds[nb++] = dh;
+  for (i = 0; i < s_pv_mask_num; i++)
+    {
+      int top = s_pv_mask[i].y - s_preview_y;
+      int bottom = top + s_pv_mask[i].h;
+      if (top > 0 && top < dh) bounds[nb++] = top;
+      if (bottom > 0 && bottom < dh) bounds[nb++] = bottom;
+    }
+
+  for (i = 1; i < nb; i++)
+    {
+      int v = bounds[i];
+      int j = i;
+      while (j > 0 && bounds[j - 1] > v)
+        {
+          bounds[j] = bounds[j - 1];
+          j--;
+        }
+      bounds[j] = v;
+    }
+
+  for (i = 0; i + 1 < nb; i++)
+    {
+      int top = bounds[i];
+      int bottom = bounds[i + 1];
+      int blocked[2 * CAM_MASK_MAX];
+      int count = 0;
+      int x = 0;
+      int m;
+
+      if (top == bottom) continue;
+      for (m = 0; m < s_pv_mask_num; m++)
+        {
+          const struct cam_mask_s *mask = &s_pv_mask[m];
+          int a = mask->x - s_preview_x;
+          int b = a + mask->w;
+          if (s_preview_y + top < mask->y ||
+              s_preview_y + top >= mask->y + mask->h) continue;
+          if (a < 0) a = 0;
+          if (b > dw) b = dw;
+          if (a < b)
+            {
+              int p = count++;
+              while (p > 0 && blocked[(p - 1) * 2] > a)
+                {
+                  blocked[p * 2] = blocked[(p - 1) * 2];
+                  blocked[p * 2 + 1] = blocked[(p - 1) * 2 + 1];
+                  p--;
+                }
+              blocked[p * 2] = a;
+              blocked[p * 2 + 1] = b;
+            }
+        }
+
+      for (m = 0; m <= count; m++)
+        {
+          int end = m < count ? blocked[m * 2] : dw;
+          int width = end - x;
+          if (width > 0)
+            {
+              /* Keep each write at most 96 rows, matching BOX's existing
+               * scan-overlap bound. Pack clipped rectangles contiguously
+               * so the explicit SPI DMA transport also handles masks. */
+              for (int y0 = top; y0 < bottom; y0 += 96)
+                {
+                  int rows = bottom - y0;
+                  struct lcddev_area_s area;
+                  if (rows > 96) rows = 96;
+                  for (int y = 0; y < rows; y++)
+                    {
+                      const uint8_t *src = lease->data +
+                        (size_t)mapy[y0 + y] * sw * 2u;
+                      uint8_t *dst = s_dvp_stage + (size_t)y * width * 2u;
+                      for (int k = 0; k < width; k++)
+                        {
+                          int sx = mapx[x + k] * 2;
+                          dst[k * 2] = src[sx];
+                          dst[k * 2 + 1] = src[sx + 1];
+                        }
+                    }
+                  memset(&area, 0, sizeof(area));
+                  area.col_start = s_preview_x + x;
+                  area.col_end = area.col_start + width - 1;
+                  area.row_start = s_preview_y + y0;
+                  area.row_end = area.row_start + rows - 1;
+                  area.stride = width * 2u | CAMERA_DMA;
+                  area.data = s_dvp_stage;
+                  if (ioctl(fd, LCDDEVIO_PUTAREA_PRESWAPPED,
+                            (unsigned long)&area) < 0) return -errno;
+                }
+            }
+          if (m < count && blocked[m * 2 + 1] > x)
+            x = blocked[m * 2 + 1];
+        }
+    }
+  return 0;
+}
+
+/* Color-bar integrity check while real preview and SPI DMA are running. */
+static bool s_dvp_phase_check;
+static uint8_t s_dvp_phase_pattern;
+static uint8_t s_dvp_phase_row[640];
+static uint32_t s_dvp_phase_skip, s_dvp_phase_frames;
+static uint32_t s_dvp_phase_bad_rows, s_dvp_phase_changed;
+
+int camera_preview_phase_audit(bool enable)
+{
+  if (enable)
+    {
+      if (!s_preview_run || s_dvp_phase_check) return -EBUSY;
+      if (board_camera_sccb_read(0x503d, &s_dvp_phase_pattern) < 0) return -EIO;
+      if (board_camera_sccb_write(0x503d, 0x80) < 0) return -EIO;
+      pthread_mutex_lock(&s_dvp_lock);
+      s_dvp_phase_frames = s_dvp_phase_bad_rows = s_dvp_phase_changed = 0;
+      s_dvp_phase_skip = 8;
+      s_dvp_phase_check = true;
+      pthread_mutex_unlock(&s_dvp_lock);
+      printf("[DvpPhaseLive] armed\n");
+      return 0;
+    }
+
+  pthread_mutex_lock(&s_dvp_lock);
+  bool was_enabled = s_dvp_phase_check;
+  s_dvp_phase_check = false;
+  uint32_t frames = s_dvp_phase_frames;
+  uint32_t bad_rows = s_dvp_phase_bad_rows;
+  uint32_t changed = s_dvp_phase_changed;
+  pthread_mutex_unlock(&s_dvp_lock);
+  if (was_enabled && board_camera_sccb_write(0x503d, s_dvp_phase_pattern) < 0)
+    return -EIO;
+  printf("[DvpPhaseLive] frames=%lu bad_rows=%lu changed=%lu\n",
+         (unsigned long)frames, (unsigned long)bad_rows, (unsigned long)changed);
+  return frames && !bad_rows && !changed ? 0 : -EIO;
+}
+
+static void camera_dvp_phase_audit_frame(const hal_camera_lease_t *lease)
+{
+  pthread_mutex_lock(&s_dvp_lock);
+  if (s_dvp_phase_check)
+    {
+      if (s_dvp_phase_skip) s_dvp_phase_skip--;
+      else
+        {
+          bool varied = false;
+          for (unsigned y = 1; y < 240; y++)
+            if (memcmp(lease->data, lease->data + y * 640u, 640u))
+              s_dvp_phase_bad_rows++;
+          for (unsigned x = 1; x < 320; x++)
+            if (memcmp(lease->data, lease->data + x * 2u, 2)) { varied = true; break; }
+          if (!varied) s_dvp_phase_bad_rows++;
+          if (s_dvp_phase_frames && memcmp(s_dvp_phase_row, lease->data, 640u))
+            s_dvp_phase_changed++;
+          memcpy(s_dvp_phase_row, lease->data, 640u);
+          s_dvp_phase_frames++;
+        }
+    }
+  pthread_mutex_unlock(&s_dvp_lock);
+}
+
+static void *camera_dvp_display_loop(void *arg)
+{
+  int fd = open("/dev/lcd0", O_WRONLY);
+  (void)arg;
+  if (fd < 0)
+    {
+      s_dvp_errors++;
+      s_dvp_display_run = false;
+      return NULL;
+    }
+
+  while (s_dvp_display_run)
+    {
+      hal_camera_lease_t lease = {0};
+      uint32_t start;
+      pthread_mutex_lock(&s_dvp_lock);
+      if (s_dvp_pending.valid)
+        {
+          lease = s_dvp_pending;
+          s_dvp_pending.valid = false;
+          s_dvp_drawing = true;
+        }
+      pthread_mutex_unlock(&s_dvp_lock);
+      if (!lease.valid)
+        {
+          usleep(2000);
+          continue;
+        }
+
+      start = clock_systime_ticks();
+      if (s_dvp_drawn == 0) s_dvp_window_tick = start;
+      uint32_t display_epoch = atomic_load(&s_display_epoch);
+      int draw_result = camera_dvp_draw(&lease, fd);
+      atomic_store(&s_display_error, draw_result);
+      if (draw_result < 0) s_dvp_errors++;
+      else
+        {
+          atomic_store(&s_display_done, display_epoch);
+          atomic_fetch_add(&s_display_count, 1);
+        }
+      hal_camera_release(&lease);
+      pthread_mutex_lock(&s_dvp_lock);
+      s_dvp_drawing = false;
+      pthread_mutex_unlock(&s_dvp_lock);
+      s_dvp_busy_ticks += clock_systime_ticks() - start;
+      s_dvp_drawn++;
+      if (s_dvp_drawn % 32u == 0)
+        {
+          uint32_t now = clock_systime_ticks();
+          uint32_t dt = now - s_dvp_window_tick;
+          hal_camera_health_t health;
+          hal_camera_get_health(&health);
+          printf("[DvpPreview] fps10=%lu busy_ms=%lu drawn=%lu replaced=%lu "
+                 "error=%lu bytes=%lu short=%lu lease_err=%lu ovf=%lu held=%02x\n",
+                 (unsigned long)(dt ? 320u * TICK_PER_SEC / dt : 0),
+                 (unsigned long)((uint64_t)s_dvp_busy_ticks * 1000u /
+                                 (32u * TICK_PER_SEC)),
+                 (unsigned long)s_dvp_drawn,
+                 (unsigned long)s_dvp_replaced, (unsigned long)s_dvp_errors,
+                 (unsigned long)health.frame_bytes,
+                 (unsigned long)health.short_frames,
+                 (unsigned long)health.lease_errors,
+                 (unsigned long)health.done_overflow, health.lease_held_mask);
+          s_dvp_window_tick = now;
+          s_dvp_busy_ticks = 0;
+        }
+    }
+  close(fd);
+  return NULL;
+}
+
+static void *camera_dvp_preview_loop(void *arg)
+{
+  hal_camera_config_t config = {0};
+  hal_camera_lease_t lease = {0};
+  bool display_started = false;
+  int ret;
+  int failures = 0;
+  (void)arg;
+
+  config.width = s_frame_w;
+  config.height = s_frame_h;
+  config.pixfmt = HAL_CAMERA_PIXFMT_RGB565;
+  config.flags = HAL_CAMERA_CONFIG_PLAN_A;
+  config.swap_bytes = false;
+  s_dvp_stage = memalign(64, 480u * 96u * 2u + 800u * sizeof(int));
+  s_dvp_drawn = s_dvp_replaced = s_dvp_errors = s_dvp_busy_ticks = 0;
+  s_dvp_window_tick = clock_systime_ticks();
+  s_dvp_pending.valid = false;
+  s_dvp_drawing = false;
+  ret = s_dvp_stage ? hal_camera_open(&config) : -ENOMEM;
+  if (ret == 0) ret = hal_camera_start();
+  if (ret < 0) goto out;
+  esp32s3_cam_dvp_set_quiet(true);
+  s_dvp_display_run = true;
+  ret = pthread_create(&s_dvp_display_tid, NULL, camera_dvp_display_loop, NULL);
+  if (ret != 0)
+    {
+      ret = -ret;
+      goto out;
+    }
+  display_started = true;
+
+  while (s_preview_run && s_dvp_display_run)
+    {
+      if (s_preview_freeze || s_preview_hold)
+        {
+          s_preview_idle = camera_dvp_display_idle();
+          usleep(5000);
+          continue;
+        }
+      s_preview_idle = false;
+      ret = hal_camera_acquire(&lease, 1500);
+      if (ret < 0)
+        {
+          printf("[DvpPreview] acquire=%d consecutive=%d\n", ret, ++failures);
+          if (failures >= 5) break;
+          continue;
+        }
+      failures = 0;
+      camera_dvp_phase_audit_frame(&lease);
+      s_preview_seq++;
+      if (s_preview_freeze || !s_preview_run)
+        {
+          hal_camera_release(&lease);
+          continue;
+        }
+
+      {
+        hal_camera_lease_t old;
+        pthread_mutex_lock(&s_dvp_lock);
+        old = s_dvp_pending;
+        s_dvp_pending = lease;
+        lease.valid = false;
+        pthread_mutex_unlock(&s_dvp_lock);
+        if (old.valid)
+          {
+            hal_camera_release(&old);
+            s_dvp_replaced++;
+          }
+      }
+    }
+
+out:
+  if (s_dvp_phase_check) camera_preview_phase_audit(false);
+  s_dvp_display_run = false;
+  if (display_started) pthread_join(s_dvp_display_tid, NULL);
+  extern void esp32s3_spi_camera_buffers_release(void);
+  esp32s3_spi_camera_buffers_release();
+  if (lease.valid) hal_camera_release(&lease);
+  if (s_dvp_pending.valid) hal_camera_release(&s_dvp_pending);
+  hal_camera_close();
+  esp32s3_cam_dvp_set_swap(true);
+  esp32s3_cam_dvp_set_quiet(false);
+  free(s_dvp_stage);
+  s_dvp_stage = NULL;
+  s_preview_idle = true;
+  s_preview_run = false;
+  printf("[DvpPreview] stopped ret=%d drawn=%lu error=%lu\n", ret,
+         (unsigned long)s_dvp_drawn, (unsigned long)s_dvp_errors);
+  return NULL;
+}
+
+int camera_dvp_phase_test(unsigned samples)
+{
+  hal_camera_config_t cfg = {320, 240, HAL_CAMERA_PIXFMT_RGB565,
+                             HAL_CAMERA_CONFIG_PLAN_A, false};
+  hal_camera_lease_t lease = {0};
+  hal_camera_health_t health;
+  uint8_t old_pattern = 0;
+  uint8_t *previous = NULL;
+  unsigned bad_rows = 0;
+  unsigned changed_frames = 0;
+  int ret;
+  int frame;
+
+  if (s_preview_run) return -EBUSY;
+  ret = camera_init();
+  if (ret < 0) return ret;
+  ret = camera_config_rgb565_wh(320, 240);
+  if (ret < 0) return ret;
+  previous = malloc(320u * 240u * 2u);
+  if (!previous) return -ENOMEM;
+  board_camera_sccb_read(0x503d, &old_pattern);
+  board_camera_sccb_write(0x503d, 0x80);
+  ret = hal_camera_open(&cfg);
+  if (ret == 0) ret = hal_camera_start();
+  if (ret < 0) goto cleanup;
+
+  for (frame = -8; frame < (int)samples; frame++)
+    {
+      unsigned rows = 0;
+      uint16_t low = UINT16_MAX;
+      uint16_t high = 0;
+      ret = hal_camera_acquire(&lease, 5000);
+      if (ret < 0) goto cleanup;
+      if (frame >= 0)
+        {
+          for (int y = 0; y < 240; y++)
+            if (memcmp(lease.data, lease.data + (size_t)y * 640u, 640u))
+              rows++;
+          for (int x = 0; x < 320; x++)
+            {
+              uint16_t color = (lease.data[x * 2] << 8) |
+                                lease.data[x * 2 + 1];
+              if (color < low) low = color;
+              if (color > high) high = color;
+            }
+          if (low == high) rows++;
+          if (frame > 0 && memcmp(previous, lease.data, lease.length))
+            changed_frames++;
+          memcpy(previous, lease.data, lease.length);
+          bad_rows += rows;
+          printf("[DvpPhase] frame=%d bytes=%u bad_rows=%u range=%04x..%04x\n",
+                 frame + 1, (unsigned)lease.length, rows, low, high);
+        }
+      hal_camera_release(&lease);
+    }
+  extern void esp32s3_cam_dvp_audit(void);
+  esp32s3_cam_dvp_audit();
+  hal_camera_get_health(&health);
+  printf("[DvpPhase] frames=%u bad_rows=%u changed=%u short=%lu "
+         "lease_err=%lu overflow=%lu held=%02x\n", samples, bad_rows, changed_frames,
+         (unsigned long)health.short_frames,
+         (unsigned long)health.lease_errors,
+         (unsigned long)health.done_overflow, health.lease_held_mask);
+  ret = bad_rows || changed_frames || health.lease_errors ||
+        health.done_overflow || health.lease_held_mask ? -EIO : 0;
+cleanup:
+  if (lease.valid) hal_camera_release(&lease);
+  hal_camera_close();
+  board_camera_sccb_write(0x503d, old_pattern);
+  free(previous);
+  camera_shutdown();
+  printf("[DvpPhase] result=%d\n", ret);
+  return ret;
+}
+
+
 static void *camera_preview_loop(void *arg)
 {
   volatile bool eoi = false;
   int ret;
   int fails = 0;
+  int dfails = 0;
 
   (void)arg;
+
+  if (s_preview_hd)
+    {
+      bool reconfigured = false;
+
+      esp32s3_cam_dvp_set_stream(false);
+      esp32s3_cam_dvp_set_quiet(true);
+      lcd_put_rgb565_set_sharpen(false);
+
+      if (s_hd_preview_frame == NULL)
+        {
+          s_hd_preview_frame = (uint8_t *)esp32s3_psram_static_alloc(
+                                                    CAM_HD_PREVIEW_SIZE);
+        }
+
+      if (s_hd_preview_frame == NULL)
+        {
+          printf("[Cam-HD] preview buffer alloc failed (%u bytes)\n",
+                 (unsigned)CAM_HD_PREVIEW_SIZE);
+          s_preview_run = false;
+          lcd_put_rgb565_set_sharpen(true);
+          esp32s3_cam_dvp_set_quiet(false);
+          return NULL;
+        }
+
+      /* 顺序对齐 CLI 已验证路径（plant cam jpeg）：先配传感器
+       * （camera_config_jpeg_wh 内部已 set_jpeg(true)，DVP init 时仍按
+       * 变长 JPEG 建链），传感器流稳定后再建 DMA/中断。实测反过来
+       * （init 在 config 前）冷启动首帧窗口拿不到完整 JPEG（-61）。 */
+
+      if (camera_config_jpeg_wh(CAM_HD_JPEG_W, CAM_HD_JPEG_H) < 0)
+        {
+          printf("[Cam-HD] JPEG config failed\n");
+          s_preview_run = false;
+          lcd_put_rgb565_set_sharpen(true);
+          esp32s3_cam_dvp_set_quiet(false);
+          return NULL;
+        }
+
+      esp32s3_cam_dvp_set_jpeg(true);
+      if (esp32s3_cam_dvp_init() < 0)
+        {
+          printf("[Cam-HD] DVP init failed\n");
+          s_preview_run = false;
+          lcd_put_rgb565_set_sharpen(true);
+          esp32s3_cam_dvp_set_quiet(false);
+          return NULL;
+        }
+
+      while (s_preview_run)
+        {
+          const uint8_t *jpeg;
+          uint8_t *snapshot;
+          size_t snapshot_size;
+          size_t jpeg_len;
+
+          if (s_preview_freeze)
+            {
+              s_preview_idle = true;
+              usleep(20000);
+              continue;
+            }
+
+          s_preview_idle = false;
+
+          ret = esp32s3_cam_dvp_start();
+          if (ret == 0)
+            {
+              ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+            }
+
+          esp32s3_cam_dvp_stop();
+
+          if (ret <= 0)
+            {
+              fails++;
+              printf("[Cam-HD] JPEG capture failed: %d (连续 %d 次)\n",
+                     ret, fails);
+
+              /* 冷启动自愈：POR 后首轮 JPEG 配置下传感器 DVP 不出流
+               * （vsync 死、DMA 零字节；同 boot 第二次全量配置即恢复，
+               * 已实测验证）。首个失败立刻重跑一次完整配置，代价 ~1.2s，
+               * 只在本会话首次失败时触发一次。 */
+
+              if (!reconfigured)
+                {
+                  reconfigured = true;
+
+                  /* 冷启动自愈 = 复刻 CLI 已验证的"两段式"序列：
+                   * 第一次失败后 pins_release 路径里的 camera_shutdown()
+                   * （DVP stop + 传感器 0x3008=0x82 软复位 + 20ms 稳定）
+                   * 是第二次配置能出流的必要前置——只重配置不复位无效
+                   * （v52h 实测：裸重配后依旧 chunks=0；CLI 带 shutdown
+                   * 的第二次 jpeg 即成功）。 */
+
+                  /* 冷启动自愈 v2 = 复刻唯一实测成功的冷启动序列
+                   * （v52_rgb_cold: RGB565 配置 -> 传感器出流 -> JPEG
+                   * 配置 -> 首抓即得 81KB 完整帧）：shutdown 后先
+                   * RGB565 QVGA 让传感器真正出流 ~800ms（RGB565 模式
+                   * VSYNC 实测有沿，DVP 输出链路被唤醒），再切回 JPEG。
+                   * 只 shutdown+重配 JPEG 无效（v52j 实测 chunks=0）。 */
+
+                  printf("[Cam-HD] 冷启动锁死，RGB565 热身自愈\n");
+                  camera_shutdown();
+                  camera_config_rgb565_qvga();
+                  usleep(800 * 1000);
+                  if (camera_config_jpeg_wh(CAM_HD_JPEG_W,
+                                            CAM_HD_JPEG_H) == 0)
+                    {
+                      esp32s3_cam_dvp_set_jpeg(true);
+                      esp32s3_cam_dvp_reinit_hw();
+                      fails = 0;
+                      continue;
+                    }
+                }
+
+              if (fails >= 5)
+                {
+                  /* 2026-09-27 (v54d): never kill the preview thread on
+                   * -ENODATA.  Dark scenes stretch the JPEG frame period
+                   * past the capture silence window, so bursts of empty
+                   * captures are normal; keep polling at a calm rate and
+                   * paint whenever a frame lands instead of leaving a
+                   * dead viewfinder until page re-entry. */
+                  fails = 0;
+                  usleep(500 * 1000);
+                  continue;
+                }
+
+              usleep(100 * 1000);
+              continue;
+            }
+
+          fails = 0;
+          jpeg = esp32s3_cam_dvp_get_frame();
+          jpeg_len = (size_t)ret;
+          snapshot = esp32s3_cam_dvp_get_shadow();
+          snapshot_size = esp32s3_cam_dvp_get_shadow_size();
+
+          if (jpeg == NULL || snapshot == NULL || jpeg_len == 0 ||
+              jpeg_len > snapshot_size)
+            {
+              printf("[Cam-HD] bad snapshot: len=%u cap=%u\n",
+                     (unsigned)jpeg_len, (unsigned)snapshot_size);
+              continue;
+            }
+
+          /* ``stop`` can leave the CPU data cache holding the old zero-filled
+           * PSRAM lines even though GDMA wrote the JPEG to physical memory.
+           * Invalidate now, immediately before the CPU copy/decoder read. */
+
+          esp32s3_cam_dvp_invalidate(jpeg, jpeg_len);
+
+          /* 2048 帧尾截断是常态（逐帧随机）：严格 JDR_OK 的完整率随场景
+           * 在 0~50% 波动，只收完整帧会让取景框长时间空白。改为接受
+           * 解码覆盖 >=760/768 行的帧（缺失只在底部 8 行右段，占 0.5%，
+           * 上屏与 AI 诊断无感；上传原图服务器 Pillow 可正常解码）。
+           * 中段损坏（覆盖远低于此）仍丢弃重抓。 */
+
+          /* 2026-09-25: validate on rxbuf first, then snapshot.  DMA is
+           * stopped so rxbuf is stable; shadow must only ever hold an
+           * accepted frame, otherwise a corrupt in-flight frame at
+           * shutter-freeze time overwrites shadow while s_hd_jpeg still
+           * points at it -> unvalidated corrupt JPEG gets uploaded. */
+          if (cam_hd_jpeg_decode(jpeg, jpeg_len) < 0 &&
+              s_hd_decoded_bottom < CAM_HD_PREVIEW_H - 8)
+            {
+              /* 取证（每次预览会话只落盘一次）：坏帧存 SD，离线看
+               * 损坏位置（头/中/尾）；同时打 SOI/EOI 扫描结果。 */
+
+              if (!s_hd_bad_dumped)
+                {
+                  s_hd_bad_dumped = true;
+                  cam_hd_dump_bad_frame(jpeg, jpeg_len);
+                }
+
+              /* 解码失败也计入失败预算：偶发重抓无碍，连续失败（如镜头
+               * 排线松）必须退出，否则空转热循环烧 CPU + 刷屏日志。 */
+
+              dfails++;
+              if (dfails >= 30)
+                {
+                  printf("[Cam-HD] 连续 %d 次解码失败，放弃预览\n",
+                         dfails);
+                  break;
+                }
+
+              usleep(50 * 1000);
+              continue;
+            }
+
+          dfails = 0;
+
+          /* 单色帧照样上屏（孩子能看到"黑了/红了"知道镜头被挡），
+           * 但不进 shadow、不作快门快照 —— shadow 里永远保留最后一张
+           * 有信息量的有效帧。 */
+
+          {
+            bool mono = cam_hd_frame_is_mono();
+
+            if (mono)
+              {
+                s_hd_mono_streak++;
+                if (s_hd_mono_streak == 3)
+                  {
+                    printf("[Cam-HD] 连续单色帧（镜头被挡？），"
+                           "上屏但不留档\n");
+                  }
+              }
+            else
+              {
+                s_hd_mono_streak = 0;
+                memcpy(snapshot, jpeg, jpeg_len);
+              }
+
+            if (lcd_put_rgb565_cover(s_hd_preview_frame,
+                                     CAM_HD_PREVIEW_W, CAM_HD_PREVIEW_H,
+                                     s_preview_x, s_preview_y,
+                                     s_preview_w, s_preview_h) == 0)
+              {
+                if (!mono)
+                  {
+                    s_hd_jpeg = snapshot;
+                    s_hd_jpeg_len = jpeg_len;
+                  }
+
+                s_preview_seq++;
+              }
+          }
+
+          usleep(2000);
+        }
+
+      esp32s3_cam_dvp_stop();
+      lcd_put_rgb565_set_sharpen(true);
+      esp32s3_cam_dvp_set_quiet(false);
+      return NULL;
+    }
+
+  return camera_dvp_preview_loop(arg);
 
   /* OV3660 RGB565 大端输出（2.49 彩条实锤）：强制字节交换（防任何残留/误设） */
 
   esp32s3_cam_dvp_set_swap(true);
   esp32s3_cam_dvp_set_quiet(true);
-  esp32s3_cam_dvp_set_stream(true);
+  s_prev_reframe = false;   /* 滚动流 */
+  s_preview_min_ms = 0;     /* v167：不限速。实测采集 156ms + 处理 ~150ms，
+                             * 循环自己就是 ~300ms/帧，再限速只会更慢。 */
+  esp32s3_cam_dvp_set_stream(!s_prev_reframe);
+  esp32s3_cam_dvp_set_stream_direct(false);  /* 走 shadow 拷贝路径 */
   lcd_put_rgb565_set_sharpen(false);   /* 预览走快路径，单帧拍照仍锐化 */
   esp32s3_cam_dvp_init();
-  esp32s3_cam_dvp_start();
+  if (!s_prev_reframe)
+    {
+      esp32s3_cam_dvp_start();
+    }
 
   while (s_preview_run)
     {
       if (s_preview_freeze)
         {
+          s_preview_idle = true;   /* v175：在这里置位 = 上一轮写屏已结束 */
           usleep(20000);
           continue;
         }
 
-      ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+      s_preview_idle = false;
+
+      if (s_preview_hold)
+        {
+          /* 诊断：不采集，直接重复写上一帧（shadow 保持不动） */
+
+          lcd_put_rgb565_cover(esp32s3_cam_dvp_get_frame(),
+                               s_frame_w, s_frame_h,
+                               s_preview_x, s_preview_y,
+                               s_preview_w, s_preview_h);
+          usleep(100 * 1000);
+          continue;
+        }
+
+      if (s_prev_reframe)
+        {
+          ret = esp32s3_cam_dvp_start();
+          if (ret == 0)
+            {
+              ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+            }
+
+          esp32s3_cam_dvp_stop();
+        }
+      else
+        {
+          ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+        }
+
       if (ret < 0)
         {
           /* ⚠️ 2026-09-18：采集失败不要立刻退出。这里原来是裸 break ——
@@ -1883,26 +3794,644 @@ static void *camera_preview_loop(void *arg)
       fails = 0;
       s_preview_seq++;
 
-      /* 直写 LCD 取景框区域（与 plant cam preview 同链路：软件最近邻
-       * 缩放 + LCDDEVIO_PUTAREA 逐行分块 ≤320px，不越界） */
+      /* 直写 LCD 取景框区域（v65：640x480 -> 480x256 是降采样，最近邻
+       * 查表会和叶片细纹拍频出摩尔纹——用户实测"油膜花纹+抖动"。
+       * 换回 4-tap 双线性（自带抗混叠），花纹消除；代价每帧多 ~100ms。 */
 
-      /* 去饱和后再上屏：否则取景框里那片亮窗/灯同样是粉色块 */
+      {
+        static uint32_t s_tm_cap, s_tm_lcd, s_tm_n, s_tm_t0, s_tm_diag;
+        static uint32_t s_prev_iter_t0;
+        static uint32_t s_sh_acc_bestx, s_sh_acc_besty, s_sh_acc;
+        uint32_t t_iter = (uint32_t)clock_systime_ticks();
+        uint32_t ta = t_iter;
+        uint32_t tb;
+        uint32_t tc;
+        uint32_t td = ta;
 
-      cam_highlight_desat(esp32s3_cam_dvp_get_frame(),
-                          (unsigned)(CAM_FRAME_W * CAM_FRAME_H), NULL);
-      lcd_put_rgb565(esp32s3_cam_dvp_get_frame(), CAM_FRAME_W, CAM_FRAME_H,
-                     s_preview_x, s_preview_y, s_preview_w, s_preview_h);
+        if (s_prev_verify)
+          {
+            /* 帧校验 + 静态跳过：
+             * 1) 与上一"已接受"帧做两段式配准：先在 ±16 范围 4 像素步长
+             *    粗搜，再在最优位置 ±3 细化。实测错位可达 16x9 像素，
+             *    只有大范围搜索才认得出这种坏帧（旧版 ±4 会漏掉）。
+             * 2) sad0 超阈值且平移能解释差异 → 判为错位帧，不上屏。
+             * 3) sad0 极小（画面几乎没变）→ 跳过本次写屏，静止场景
+             *    彻底没有撕裂（面板保持上一帧）。 */
 
-      /* 小睡一拍：给 UI 线程留呼吸；滚动采集下写屏是主要耗时 */
+            static uint16_t s_vf_prev[128];
+            static uint32_t s_vf_avg;
+            static uint32_t s_vf_ok;
+            static uint32_t s_vf_bad;
+            static uint32_t s_vf_skip;
+            static uint32_t s_vf_jump;
+            static int s_vf_lastx;
+            static int s_vf_lasty;
+            static bool s_vf_have;
+            const uint16_t *fv =
+              (const uint16_t *)esp32s3_cam_dvp_get_frame();
+            int vw = s_frame_w;
+            int vh = s_frame_h;
 
-      usleep(8000);   /* 给 UI 线程留呼吸；滚动采集下写屏已是主要耗时 */
+            if (fv != NULL && vw > 64 && vh > 64)
+              {
+                uint32_t sad0 = 0;
+                uint32_t best = 0xffffffffu;
+                int bx = 0;
+                int by = 0;
+                int cx;
+                int cy;
+                int dx;
+                int dy;
+                int k;
+
+                for (k = 0; k < 128; k++)
+                  {
+                    int px = ((k * 37) % (vw - 40)) + 20;
+                    int py = ((k * 91) % (vh - 40)) + 20;
+                    uint16_t cur = fv[(size_t)py * vw + px];
+                    uint32_t lc = ((cur >> 11) & 31u) * 8u +
+                                  ((cur >> 5) & 63u) * 4u + (cur & 31u) * 8u;
+                    uint32_t lp = s_vf_prev[k];
+
+                    sad0 += (lc > lp) ? (lc - lp) : (lp - lc);
+                  }
+
+                for (dy = -32; dy <= 32; dy += 4)
+                  {
+                    for (dx = -32; dx <= 32; dx += 4)
+                      {
+                        uint32_t sad = 0;
+
+                        for (k = 0; k < 128; k++)
+                          {
+                            int px = ((k * 37) % (vw - 40)) + 20;
+                            int py = ((k * 91) % (vh - 40)) + 20;
+                            uint16_t cur =
+                              fv[(size_t)(py + dy) * vw + (px + dx)];
+                            uint32_t lc = ((cur >> 11) & 31u) * 8u +
+                                          ((cur >> 5) & 63u) * 4u +
+                                          (cur & 31u) * 8u;
+                            uint32_t lp = s_vf_prev[k];
+
+                            sad += (lc > lp) ? (lc - lp) : (lp - lc);
+                          }
+
+                        if (sad < best)
+                          {
+                            best = sad;
+                            bx = dx;
+                            by = dy;
+                          }
+                      }
+                  }
+
+                cx = bx;
+                cy = by;
+
+                for (dy = cy - 3; dy <= cy + 3; dy++)
+                  {
+                    for (dx = cx - 3; dx <= cx + 3; dx++)
+                      {
+                        uint32_t sad = 0;
+
+                        for (k = 0; k < 128; k++)
+                          {
+                            int px = ((k * 37) % (vw - 40)) + 20;
+                            int py = ((k * 91) % (vh - 40)) + 20;
+                            uint16_t cur =
+                              fv[(size_t)(py + dy) * vw + (px + dx)];
+                            uint32_t lc = ((cur >> 11) & 31u) * 8u +
+                                          ((cur >> 5) & 63u) * 4u +
+                                          (cur & 31u) * 8u;
+                            uint32_t lp = s_vf_prev[k];
+
+                            sad += (lc > lp) ? (lc - lp) : (lp - lc);
+                          }
+
+                        if (sad < best)
+                          {
+                            best = sad;
+                            bx = dx;
+                            by = dy;
+                          }
+                      }
+                  }
+
+                sad0 /= 128u;
+                best /= 128u;
+
+                if (s_vf_have)
+                  {
+                    uint32_t lim = s_prev_thresh;
+
+                    if (s_vf_avg > 0 && s_vf_avg * 2u > lim)
+                      {
+                        lim = s_vf_avg * 2u;
+                      }
+
+                    /* 判据 A：内容差异大且能被平移解释 → 错位帧 */
+
+                    /* 改善必须显著（降到 70% 以下）才算"平移能解释"，
+                     * 否则 ±32 大范围搜索会因多重比较产生假匹配，
+                     * 把好帧也全判成错位（v111 实测 48/48 全拒绝）。 */
+
+                    if (sad0 > lim && best * 10u < sad0 * 7u)
+                      {
+                        s_vf_bad++;
+                        if ((s_vf_bad + s_vf_ok) >= 48u)
+                          {
+                            printf("[Cam] 帧校验: 错位拒绝 %lu/%lu 突变 %lu "
+                                   "跳过 %lu",
+                                   (unsigned long)s_vf_bad,
+                                   (unsigned long)(s_vf_bad + s_vf_ok),
+                                   (unsigned long)s_vf_jump,
+                                   (unsigned long)s_vf_skip);
+                            printf("\n");
+                            s_vf_bad = 0;
+                            s_vf_ok = 0;
+                            s_vf_skip = 0;
+                            s_vf_jump = 0;
+                          }
+
+                        s_tm_t0 = (uint32_t)clock_systime_ticks();
+                        usleep(2000);
+                        continue;
+                      }
+
+                    s_vf_lastx = bx;
+                    s_vf_lasty = by;
+
+                    s_vf_ok++;
+                    s_vf_avg = (s_vf_avg * 7u + sad0) / 8u;
+
+                    /* 静态跳过：画面几乎没变 → 不写面板（静止时零撕裂） */
+
+                    if (sad0 < 2u && best >= sad0 && !camera_preview_refresh_pending())
+                      {
+                        s_vf_skip++;
+                        s_tm_t0 = (uint32_t)clock_systime_ticks();
+                        usleep(2000);
+                        continue;
+                      }
+                  }
+
+                s_vf_have = true;
+
+                for (k = 0; k < 128; k++)
+                  {
+                    int px = ((k * 37) % (vw - 40)) + 20;
+                    int py = ((k * 91) % (vh - 40)) + 20;
+                    uint16_t cur = fv[(size_t)py * vw + px];
+
+                    s_vf_prev[k] = ((cur >> 11) & 31u) * 8u +
+                                   ((cur >> 5) & 63u) * 4u + (cur & 31u) * 8u;
+                  }
+              }
+          }
+
+        {
+          /* 过曝量化（v144）：统计"通道顶满"像素占比。若持续 >3%，
+           * 说明曝光/增益偏高，画面高光被削平 → 运动时呈"油膜"观感。 */
+
+          static uint32_t s_clip_n;
+          static uint32_t s_clip_sum;
+          static uint32_t s_clip_tot;
+          const uint16_t *fc = (const uint16_t *)esp32s3_cam_dvp_get_frame();
+
+          if (fc != NULL)
+            {
+              size_t npc = (size_t)s_frame_w * (size_t)s_frame_h;
+              size_t ic;
+              uint32_t clipc = 0;
+
+              for (ic = 0; ic < npc; ic += 37u)
+                {
+                  uint16_t pc = fc[ic];
+
+                  if (((pc >> 11) & 31u) >= 30u && ((pc >> 5) & 63u) >= 62u &&
+                      (pc & 31u) >= 30u)
+                    {
+                      clipc++;
+                    }
+
+                  s_clip_tot++;
+                }
+
+              s_clip_sum += clipc;
+              s_clip_n++;
+              if (s_clip_n >= 32u)
+                {
+                  uint32_t tot = s_clip_tot ? s_clip_tot : 1u;
+
+                  printf("[Cam] 过曝(顶满)像素: %lu.%lu%%",
+                         (unsigned long)(s_clip_sum * 100u / tot),
+                         (unsigned long)((s_clip_sum * 1000u / tot) % 10u));
+                  printf("\n");
+                  s_clip_sum = 0;
+                  s_clip_tot = 0;
+                  s_clip_n = 0;
+                }
+            }
+        }
+
+        {
+          /* 帧间位移估计（加强版）：±8 像素 2D 搜索 + 512 采样点。
+           * 静止场景下"最佳位移"若稳定在 (0,0) → 对齐良好；
+           * 若每帧乱跳且 |d| 有数像素 → 采集帧边界在漂。 */
+
+          static uint16_t s_sh_prev[128];
+          static uint32_t s_sh_n;
+          static uint32_t s_sh_acc;
+          static uint32_t s_sh_adx;
+          static uint32_t s_sh_ady;
+          static uint32_t s_sh_mdx;
+          static uint32_t s_sh_mdy;
+          const uint16_t *fsh =
+            (const uint16_t *)esp32s3_cam_dvp_get_frame();
+          int sw = s_frame_w;
+          int sh = s_frame_h;
+
+          if (fsh != NULL && sw > 48 && sh > 48 && s_sh_n > 0)
+            {
+              int dx;
+              int dy;
+              int bdx = 0;
+              int bdy = 0;
+              uint32_t bsad = 0xffffffffu;
+              uint32_t sad0 = 0;
+
+              for (dy = -4; dy <= 4; dy++)
+                {
+                  for (dx = -4; dx <= 4; dx++)
+                    {
+                      uint32_t sad = 0;
+                      int k;
+
+                      for (k = 0; k < 128; k++)
+                        {
+                          int px = ((k * 37) % (sw - 40)) + 16;
+                          int py = ((k * 91) % (sh - 40)) + 16;
+                          uint16_t cur = fsh[(size_t)(py + dy) * sw +
+                                             (px + dx)];
+                          uint32_t lc = ((cur >> 11) & 31u) * 8u +
+                                        ((cur >> 5) & 63u) * 4u +
+                                        (cur & 31u) * 8u;
+                          uint32_t lp = s_sh_prev[k];
+
+                          sad += (lc > lp) ? (lc - lp) : (lp - lc);
+                        }
+
+                      if (dx == 0 && dy == 0)
+                        {
+                          sad0 = sad;
+                        }
+
+                      if (sad < bsad)
+                        {
+                          bsad = sad;
+                          bdx = dx;
+                          bdy = dy;
+                        }
+                    }
+                }
+
+              {
+                uint32_t adx = (bdx < 0) ? (uint32_t)-bdx : (uint32_t)bdx;
+                uint32_t ady = (bdy < 0) ? (uint32_t)-bdy : (uint32_t)bdy;
+
+                s_sh_adx += adx;
+                s_sh_ady += ady;
+                if (adx > s_sh_mdx)
+                  {
+                    s_sh_mdx = adx;
+                  }
+
+                if (ady > s_sh_mdy)
+                  {
+                    s_sh_mdy = ady;
+                  }
+
+                s_sh_acc++;
+                if (s_sh_acc >= 32)
+                  {
+                    printf("[PrevShift] dx:avg=%u.%u max=%u | dy:avg=%u.%u "
+                           "max=%u | sad0=%u sadmin=%u last=(%d,%d)",
+                           (unsigned)(s_sh_adx * 10u / s_sh_acc / 10u),
+                           (unsigned)((s_sh_adx * 10u / s_sh_acc) % 10u),
+                           (unsigned)s_sh_mdx,
+                           (unsigned)(s_sh_ady * 10u / s_sh_acc / 10u),
+                           (unsigned)((s_sh_ady * 10u / s_sh_acc) % 10u),
+                           (unsigned)s_sh_mdy,
+                           (unsigned)(sad0 / 128u), (unsigned)(bsad / 128u),
+                           bdx, bdy);
+                    printf("\n");
+                    s_sh_adx = 0;
+                    s_sh_ady = 0;
+                    s_sh_mdx = 0;
+                    s_sh_mdy = 0;
+                    s_sh_acc = 0;
+                  }
+              }
+            }
+
+          if (fsh != NULL && sw > 48 && sh > 48)
+            {
+              int k;
+
+              for (k = 0; k < 128; k++)
+                {
+                  int px = ((k * 37) % (sw - 40)) + 16;
+                  int py = ((k * 91) % (sh - 40)) + 16;
+                  uint16_t cur = fsh[(size_t)py * sw + px];
+
+                  s_sh_prev[k] = ((cur >> 11) & 31u) * 8u +
+                                 ((cur >> 5) & 63u) * 4u + (cur & 31u) * 8u;
+                }
+
+              s_sh_n++;
+            }
+        }
+
+        {
+          /* 逐帧诊断：静止场景帧间差应≈0（仅噪声）；若很大说明传感器
+           * 曝光/时序在抖（QVGA PLL 配置可疑）。 */
+
+          static uint32_t s_dg_prev[64];
+          static uint32_t s_dg_sum;
+          static uint32_t s_dg_r;
+          static uint32_t s_dg_g;
+          static uint32_t s_dg_b;
+          static uint32_t s_dg_diff;
+          static uint32_t s_dg_n;
+          const uint16_t *fdiag =
+            (const uint16_t *)esp32s3_cam_dvp_get_frame();
+          size_t npix = (size_t)s_frame_w * (size_t)s_frame_h;
+
+          if (fdiag != NULL && npix > 64)
+            {
+              uint32_t dsum = 0;
+              uint32_t ddiff = 0;
+              int di;
+
+              for (di = 0; di < 64; di++)
+                {
+                  size_t idx = (npix / 64u) * (size_t)di;
+                  uint16_t pxd = fdiag[idx];
+                  uint32_t lum = ((pxd >> 11) & 31u) * 8u +
+                                 ((pxd >> 5) & 63u) * 4u + (pxd & 31u) * 8u;
+
+                  dsum += lum;
+                  s_dg_r += (pxd >> 11) & 31u;
+                  s_dg_g += (pxd >> 5) & 63u;
+                  s_dg_b += pxd & 31u;
+                  if (s_dg_n > 0)
+                    {
+                      ddiff += (lum > s_dg_prev[di]) ? (lum - s_dg_prev[di])
+                                                     : (s_dg_prev[di] - lum);
+                    }
+
+                  s_dg_prev[di] = lum;
+                }
+
+              s_dg_sum += dsum;
+              s_dg_diff += ddiff;
+              s_dg_n++;
+              if (s_dg_n >= 32)
+                {
+                  printf("[PrevDiag] R=%u G=%u B=%u diff=%u",
+                         (unsigned)(s_dg_r / 32u / 64u),
+                         (unsigned)(s_dg_g / 32u / 64u),
+                         (unsigned)(s_dg_b / 32u / 64u),
+                         (unsigned)(s_dg_diff / 32u / 64u));
+                  printf("\n");
+                  s_dg_sum = 0;
+                  s_dg_r = 0;
+                  s_dg_g = 0;
+                  s_dg_b = 0;
+                  s_dg_diff = 0;
+                  s_dg_n = 0;
+                }
+            }
+        }
+
+        td = (uint32_t)clock_systime_ticks();
+
+        {
+          /* v156：B 模式快照 —— 1:1 写取景框，只写变化的行，写入期间
+           * DISPOFF（写完整帧才需要，写几行时闪断 <1ms 不可见）。
+           * 静止画面完全不变 → 一次都不写 → 零撕裂、零闪断。 */
+
+          extern int lcd_put_rgb565_snapshot(const uint8_t *fb,
+                                             int sw, int sh,
+                                             int dx, int dy,
+                                             int dw, int dh);
+
+          int draw=lcd_put_rgb565_snapshot(esp32s3_cam_dvp_get_frame(),
+                                  s_frame_w, s_frame_h,
+                                  s_preview_x, s_preview_y,
+                                  s_preview_w, s_preview_h);
+          int previous=atomic_exchange(&s_display_error,draw);
+          if(draw<0&&draw!=previous)printf("[CamPreview] display failed=%d\n",draw);
+          if(draw==0&&previous<0)printf("[CamPreview] display recovered\n");
+        }
+
+        tb = (uint32_t)clock_systime_ticks();
+
+        /* 小睡一拍：给 UI 线程留呼吸；滚动采集下写屏是主要耗时 */
+
+        usleep(2000);
+        tc = (uint32_t)clock_systime_ticks();
+
+        s_tm_cap += ta - s_tm_t0;   /* 上帧结束->本帧取回 = EOF 等待+memcpy */
+        s_tm_diag += td - ta;       /* 诊断/帧校验/位移估计 */
+        s_tm_lcd += tb - td;        /* 缩放+写屏 */
+        s_tm_n++;
+        s_tm_t0 = tc;
+
+        /* 取景更新限速：撕裂只在"写入 vs 面板扫描"重叠时出现，
+         * 降低更新率 = 线性减少撕裂出现次数（代价是取景更顿）。 */
+
+        if (s_preview_min_ms > 0)
+          {
+            uint32_t el = tc - t_iter;
+            uint32_t want = (uint32_t)((s_preview_min_ms + 9) / 10);
+            if (want > el)
+              {
+                uint32_t d = want - el;
+                usleep(d * 10000);
+                s_tm_t0 += d;
+                tc += d;
+              }
+          }
+
+        s_prev_iter_t0 = tc;
+        (void)s_prev_iter_t0;
+        if (s_tm_n >= 32)
+          {
+            printf("[Prev] %ums/帧: 采集 %ums, 诊断 %ums, 缩放+写屏 %ums (%.1f fps)\n",
+                   (unsigned)((s_tm_cap + s_tm_diag + s_tm_lcd) * 10 / s_tm_n),
+                   (unsigned)(s_tm_cap * 10 / s_tm_n),
+                   (unsigned)(s_tm_diag * 10 / s_tm_n),
+                   (unsigned)(s_tm_lcd * 10 / s_tm_n),
+                   (double)s_tm_n * 100.0 /
+                     (double)(s_tm_cap + s_tm_diag + s_tm_lcd + 1));
+            s_tm_cap = 0;
+            s_tm_diag = 0;
+            s_tm_lcd = 0;
+            s_tm_n = 0;
+          }
+      }
     }
 
   esp32s3_cam_dvp_stop();
   lcd_put_rgb565_set_sharpen(true);
+  esp32s3_cam_dvp_set_stream_direct(false);
   esp32s3_cam_dvp_set_stream(false);
   esp32s3_cam_dvp_set_quiet(false);
   return NULL;
+}
+
+/* 快门专用：JPEG 单拍 + TJpgDec 严格解码验证 + 失败重抓。
+ *
+ * 2048 帧尾截断是逐帧随机竞态（v1.3.34 寄存器提速后完整率 ~25-50%），
+ * 截断帧 jd_decomp 报 JDR_INTR —— 解码不过就重抓，直到拿到完整帧。
+ * 成功后把解码结果（1024x768）定格到取景框 (x,y,w,h)，返回 shadow 里
+ * 的原始 2048 字节（所见即所传）。调用前必须先 camera_preview_stop()。 */
+
+int camera_hd_jpeg_capture_verified(const uint8_t **jpeg, size_t *len,
+                                    int x, int y, int w, int h,
+                                    int max_tries)
+{
+  volatile bool eoi = false;
+  int attempt;
+  int ret;
+
+  if (jpeg == NULL || len == NULL || max_tries < 1)
+    {
+      return -EINVAL;
+    }
+
+  *jpeg = NULL;
+  *len = 0;
+
+  if (s_hd_preview_frame == NULL)
+    {
+      s_hd_preview_frame = (uint8_t *)esp32s3_psram_static_alloc(
+                              CAM_HD_PREVIEW_SIZE);
+    }
+
+  if (s_hd_preview_frame == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  hal_camera_close();
+
+  /* 初始化 DVP 前必须先进入 JPEG 模式（与 HD 预览同序） */
+
+  esp32s3_cam_dvp_set_jpeg(true);
+  if (esp32s3_cam_dvp_init() < 0)
+    {
+      printf("[Cam-HD] shot: DVP init failed\n");
+      return -EIO;
+    }
+
+  if (camera_config_jpeg_wh(CAM_HD_JPEG_W, CAM_HD_JPEG_H) < 0)
+    {
+      printf("[Cam-HD] shot: JPEG config failed\n");
+      return -EIO;
+    }
+
+  bool reinited = false;
+
+  for (attempt = 1; attempt <= max_tries; attempt++)
+    {
+      const uint8_t *fb;
+      uint8_t *snapshot;
+      size_t cap;
+
+#ifdef CONFIG_PLANT_UI
+      int quiet=ui_app_render_pause(true);
+      if(quiet<0)return quiet;
+#endif
+      ret = esp32s3_cam_dvp_start();
+      if (ret == 0)
+        {
+          ret = esp32s3_cam_dvp_capture(NULL, NULL, &eoi);
+        }
+
+      esp32s3_cam_dvp_stop();
+
+      if (ret <= 0)
+        {
+#ifdef CONFIG_PLANT_UI
+          ui_app_render_pause(false);
+#endif
+          printf("[Cam-HD] shot #%d capture failed: %d\n", attempt, ret);
+
+          /* 2026-09-27 (v55c): 冷启动 JPEG DMA 锁死（chunks=0）时，
+           * 第一次失败立刻重跑完整硬件配置（GPIO/LCD_CAM/DMA 链），
+           * 传感器此时正持续 RGB565 出流 = 实测唯一可靠的恢复序列
+           * 的最后一个环节。 */
+
+          if (!reinited)
+            {
+              reinited = true;
+              printf("[Cam-HD] shot: 触发 hw reinit 自愈\n");
+              esp32s3_cam_dvp_reinit_hw();
+            }
+
+          continue;
+        }
+
+      fb = esp32s3_cam_dvp_get_frame();
+      snapshot = esp32s3_cam_dvp_get_shadow();
+      cap = esp32s3_cam_dvp_get_shadow_size();
+
+      if (fb == NULL || snapshot == NULL || (size_t)ret > cap)
+        {
+#ifdef CONFIG_PLANT_UI
+          ui_app_render_pause(false);
+#endif
+          printf("[Cam-HD] shot #%d bad snapshot\n", attempt);
+          continue;
+        }
+
+      esp32s3_cam_dvp_invalidate(fb, (size_t)ret);
+      memcpy(snapshot, fb, (size_t)ret);
+#ifdef CONFIG_PLANT_UI
+      ui_app_render_pause(false);
+#endif
+
+      if (cam_hd_jpeg_decode(snapshot, (size_t)ret) == 0)
+        {
+          lcd_put_rgb565_cover(s_hd_preview_frame,
+                               CAM_HD_PREVIEW_W, CAM_HD_PREVIEW_H,
+                               x, y, w, h);
+          *jpeg = snapshot;
+          *len = (size_t)ret;
+          printf("[Cam-HD] shot #%d verified: len=%u fnv=%08x\n",
+                 attempt, (unsigned)*len,
+                 (unsigned)cam_hd_jpeg_hash(*jpeg, *len));
+          return 0;
+        }
+
+      printf("[Cam-HD] shot #%d truncated (%u/%u rows), retry\n",
+             attempt, s_hd_decoded_bottom, (unsigned)CAM_HD_PREVIEW_H);
+
+      /* Consecutive decode errors can leave receiver state unhealthy.
+       * Re-arm from the known hardware mode before retrying, rather than
+       * repeatedly accepting bytes from the same failed receive state.
+       */
+      if ((attempt % 2) == 0 && attempt < max_tries)
+        {
+          esp32s3_cam_dvp_reinit_hw();
+        }
+
+    }
+
+  printf("[Cam-HD] shot: no usable frame after %d tries\n", max_tries);
+  return -ENODATA;
 }
 
 int camera_preview_start(int x, int y, int w, int h)
@@ -1911,6 +4440,12 @@ int camera_preview_start(int x, int y, int w, int h)
     {
       return 0;
     }
+
+  cam_mask_take_snapshot();
+
+  s_preview_hd = false;
+  s_frame_w = CAM_PREVIEW_W;
+  s_frame_h = CAM_PREVIEW_H;
 
   /* 回到预览几何：拍照后传感器停在 320×240，若直接启动预览线程，直写会
    * 把 320 宽的帧当 160×120 用 → 画面错乱。已在该模式时零开销返回。 */
@@ -1937,23 +4472,177 @@ int camera_preview_start(int x, int y, int w, int h)
   return 0;
 }
 
+int camera_preview_start_hd(int x, int y, int w, int h)
+{
+  if (s_preview_run)
+    {
+      return 0;
+    }
+
+  s_preview_hd = true;
+  s_preview_x = x;
+  s_preview_y = y;
+  s_preview_w = w;
+  s_preview_h = h;
+  s_preview_seq = 0;
+  s_preview_freeze = false;
+  s_hd_jpeg = NULL;
+  s_hd_jpeg_len = 0;
+  s_preview_run = true;
+
+  if (pthread_create(&s_preview_tid, NULL, camera_preview_loop, NULL) != 0)
+    {
+      s_preview_run = false;
+      return -1;
+    }
+
+  return 0;
+}
+
+int camera_preview_start_rgb(int x, int y, int w, int h)
+{
+  if (s_preview_run)
+    {
+      return 0;
+    }
+
+  /* v61：640x480 RGB565 直采取景（VSYNC 对齐 DMA + 滚动快照），
+   * 实测稳态 ~80ms/帧（12.5fps）；无 JPEG 编解码，没有中段损坏重抓。
+   * 清晰度高于 512x384 的 JPEG 半尺度解码。快门时切 JPEG 1024x768
+   * 冷拍（camera_hd_jpeg_capture_verified，静模式链路 100% 完好）。 */
+
+  /* 2026-09-28：显示仍是 320x240 取景框（撕裂控制），但采集源回到
+   * 640x480。原因：QVGA 分支是为提帧率改过 PLL 的，实测帧周期 ~200ms
+   * 且静止画面曝光/时序在抖（用户反馈"画面跳来跳去"）；640x480 是
+   * 长期验证稳定的配置（帧周期 136ms），缩放 2:1 写入量不变。 */
+
+  /* 2026-09-28：取景采集回 QVGA 320x240。aligncheck 实测（静态场景、
+   * 同一采集路径）640x480 帧间差 sad0=145-233、60-93% 行异常，而
+   * 320x240 只有 sad0=5-71、0-32% —— QVGA 分支当年为 AEC 稳定调过
+   * PLL（pclk_div 8->10），是明显更稳的一条路。显示仍是 320x240，
+   * 1:1 直写、无需缩放。 */
+
+  if (!s_rgb_qvga_ready)
+    {
+      if (camera_config_rgb565_wh(320, 240) < 0)
+        {
+          printf("[Cam] rgb preview: 320x240 config failed\n");
+          return -EIO;
+        }
+
+      s_rgb_qvga_ready = true;
+    }
+
+  s_preview_hd = false;
+  s_frame_w = 320;
+  s_frame_h = 240;
+  cam_mask_take_snapshot();
+  s_preview_x = x;
+  s_preview_y = y;
+  s_preview_w = w;
+  s_preview_h = h;
+  camera_preview_invalidate();
+  s_preview_seq = 0;
+  s_preview_freeze = false;
+  s_preview_run = true;
+
+  if (pthread_create(&s_preview_tid, NULL, camera_preview_loop, NULL) != 0)
+    {
+      s_preview_run = false;
+      return -1;
+    }
+
+  return 0;
+}
+
+/* 连续单色帧计数（镜头被挡提示用，见 cam_hd_frame_is_mono） */
+
+unsigned camera_preview_mono_streak(void)
+{
+  return s_hd_mono_streak;
+}
+
+void camera_preview_set_verify(bool on)
+{
+  s_prev_verify = on;
+  printf("[Cam] frame verify %s (thresh=%lu)\n", on ? "ON" : "OFF",
+         (unsigned long)s_prev_thresh);
+}
+
+void camera_preview_set_hold(bool on)
+{
+  s_preview_hold = on;
+  printf("[Cam] preview hold %s\n", on ? "ON（停采集，重复写同帧）" : "OFF");
+}
+
+void camera_preview_set_min_interval_ms(int ms)
+{
+  s_preview_min_ms = (ms < 0) ? 0 : ms;
+  printf("[Cam] preview min interval = %d ms\n", s_preview_min_ms);
+}
+
+int camera_preview_set_min_interval_ms_get(void)
+{
+  return s_preview_min_ms;
+}
+
+int camera_preview_get_jpeg(const uint8_t **jpeg, size_t *len)
+{
+  if (jpeg == NULL || len == NULL)
+    {
+      return -EINVAL;
+    }
+
+  *jpeg = s_hd_jpeg;
+  *len = s_hd_jpeg_len;
+  if (s_hd_jpeg == NULL || s_hd_jpeg_len == 0)
+    {
+      return -ENODATA;
+    }
+
+  printf("[Cam-HD] capture ready: len=%u fnv=%08x\n",
+         (unsigned)s_hd_jpeg_len,
+         (unsigned)cam_hd_jpeg_hash(s_hd_jpeg, s_hd_jpeg_len));
+  return 0;
+}
+
 int camera_preview_take(void)
 {
-  /* 冻结：预览线程停取帧，s_preview_latest 保留最后一帧（画面定格） */
+  /* 冻结：预览线程停取帧，s_preview_latest 保留最后一帧（画面定格）。
+   *
+   * v175（用户报：点“相册”卡住 + 雪花屏）：原来只置标志就返回，而线程
+   * 可能正在“写一整屏”的中途（现在取景框铺满整屏，一次写屏 ~250ms）：
+   * 等于切页后它还会把相机画面盖到新页面上，两边交替刷 →
+   * 花屏/卡住。现在同步等它真停下（最多 1s）再返回。 */
+
+  int i;
 
   s_preview_freeze = true;
-  return 0;
+
+  for (i = 0; i < 200 && !s_preview_idle && s_preview_run; i++)
+    {
+      usleep(5 * 1000);
+    }
+
+  return (s_preview_idle || !s_preview_run) ? 0 : -ETIMEDOUT;
 }
 
 int camera_preview_resume(void)
 {
+  if(s_preview_freeze)camera_preview_invalidate();
+  s_preview_idle = false;
   s_preview_freeze = false;
   return 0;
 }
 
+bool camera_preview_is_running(void)
+{
+  return s_preview_run;
+}
+
 int camera_preview_stop(void)
 {
-  if (!s_preview_run)
+  if (!s_preview_run && s_preview_tid == 0)
     {
       return 0;
     }
@@ -1961,6 +4650,7 @@ int camera_preview_stop(void)
   s_preview_run = false;
   pthread_join(s_preview_tid, NULL);
   s_preview_tid = 0;
+  s_preview_idle = true;   /* v175：线程已退出，不再有人写屏 */
   return 0;
 }
 
@@ -2009,6 +4699,8 @@ int camera_preview_get_frame_index(void)
 /* 预览快路径开关：连续预览（stream）关锐化提帧率；单帧拍照保持默认锐化。 */
 
 static bool s_lcd_sharpen = true;
+static bool s_lcd_cover;      /* cover-fit: crop source instead of stretching */
+static bool s_lcd_src_be;     /* 源为传感器原始大端序（免拷贝直通时用） */
 
 void lcd_put_rgb565_set_sharpen(bool on)
 {
@@ -2083,7 +4775,9 @@ static inline uint16_t cam_sharp_px(const uint8_t *fb, int sw, int sh,
 int lcd_put_rgb565(const uint8_t *fb, int sw, int sh,
                    int dx, int dy, int dw, int dh)
 {
-  int fd = open("/dev/lcd0", O_WRONLY);
+  static int s_lcdfd = -1;
+  static uint8_t *s_fbuf;
+  int fd;
   struct lcddev_area_s area;
   static int16_t s_sx0[480];   /* target x -> source integer x0 (bilinear) */
   static uint8_t s_fx8[480];   /* target x -> source fraction x256 */
@@ -2092,11 +4786,17 @@ int lcd_put_rgb565(const uint8_t *fb, int sw, int sh,
   uint8_t *fbuf;
   int y;
 
-  if (fd < 0)
+  if (s_lcdfd < 0)
     {
-      printf("[LCD] open /dev/lcd0 failed: %d\n", fd);
-      return -1;
+      s_lcdfd = open("/dev/lcd0", O_WRONLY);
+      if (s_lcdfd < 0)
+        {
+          printf("[LCD] open /dev/lcd0 failed: %d\n", s_lcdfd);
+          return -1;
+        }
     }
+
+  fd = s_lcdfd;
 
   if (dw > 480)
     {
@@ -2105,22 +4805,53 @@ int lcd_put_rgb565(const uint8_t *fb, int sw, int sh,
 
   if (dw <= 0 || dh <= 0)
     {
-      close(fd);
       return -1;
     }
 
-  /* Whole-frame staging buffer: scale into one contiguous area, then one
-   * LCDDEVIO_PUTAREA pushes the whole viewport in a single transaction.
-   * st7789 wrram swaps/sends in rowbuff_be-sized chunks, so large areas
-   * never overflow the driver working buffer. */
+  /* Optional cover fit: crop the source to the target aspect ratio and
+   * center it, so 4:3 camera frames do not stretch into the wide viewport. */
 
-  fbuf = malloc((size_t)dw * (size_t)dh * 2);
-  if (fbuf == NULL)
+  int cw = sw;
+  int ch = sh;
+  int cx = 0;
+  int cy = 0;
+
+  if (s_lcd_cover)
     {
-      printf("[LCD] malloc staging %dx%d failed\n", dw, dh);
-      close(fd);
-      return -1;
+      if ((long)sw * dh > (long)sh * dw)
+        {
+          cw = (sh * dw) / dh;
+          if (cw < 1) cw = 1;
+          cx = (sw - cw) / 2;
+        }
+      else
+        {
+          ch = (sw * dh) / dw;
+          if (ch < 1) ch = 1;
+          cy = (sh - ch) / 2;
+        }
     }
+
+  /* Eight rows bound persistent staging to 7680 bytes. A full-screen
+   * allocation (307200 bytes) exceeds the measured free contiguous heap
+   * after voice/UI initialization and silently loses photo stills.
+   * Keep the same scaler/preswapped pixels; submit complete row bands. */
+
+  if (s_fbuf == NULL)
+    {
+#ifdef CONFIG_ESP32S3_SPIRAM_COMMON_HEAP
+      s_fbuf = esp32s3_psram_static_alloc(480ul * 8ul * 2ul);
+#else
+      s_fbuf = malloc(480ul * 8ul * 2ul);
+#endif
+      if (s_fbuf == NULL)
+        {
+          printf("[LCD] malloc staging failed\n");
+          return -ENOMEM;
+        }
+    }
+
+  fbuf = s_fbuf;
 
   memset(&area, 0, sizeof(area));
   area.stride = 0;
@@ -2132,38 +4863,38 @@ int lcd_put_rgb565(const uint8_t *fb, int sw, int sh,
 
     for (x = 0; x < dw; x++)
       {
-        int pos = x * sw;
+        int pos = x * cw;
         int s0 = pos / dw;
         int f = pos % dw;
 
-        s_sx0[x] = (int16_t)(s0 >= sw ? sw - 1 : s0);
+        s_sx0[x] = (int16_t)(s0 >= cw ? cw - 1 : s0);
         s_fx8[x] = (uint8_t)((f * 256) / dw);
       }
   }
 
   for (y = 0; y < dh; y++)
     {
-      int vpos = y * sh;
+      int vpos = y * ch;
       int sy0 = vpos / dh;
       int fy = vpos % dh;
       int sy1;
       int fy8;
       int x0;
-      uint8_t *dst = fbuf + (size_t)y * (size_t)dw * 2;
+      uint8_t *dst = fbuf + (size_t)(y % 8) * (size_t)dw * 2;
 
-      if (sy0 >= sh)
+      if (sy0 >= ch)
         {
-          sy0 = sh - 1;
+          sy0 = ch - 1;
         }
 
-      sy1 = (sy0 + 1 >= sh) ? sy0 : sy0 + 1;
+      sy1 = (sy0 + 1 >= ch) ? sy0 : sy0 + 1;
       fy8 = (fy * 256) / dh;
 
       /* Pre-sharpen the two source rows once per band, then
        * bilinear-sample them (keeps the 2026-09-01 quality upgrade at a
        * fraction of the CPU cost). */
 
-      if (s_lcd_sharpen)
+      if (s_lcd_sharpen && !s_lcd_cover)
         {
       for (x0 = 0; x0 < 2; x0++)
         {
@@ -2185,15 +4916,16 @@ int lcd_put_rgb565(const uint8_t *fb, int sw, int sh,
         }
         }
 
+      {
+        const uint8_t *row0 = fb + ((size_t)(cy + sy0) * sw + cx) * 2;
+        const uint8_t *row1 = fb + ((size_t)(cy + sy1) * sw + cx) * 2;
+        int wy0 = 256 - fy8;
+
       for (x0 = 0; x0 < dw; x0++)
         {
           int sx0 = s_sx0[x0];
           int fx = s_fx8[x0];
-          int sx1 = (sx0 + 1 >= sw) ? sx0 : sx0 + 1;
-          int w00;
-          int w01;
-          int w10;
-          int w11;
+          int sx1 = (sx0 + 1 >= cw) ? sx0 : sx0 + 1;
           uint16_t p00;
           uint16_t p01;
           uint16_t p10;
@@ -2203,7 +4935,7 @@ int lcd_put_rgb565(const uint8_t *fb, int sw, int sh,
           int b;
           uint16_t px;
 
-          if (s_lcd_sharpen)
+          if (s_lcd_sharpen && !s_lcd_cover)
             {
               p00 = s_shrow[0][sx0 * 2] | (s_shrow[0][sx0 * 2 + 1] << 8);
               p01 = s_shrow[0][sx1 * 2] | (s_shrow[0][sx1 * 2 + 1] << 8);
@@ -2212,45 +4944,568 @@ int lcd_put_rgb565(const uint8_t *fb, int sw, int sh,
             }
           else
             {
-              const uint8_t *q00 = fb + ((size_t)sy0 * sw + sx0) * 2;
-              const uint8_t *q01 = fb + ((size_t)sy0 * sw + sx1) * 2;
-              const uint8_t *q10 = fb + ((size_t)sy1 * sw + sx0) * 2;
-              const uint8_t *q11 = fb + ((size_t)sy1 * sw + sx1) * 2;
+              const uint8_t *q0 = row0 + (size_t)sx0 * 2;
+              const uint8_t *q1 = row1 + (size_t)sx0 * 2;
+              int o1 = (sx0 + 1 >= cw) ? 0 : 2;
 
-              p00 = q00[0] | (uint16_t)(q00[1] << 8);
-              p01 = q01[0] | (uint16_t)(q01[1] << 8);
-              p10 = q10[0] | (uint16_t)(q10[1] << 8);
-              p11 = q11[0] | (uint16_t)(q11[1] << 8);
+              if (s_lcd_src_be)
+                {
+                  p00 = (uint16_t)(q0[0] << 8) | q0[1];
+                  p01 = (uint16_t)(q0[o1] << 8) | q0[o1 + 1];
+                  p10 = (uint16_t)(q1[0] << 8) | q1[1];
+                  p11 = (uint16_t)(q1[o1] << 8) | q1[o1 + 1];
+                }
+              else
+                {
+                  p00 = q0[0] | (uint16_t)(q0[1] << 8);
+                  p01 = q0[o1] | (uint16_t)(q0[o1 + 1] << 8);
+                  p10 = q1[0] | (uint16_t)(q1[1] << 8);
+                  p11 = q1[o1] | (uint16_t)(q1[o1 + 1] << 8);
+                }
             }
 
-          w00 = (256 - fx) * (256 - fy8);
-          w01 = fx * (256 - fy8);
-          w10 = (256 - fx) * fy8;
-          w11 = fx * fy8;
+          /* 先列向混合、再行间混合：每通道 6 次乘法（原 12 次）。
+           * 权重和恒为 256*256，与原 4-tap 双线性严格等价。 */
 
-          r = ((((p00 >> 11) & 31) * w00 + ((p01 >> 11) & 31) * w01 +
-                ((p10 >> 11) & 31) * w10 + ((p11 >> 11) & 31) * w11) >> 16);
-          g = ((((p00 >> 5) & 63) * w00 + ((p01 >> 5) & 63) * w01 +
-                ((p10 >> 5) & 63) * w10 + ((p11 >> 5) & 63) * w11) >> 16);
-          b = (((p00 & 31) * w00 + (p01 & 31) * w01 +
-                (p10 & 31) * w10 + (p11 & 31) * w11) >> 16);
+          {
+            int wx0 = 256 - fx;
+            int t0;
+            int t1;
+
+            t0 = ((p00 >> 11) & 31) * wx0 + ((p01 >> 11) & 31) * fx;
+            t1 = ((p10 >> 11) & 31) * wx0 + ((p11 >> 11) & 31) * fx;
+            r = (t0 * wy0 + t1 * fy8) >> 16;
+
+            t0 = ((p00 >> 5) & 63) * wx0 + ((p01 >> 5) & 63) * fx;
+            t1 = ((p10 >> 5) & 63) * wx0 + ((p11 >> 5) & 63) * fx;
+            g = (t0 * wy0 + t1 * fy8) >> 16;
+
+            t0 = (p00 & 31) * wx0 + (p01 & 31) * fx;
+            t1 = (p10 & 31) * wx0 + (p11 & 31) * fx;
+            b = (t0 * wy0 + t1 * fy8) >> 16;
+          }
 
           px = (uint16_t)((r << 11) | (g << 5) | b);
-          dst[x0 * 2]     = (uint8_t)(px & 0xff);
-          dst[x0 * 2 + 1] = (uint8_t)(px >> 8);
+          /* Panel byte order is high byte first; swap while the pixel is
+           * hot in cache so st7789 can send the staging buffer directly. */
+
+          dst[x0 * 2]     = (uint8_t)(px >> 8);
+          dst[x0 * 2 + 1] = (uint8_t)(px & 0xff);
+        }
+      }
+      unsigned rows=(unsigned)(y % 8)+1;
+      if(rows==8||y==dh-1){
+        area.col_start=dx;area.col_end=dx+dw-1;
+        area.row_start=dy+y+1-(int)rows;area.row_end=dy+y;
+        area.data=fbuf;
+        if(ioctl(fd,LCDDEVIO_PUTAREA_PRESWAPPED,(unsigned long)&area)<0)
+          return errno?-errno:-EIO;
+      }
+    }
+  printf("[LCD] bounded blit %dx%d bands=%d staging=7680 result=0\n",dw,dh,(dh+7)/8);
+  return 0;
+}
+
+/* 取景器专用快路径：cover 裁剪 + 最近邻查表采样 + 字节交换，单次 PUTAREA。
+ * 相对 lcd_put_rgb565（双线性 4-tap + 每帧 open/malloc/close）：
+ * 几何不变时列/行映射与 staging 缓冲静态缓存，LCD fd 常驻打开；
+ * 76k 目标像素从 ~12 次乘加/px 降到 1 次查表 + 1 次交换/px。 */
+
+int lcd_put_rgb565_cover_fast(const uint8_t *fb, int sw, int sh,
+                              int dx, int dy, int dw, int dh)
+{
+  static int s_fast_fd = -1;
+  static uint8_t *s_fast_buf;
+  static int s_fast_geo[6] = { -1, -1, -1, -1, -1, -1 };
+  static int32_t s_fast_mapx[480];
+  static int32_t s_fast_mapy[320];
+  struct lcddev_area_s area;
+  int cw;
+  int ch;
+  int cx;
+  int cy;
+  int x;
+  int y;
+
+  if (fb == NULL || dw <= 0 || dh <= 0 || dw > 480 || dh > 320)
+    {
+      return -EINVAL;
+    }
+
+  if (s_fast_fd < 0)
+    {
+      s_fast_fd = open("/dev/lcd0", O_WRONLY);
+      if (s_fast_fd < 0)
+        {
+          printf("[LCD] fast: open /dev/lcd0 failed: %d\n", s_fast_fd);
+          return -1;
         }
     }
 
+  if (s_fast_buf == NULL)
+    {
+      s_fast_buf = malloc(480ul * 320ul * 2ul);
+      if (s_fast_buf == NULL)
+        {
+          printf("[LCD] fast: staging malloc failed\n");
+          return -ENOMEM;
+        }
+    }
+
+  /* cover 裁剪（与 lcd_put_rgb565 同规则） */
+
+  cw = sw;
+  ch = sh;
+  cx = 0;
+  cy = 0;
+  if ((long)sw * dh > (long)sh * dw)
+    {
+      cw = (sh * dw) / dh;
+      if (cw < 1) cw = 1;
+      cx = (sw - cw) / 2;
+    }
+  else
+    {
+      ch = (sw * dh) / dw;
+      if (ch < 1) ch = 1;
+      cy = (sh - ch) / 2;
+    }
+
+  if (s_fast_geo[0] != sw || s_fast_geo[1] != sh ||
+      s_fast_geo[2] != dx || s_fast_geo[3] != dy ||
+      s_fast_geo[4] != dw || s_fast_geo[5] != dh)
+    {
+      for (x = 0; x < dw; x++)
+        {
+          s_fast_mapx[x] = cx + (int)(((long)x * cw) / dw);
+        }
+
+      for (y = 0; y < dh; y++)
+        {
+          s_fast_mapy[y] = cy + (int)(((long)y * ch) / dh);
+        }
+
+      s_fast_geo[0] = sw;
+      s_fast_geo[1] = sh;
+      s_fast_geo[2] = dx;
+      s_fast_geo[3] = dy;
+      s_fast_geo[4] = dw;
+      s_fast_geo[5] = dh;
+    }
+
+  for (y = 0; y < dh; y++)
+    {
+      const uint8_t *srow = fb + (size_t)s_fast_mapy[y] * (size_t)sw * 2;
+      uint8_t *drow = s_fast_buf + (size_t)y * (size_t)dw * 2;
+
+      for (x = 0; x < dw; x++)
+        {
+          const uint8_t *px = srow + (size_t)s_fast_mapx[x] * 2;
+
+          drow[x * 2]     = px[1];   /* 面板序：高字节在前 */
+          drow[x * 2 + 1] = px[0];
+        }
+    }
+
+  memset(&area, 0, sizeof(area));
   area.col_start = dx;
   area.col_end = dx + dw - 1;
   area.row_start = dy;
   area.row_end = dy + dh - 1;
-  area.data = fbuf;
-  ioctl(fd, LCDDEVIO_PUTAREA, (unsigned long)&area);
-
-  free(fbuf);
-  close(fd);
+  area.data = s_fast_buf;
+  ioctl(s_fast_fd, LCDDEVIO_PUTAREA_PRESWAPPED, (unsigned long)&area);
   return 0;
+}
+
+/****************************************************************************
+ * lcd_put_rgb565_snapshot —— B 模式取景快照写屏（1:1 源→取景框）
+ *
+ * 与 lcd_put_rgb565_cover 的区别：
+ *  - 源尺寸与显示尺寸相同（320x240 → 320x240），直接 1:1 拷贝 + 字节交换，
+ *    不再走双线性缩放（快、且不会因缩放引入混叠）；
+ *  - 与上一帧比较，**只写发生变化的行**（组连续行段提交），并只在写屏
+ *    期间 DISPOFF（写完整帧时才有明显闪断，写几行时几乎不可见）；
+ *  - 完全没变化时一次都不写 → 静止画面零闪断、零撕裂。
+ ****************************************************************************/
+
+static uint32_t s_snap_calls;
+static uint32_t s_snap_bytes;
+
+/* v170：用"每行校验和"代替 s_prev 整帧 memcmp。
+ * 原做法每帧要读 2 × 307KB（PSRAM）=39ms，还要再 memcpy 307KB（再 19ms）；
+ * 而校验和在缩放循环里顺手就算了（每像素 +1 add +1 xor），两边都省。
+ * "相似就跳写"：碰撞概率极低，即使撞了也只是该行晚一帧刷新。 */
+
+#define SNAP_ROWS_MAX  512
+
+/* v179：这四张表原来是静态 .bss（4x512x4 = 8KB），而 .bss 占的是
+ * **内部 SRAM** —— 正是 WiFi 驱动要用的那块。改成堆上分配
+ * （PSRAM），把内部 SRAM 还回去。分配失败就退化为“每帧全写”，
+ * 不会出现少写行的错误行为。 */
+
+static uint32_t *s_rowsum_cur;
+static uint32_t *s_rowxor_cur;
+static uint32_t *s_rowsum_pv;
+static uint32_t *s_rowxor_pv;
+static int s_rowsum_valid;
+
+static int snap_rowsum_alloc(void)
+{
+  size_t bytes = sizeof(uint32_t) * (size_t)SNAP_ROWS_MAX;
+
+  if (s_rowsum_cur != NULL)
+    {
+      return 0;
+    }
+
+  s_rowsum_cur = (uint32_t *)malloc(bytes);
+  s_rowxor_cur = (uint32_t *)malloc(bytes);
+  s_rowsum_pv = (uint32_t *)malloc(bytes);
+  s_rowxor_pv = (uint32_t *)malloc(bytes);
+
+  if (s_rowsum_cur == NULL || s_rowxor_cur == NULL ||
+      s_rowsum_pv == NULL || s_rowxor_pv == NULL)
+    {
+      free(s_rowsum_cur);free(s_rowxor_cur);free(s_rowsum_pv);free(s_rowxor_pv);
+      s_rowsum_cur=s_rowxor_cur=s_rowsum_pv=s_rowxor_pv=NULL;
+      printf("[Snap] rowsum alloc failed, fall back to full write");
+      printf("\n");
+      return -ENOMEM;
+    }
+
+  return 0;
+}
+
+/* v182：让位区用【包围盒】x 区间（整段常量），不再按圆角逐行求交。
+ * 圆角让每行 blocked[] 都不同 → 无法合并 → 每帧上百次碎 PUTAREA，
+ * 底栏观感就是拼接块/油膜条。包围盒略多让几个像素，但整段可 2~6 次写完。 */
+
+static int cam_mask_blocked_bbox(int sy0, int sy1, int dx, int dw, int *blocked)
+{
+  int raw[2 * CAM_MASK_MAX];
+  int n = 0;
+  int i;
+  int j;
+
+  for (i = 0; i < s_pv_mask_num; i++)
+    {
+      const struct cam_mask_s *m = &s_pv_mask[i];
+      int x0;
+      int x1;
+
+      if (m->y >= sy1 || m->y + m->h <= sy0)
+        {
+          continue;
+        }
+
+      x0 = m->x - dx;
+      x1 = m->x + m->w - dx;
+      if (x0 < 0)
+        {
+          x0 = 0;
+        }
+
+      if (x1 > dw)
+        {
+          x1 = dw;
+        }
+
+      if (x1 <= x0)
+        {
+          continue;
+        }
+
+      raw[2 * n] = x0;
+      raw[2 * n + 1] = x1;
+      n++;
+    }
+
+  /* 按 x0 排序后合并重叠/相邻 */
+
+  for (i = 0; i < n; i++)
+    {
+      for (j = i + 1; j < n; j++)
+        {
+          if (raw[2 * j] < raw[2 * i])
+            {
+              int a0 = raw[2 * i];
+              int a1 = raw[2 * i + 1];
+              raw[2 * i] = raw[2 * j];
+              raw[2 * i + 1] = raw[2 * j + 1];
+              raw[2 * j] = a0;
+              raw[2 * j + 1] = a1;
+            }
+        }
+    }
+
+  {
+    int out = 0;
+
+    for (i = 0; i < n; i++)
+      {
+        if (out > 0 && raw[2 * i] <= blocked[2 * out - 1])
+          {
+            if (raw[2 * i + 1] > blocked[2 * out - 1])
+              {
+                blocked[2 * out - 1] = raw[2 * i + 1];
+              }
+          }
+        else
+          {
+            blocked[2 * out] = raw[2 * i];
+            blocked[2 * out + 1] = raw[2 * i + 1];
+            out++;
+          }
+      }
+
+    return out;
+  }
+}
+
+/* v169：把一批"让位区间相同"的行用一次 PUTAREA 写掉（stride 告诉驱动
+ * 行间跳过多少字节）。原来每行一次调用，实测每次调用固定开销
+ * ~0.6ms，244 次/帧就是 150ms —— 写屏的真正瓶颈。 */
+
+static int snap_write_intervals(int fd, const uint8_t *cur, int dw,
+                                 int dx, int dy, int y0, int rows,
+                                 const int *blocked, int nb)
+{
+  int curx = 0;
+  int bi;
+
+  for (bi = 0; bi <= nb; bi++)
+    {
+      int x1 = (bi < nb) ? blocked[2 * bi] : dw;
+
+      if (x1 > curx)
+        {
+          struct lcddev_area_s ar;
+
+          memset(&ar, 0, sizeof(ar));
+          ar.col_start = (fb_coord_t)(dx + curx);
+          ar.col_end = (fb_coord_t)(dx + x1 - 1);
+          ar.row_start = (fb_coord_t)(dy + y0);
+          ar.row_end = (fb_coord_t)(dy + y0 + rows - 1);
+          ar.data = cur + (size_t)y0 * (size_t)dw * 2u + (size_t)curx * 2u;
+          ar.stride = dw * 2;
+
+          if(ioctl(fd,LCDDEVIO_PUTAREA_PRESWAPPED,(unsigned long)&ar)<0)return -errno;
+          s_snap_calls++;
+          s_snap_bytes += (size_t)(x1 - curx) * 2u * (size_t)rows;
+        }
+
+      if (bi < nb)
+        {
+          curx = blocked[2 * bi + 1];
+        }
+    }
+  return 0;
+}
+
+int lcd_put_rgb565_snapshot(const uint8_t *fb, int sw, int sh,
+                            int dx, int dy, int dw, int dh)
+{
+  /* A complete480x320 staging frame required307200 contiguous heap bytes.
+   * Render eight rows at a time instead, keeping pixel math and masks. */
+  enum { BAND_ROWS=8, MAX_WIDTH=480 };
+  static uint8_t *s_cur;
+  static int s_fd=-1;
+  static uint32_t seen_epoch;
+  int y,ret=0,wrote_any=0;
+  uint32_t epoch=atomic_load(&s_display_epoch);
+  if(!fb||sw<=0||sh<=0||dw<=0||dh<=0||dw>MAX_WIDTH||dh>320||
+     dx<0||dy<0||dx+dw>480||dy+dh>320)return -EINVAL;
+  if(!s_cur){
+#ifdef CONFIG_ESP32S3_SPIRAM_COMMON_HEAP
+    s_cur=esp32s3_psram_static_alloc(MAX_WIDTH*BAND_ROWS*2u);
+#else
+    s_cur=malloc(MAX_WIDTH*BAND_ROWS*2u);
+#endif
+    if(!s_cur)return -ENOMEM;
+    s_rowsum_valid=0;
+    snap_rowsum_alloc();
+  }
+  if(seen_epoch!=epoch)s_rowsum_valid=0;
+  if(s_fd<0){s_fd=open("/dev/lcd0",O_WRONLY);if(s_fd<0)return -errno;}
+  for(int base=0;base<dh;base+=BAND_ROWS){
+    int end=base+BAND_ROWS<dh?base+BAND_ROWS:dh;
+  {
+    int cw = sw;
+    int ch = sh;
+    int cx = 0;
+    int cy = 0;
+    uint32_t hstep;
+
+    if ((long)sw * dh > (long)sh * dw)
+      {
+        cw = (sh * dw) / dh;
+        if (cw < 1) cw = 1;
+        cx = (sw - cw) / 2;
+      }
+    else
+      {
+        ch = (sw * dh) / dw;
+        if (ch < 1) ch = 1;
+        cy = (sh - ch) / 2;
+      }
+
+    /* v167：水平采样点改用 16.16 定点累加。Xtensa 没有硬件除法，
+     * 原实现每个像素要做 2 次整数除法（共 ~30 万次/帧）。采样点与
+     * 权重与原实现等价（累积截断误差 < 1/65536 个步进）。 */
+
+    hstep = ((uint32_t)cw << 16) / (uint32_t)dw;
+
+    for (y = base; y < end; y++)
+      {
+        int vpos = y * ch;
+        int sy0 = vpos / dh;
+        int fy8;
+        int sy1;
+        uint8_t *dst = s_cur + (size_t)(y-base) * (size_t)dw * 2u;
+        const uint8_t *row0;
+        const uint8_t *row1;
+        uint32_t hacc = 0;
+        uint32_t rsum = 0;
+        uint32_t rxor = 0;
+        int x;
+
+        if (sy0 >= ch) sy0 = ch - 1;
+        sy1 = (sy0 + 1 >= ch) ? sy0 : sy0 + 1;
+        fy8 = ((vpos % dh) * 256) / dh;
+
+        /* 源行基址提出内循环：原实现每像素还要做 4 次行乘加 */
+
+        row0 = fb + (size_t)(cy + sy0) * (size_t)sw * 2u;
+        row1 = fb + (size_t)(cy + sy1) * (size_t)sw * 2u;
+
+        for (x = 0; x < dw; x++)
+          {
+            int sx0 = (int)(hacc >> 16);
+            int fx8 = (int)(((hacc & 0xffffu) * 256u) >> 16);
+            int sx1;
+            const uint8_t *q00;
+            const uint8_t *q01;
+            const uint8_t *q10;
+            const uint8_t *q11;
+            uint16_t p00;
+            uint16_t p01;
+            uint16_t p10;
+            uint16_t p11;
+            int wx0;
+            int t0;
+            int t1;
+            int r;
+            int g;
+            int bl;
+            uint16_t px;
+
+            hacc += hstep;
+
+            if (sx0 >= cw) sx0 = cw - 1;
+            sx1 = (sx0 + 1 >= cw) ? sx0 : sx0 + 1;
+
+            q00 = row0 + (size_t)(cx + sx0) * 2u;
+            q01 = row0 + (size_t)(cx + sx1) * 2u;
+            q10 = row1 + (size_t)(cx + sx0) * 2u;
+            q11 = row1 + (size_t)(cx + sx1) * 2u;
+
+            p00 = (uint16_t)(q00[0] | (q00[1] << 8));
+            p01 = (uint16_t)(q01[0] | (q01[1] << 8));
+            p10 = (uint16_t)(q10[0] | (q10[1] << 8));
+            p11 = (uint16_t)(q11[0] | (q11[1] << 8));
+
+            wx0 = 256 - fx8;
+            t0 = ((p00 >> 11) & 31) * wx0 + ((p01 >> 11) & 31) * fx8;
+            t1 = ((p10 >> 11) & 31) * wx0 + ((p11 >> 11) & 31) * fx8;
+            r = (t0 * (256 - fy8) + t1 * fy8) >> 16;
+
+            t0 = ((p00 >> 5) & 63) * wx0 + ((p01 >> 5) & 63) * fx8;
+            t1 = ((p10 >> 5) & 63) * wx0 + ((p11 >> 5) & 63) * fx8;
+            g = (t0 * (256 - fy8) + t1 * fy8) >> 16;
+
+            t0 = (p00 & 31) * wx0 + (p01 & 31) * fx8;
+            t1 = (p10 & 31) * wx0 + (p11 & 31) * fx8;
+            bl = (t0 * (256 - fy8) + t1 * fy8) >> 16;
+
+            px = (uint16_t)((r << 11) | (g << 5) | bl);
+            dst[x * 2]     = (uint8_t)(px >> 8);
+            dst[x * 2 + 1] = (uint8_t)(px & 0xff);
+
+            rsum += (uint32_t)px;
+            rxor ^= (uint32_t)px;
+          }
+
+        if (s_rowsum_cur != NULL && y < SNAP_ROWS_MAX)
+          {
+            s_rowsum_cur[y] = rsum;
+            s_rowxor_cur[y] = rxor;
+          }
+      }
+  }
+
+
+    /* Commit changed runs while their eight-row staging data are alive. */
+    for(int local=base;local<end;){
+      bool dirty=!s_rowsum_cur||!s_rowsum_valid||
+        s_rowsum_cur[local]!=s_rowsum_pv[local]||s_rowxor_cur[local]!=s_rowxor_pv[local];
+      if(!dirty){local++;continue;}
+      int first=local;bool hit=cam_mask_row_hit(dy+local);local++;
+      while(local<end&&cam_mask_row_hit(dy+local)==hit&&
+        (!s_rowsum_cur||!s_rowsum_valid||s_rowsum_cur[local]!=s_rowsum_pv[local]||s_rowxor_cur[local]!=s_rowxor_pv[local]))local++;
+      if(hit){
+        int blocked[2*CAM_MASK_MAX];int nb=cam_mask_blocked_bbox(dy+first,dy+local,dx,dw,blocked);
+        ret=snap_write_intervals(s_fd,s_cur,dw,dx,dy+base,first-base,local-first,blocked,nb);
+      }else{
+        struct lcddev_area_s ar;memset(&ar,0,sizeof(ar));
+        ar.col_start=dx;ar.col_end=dx+dw-1;ar.row_start=dy+first;ar.row_end=dy+local-1;
+        ar.data=s_cur+(size_t)(first-base)*dw*2u;
+        ret=ioctl(s_fd,LCDDEVIO_PUTAREA_PRESWAPPED,(unsigned long)&ar);
+        if(ret<0)ret=-errno;
+        else{s_snap_calls++;s_snap_bytes+=(size_t)dw*2u*(local-first);}
+      }
+      if(ret<0){s_rowsum_valid=0;return ret;}
+      wrote_any=1;
+    }
+  }
+  if(s_rowsum_cur)for(y=0;y<dh;y++){
+    s_rowsum_pv[y]=s_rowsum_cur[y];s_rowxor_pv[y]=s_rowxor_cur[y];
+  }
+  s_rowsum_valid=s_rowsum_cur!=NULL;seen_epoch=epoch;
+  atomic_store(&s_display_done,epoch);
+  if(wrote_any)atomic_fetch_add(&s_display_count,1);
+  return 0;
+}
+
+int lcd_put_rgb565_cover(const uint8_t *fb, int sw, int sh,
+                         int dx, int dy, int dw, int dh)
+{
+  bool old = s_lcd_cover;
+  int ret;
+
+  /* v189：必须整幅一次写。
+   * v148 曾拆成 4 条横带、每条都调 lcd_put_rgb565(整幅源, 1/4 高)，
+   * 等于把同一张图压扁后叠 4 层 —— 快门定格时用户看到"同一画面压缩
+   * 显示 4 次"。分带若要做必须按源图切片裁剪，这里直接单次写完。 */
+
+  s_lcd_cover = true;
+  ret = lcd_put_rgb565(fb, sw, sh, dx, dy, dw, dh);
+  s_lcd_cover = old;
+  return ret;
+}
+
+int lcd_put_rgb565_cover_be(const uint8_t *fb, int sw, int sh,
+                            int dx, int dy, int dw, int dh)
+{
+  bool oldc = s_lcd_cover;
+  bool oldb = s_lcd_src_be;
+  int ret;
+
+  s_lcd_cover = true;
+  s_lcd_src_be = true;
+  ret = lcd_put_rgb565(fb, sw, sh, dx, dy, dw, dh);
+  s_lcd_cover = oldc;
+  s_lcd_src_be = oldb;
+  return ret;
 }
 
 
@@ -2293,6 +5548,8 @@ int camera_shutdown(void)
    * 模式"直接返回 0 → 跳过完整配置 → 第二次进页面没画面。 */
 
   s_rgb565_ready = false;
+  s_rgb_hd_ready = false;
+  s_rgb_qvga_ready = false;
   s_sensor_mode = CAM_MODE_NONE;
   return 0;
 }

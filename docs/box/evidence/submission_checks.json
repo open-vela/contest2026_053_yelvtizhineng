@@ -1,0 +1,15 @@
+{
+  "application_files": 283,
+  "sdk_patch_files": 56,
+  "manifest_xml": "passed",
+  "sdk_patch_preflight": "passed",
+  "mismatched_sdk_refused_without_writes": "passed",
+  "c_token_equivalence_files": 252,
+  "public_build_exit": 0,
+  "published_compilation_inputs_matched": 261,
+  "flash_partition_guard": "real table accepted, old 2 MiB and oversized images refused",
+  "ai_dialogue_visible_events": 645,
+  "official_log_validation": "passed",
+  "other_module_changes": "wireless soil node, server and mobile unchanged",
+  "new_firmware_flashed": false
+}

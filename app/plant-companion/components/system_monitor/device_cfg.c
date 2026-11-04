@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 #include "sd_card.h"
 #include "device_cfg.h"
@@ -19,8 +20,8 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define PLANT_CFG_PATH    SD_MOUNTPOINT "/plant.cfg"
-#define PLANT_CFG_TMP     SD_MOUNTPOINT "/plant.cfg.tmp"
+#define PLANT_CFG_PATH    "/data/plant.cfg"
+#define PLANT_CFG_TMP     "/data/plant.cfg.tmp"
 
 /****************************************************************************
  * Private Functions
@@ -60,20 +61,31 @@ static void cfg_copy_val(const char *val, char *dst, size_t dst_size)
 
 static int cfg_ensure_mounted(void)
 {
-  if (sd_card_status())
-    {
-      return 0;
-    }
+  struct stat st;
+  return stat("/data", &st) == 0 && S_ISDIR(st.st_mode) ? 0 : -ENODEV;
+}
 
-  return sd_card_mount();
+/* Existing SD files are compatibility inputs only. */
+static FILE *cfg_open_read(void)
+{
+  FILE *fp = fopen(PLANT_CFG_PATH, "r");
+  if (fp == NULL && sd_card_status())
+    {
+      fp = fopen(SD_MOUNTPOINT "/plant.cfg", "r");
+    }
+  return fp;
 }
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
-int device_cfg_save(const char *ssid, const char *password,
-                    const char *host, uint16_t port)
+/* 整文件重写 plant.cfg：原来的四个键 + 设备序列号（sn 可为 NULL/空跳过）。
+ * 2026-09-22 新增 sn：设备号决定云端身份，多块板卡必须各不相同，
+ * 出厂时可以只烧一份固件，再按板写各自的 sn。 */
+
+static int cfg_write_all(const char *ssid, const char *password,
+                         const char *host, uint16_t port, const char *sn)
 {
   FILE *fp;
   int rc = 0;
@@ -89,23 +101,26 @@ int device_cfg_save(const char *ssid, const char *password,
       return -errno;
     }
 
-  fprintf(fp, "# plant-companion boot config (auto-generated)\n");
+  if (fprintf(fp, "# plant-companion boot config (auto-generated)\n") < 0) rc = -EIO;
+  if (sn != NULL && sn[0] != '\0')
+    {
+      if (fprintf(fp, "sn=%s\n", sn) < 0) rc = -EIO;
+    }
+
   if (ssid != NULL && ssid[0] != '\0')
     {
-      fprintf(fp, "wifi_ssid=%s\n", ssid);
-      fprintf(fp, "wifi_password=%s\n", password != NULL ? password : "");
+      if (fprintf(fp, "wifi_ssid=%s\n", ssid) < 0) rc = -EIO;
+      if (fprintf(fp, "wifi_password=%s\n", password != NULL ? password : "") < 0) rc = -EIO;
     }
 
   if (host != NULL && host[0] != '\0')
     {
-      fprintf(fp, "server_host=%s\n", host);
-      fprintf(fp, "server_port=%u\n", (unsigned)port);
+      if (fprintf(fp, "server_host=%s\n", host) < 0) rc = -EIO;
+      if (fprintf(fp, "server_port=%u\n", (unsigned)port) < 0) rc = -EIO;
     }
 
-  if (fclose(fp) != 0)
-    {
-      rc = -errno;
-    }
+  if (fflush(fp) != 0) rc = -EIO;
+  if (fclose(fp) != 0) rc = -EIO;
 
   if (rc == 0 && rename(PLANT_CFG_TMP, PLANT_CFG_PATH) != 0)
     {
@@ -118,6 +133,72 @@ int device_cfg_save(const char *ssid, const char *password,
     }
 
   return rc;
+}
+
+int device_cfg_load_sn(char *sn, size_t sn_size)
+{
+  FILE *fp;
+  char line[160];
+
+  if (sn != NULL && sn_size > 0)
+    {
+      sn[0] = '\0';
+    }
+
+  if (cfg_ensure_mounted() < 0)
+    {
+      return -EIO;
+    }
+
+  fp = cfg_open_read();
+  if (fp == NULL)
+    {
+      return -errno;
+    }
+
+  while (fgets(line, sizeof(line), fp) != NULL)
+    {
+      if (strncmp(line, "sn=", 3) == 0)
+        {
+          cfg_copy_val(line + 3, sn, sn_size);
+          break;
+        }
+    }
+
+  fclose(fp);
+  return (sn != NULL && sn[0] != '\0') ? 0 : -ENOENT;
+}
+
+int device_cfg_save_sn(const char *sn)
+{
+  char ssid[33] = { 0 };
+  char password[65] = { 0 };
+  char host[128] = { 0 };
+  uint16_t port = 0;
+
+  if (sn == NULL || sn[0] == '\0')
+    {
+      return -EINVAL;
+    }
+
+  /* 其余键原样保留：先读回来，再整文件重写 */
+
+  device_cfg_load(ssid, sizeof(ssid), password, sizeof(password),
+                  host, sizeof(host), &port);
+
+  return cfg_write_all(ssid, password, host, port, sn);
+}
+
+int device_cfg_save(const char *ssid, const char *password,
+                    const char *host, uint16_t port)
+{
+  char sn[40] = { 0 };
+
+  /* 别把已写好的设备号弄丢：读出来一起写回去 */
+
+  device_cfg_load_sn(sn, sizeof(sn));
+
+  return cfg_write_all(ssid, password, host, port, sn);
 }
 
 int device_cfg_load(char *ssid, size_t ssid_size,
@@ -153,7 +234,7 @@ int device_cfg_load(char *ssid, size_t ssid_size,
       return -EIO;
     }
 
-  fp = fopen(PLANT_CFG_PATH, "r");
+  fp = cfg_open_read();
   if (fp == NULL)
     {
       return -errno;   /* 常见 -ENOENT：还没有配置文件 */
@@ -193,15 +274,6 @@ int device_cfg_load(char *ssid, size_t ssid_size,
 
 int device_cfg_clear(void)
 {
-  if (cfg_ensure_mounted() < 0)
-    {
-      return -EIO;
-    }
-
-  if (remove(PLANT_CFG_PATH) == 0)
-    {
-      return 0;
-    }
-
-  return (errno == ENOENT) ? 0 : -errno;
+  /* Empty onboard config deliberately shadows an older SD config. */
+  return cfg_write_all(NULL, NULL, NULL, 0, NULL);
 }

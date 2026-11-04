@@ -125,7 +125,7 @@ int sd_card_mount(void)
           usleep(SD_MOUNT_RETRY_MS * 1000);
         }
 
-      ret = mount(SD_DEVICE, SD_MOUNTPOINT, "vfat", 0, NULL);
+      ret = mount(SD_DEVICE, SD_MOUNTPOINT, "vfat", MS_RDONLY, "ro");
       if (ret == 0)
         {
           break;

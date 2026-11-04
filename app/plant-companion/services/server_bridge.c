@@ -20,6 +20,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <limits.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/socket.h>
@@ -29,9 +31,19 @@
 #include <netdb.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <time.h>
 
 #include "server_bridge.h"
+#include "voice_pcm_window.h"
+#include "box_http_chunks.h"
+#include "server_ipv4_resolver.h"
+#include "sensor_presentation.h"
+#include "sample_time.h"
 #include "sd_write.h"
+
+#ifdef CONFIG_PLANT_SD_CARD
+#  include "../components/system_monitor/device_cfg.h"
+#endif
 #include "../ota/ota.h"
 
 /****************************************************************************
@@ -50,8 +62,65 @@
 /* 协议 v2：服务器统一前缀与设备身份（SN 即凭证，服务器幂等返回 token） */
 
 #define SB_API_PREFIX      "/api/v1"
-#define SB_DEVICE_SN       "ZXB-DEMO-0001"
+#define SB_DEVICE_SN       "ZXB-DEMO-0003"
 #define SB_DEVICE_MODEL    "CHD-ESP32-S3-Box"
+
+/* 运行期设备序列号：SD 卡 plant.cfg 里的 sn= 优先，其次编译期 SB_DEVICE_SN。
+ * 2026-09-22：一块板一个号，避免 OTA 升级后把设备号改成固件里写死的那个。 */
+
+static char g_sb_sn[40];
+
+static const char *sb_sn(void)
+{
+  if (g_sb_sn[0] == '\0')
+    {
+      bool from_cfg = false;
+
+#ifdef CONFIG_PLANT_SD_CARD
+      {
+        char v[40] = { 0 };
+
+        if (device_cfg_load_sn(v, sizeof(v)) == 0 && v[0] != '\0')
+          {
+            strncpy(g_sb_sn, v, sizeof(g_sb_sn) - 1);
+            from_cfg = true;
+          }
+      }
+#endif
+
+      if (!from_cfg)
+        {
+#ifdef CONFIG_ARCH_BOARD_ESP32S3_BOX
+          /* A missing card/config must never log a real BOX into DEMO.
+           * Preserve the existing MAC-derived BOX identity and persist it. */
+          uint8_t mac[6];
+          extern int esp_wifi_sta_read_mac(uint8_t *mac);
+          if (esp_wifi_sta_read_mac(mac) != 0)
+            {
+              printf("[Bridge] BOX identity unavailable; refusing demo login\n");
+              return "";
+            }
+          snprintf(g_sb_sn, sizeof(g_sb_sn), "ZXB-BOX-%02X%02X%02X",
+                   mac[3], mac[4], mac[5]);
+          if (device_cfg_save_sn(g_sb_sn) < 0)
+            printf("[Bridge] BOX identity persistence failed\n");
+#else
+          strncpy(g_sb_sn, SB_DEVICE_SN, sizeof(g_sb_sn) - 1);
+#endif
+        }
+
+      g_sb_sn[sizeof(g_sb_sn) - 1] = '\0';
+      printf("[Bridge] 设备序列号 SN=%s（%s）\n", g_sb_sn,
+             from_cfg ? "设备配置" : "硬件身份/编译期默认");
+    }
+
+  return g_sb_sn;
+}
+
+const char *server_bridge_device_sn(void)
+{
+  return sb_sn();
+}
 
 /* 上报给服务器的固件版本号：直接由 OTA 的版本常量拼出来，别再写死。
  * ⚠️ 旧实现是写死的 "v1.3.0-srv"，导致管理台设备列表里的「固件」字段
@@ -79,6 +148,7 @@ static int      g_seq = 0;
 static volatile int g_sb_epoch;   /* 每次 set_server 递增（时间 worker 检测=配置即抓） */
 static char     g_sb_token[192] = {0};   /* 设备凭证（register 后写入） */
 static int      g_upload_interval_s;     /* 服务器下发的上报周期(s)，0=未拿到 */
+static bool g_notice_remote;
 static char     g_sid[64] = {0};         /* 语音会话 id（服务器字符串） */
 
 /****************************************************************************
@@ -170,213 +240,110 @@ static int sb_connect_limited(int fd, FAR struct sockaddr_in *addr,
 /* 裸 socket HTTP POST，host/port 可配，body 原样发送，resp 收响应体
  * （跳过 HTTP 头，返回响应体长度）。 */
 
-static int sb_http_post(const char *host, uint16_t port,
+static uint32_t sb_monotonic_ms(void)
+{
+  struct timespec ts;clock_gettime(CLOCK_MONOTONIC,&ts);
+  return (uint32_t)((uint64_t)ts.tv_sec*1000+ts.tv_nsec/1000000);
+}
+
+static int sb_http_post_idle(const char *host, uint16_t port,
                         const char *path, const char *content_type,
                         const uint8_t *body, size_t body_len,
-                        char *resp, size_t resp_size, int timeout_ms)
+                        char *resp, size_t resp_size, int timeout_ms,
+                        int (*idle)(void *),void *idle_arg)
 {
-  struct sockaddr_in addr;
-  struct timeval tv;
-  struct hostent *hp;
-  char head[768];
-  char hdr[512];          /* 响应头累积区（头可能跨 recv 包，见下） */
-  int  hdr_len = 0;
-  int fd;
-  int hl;
-  int ret;
-  int total = 0;
-  bool header_done = false;
-
-  if (host == NULL || host[0] == '\0')
-    {
-      return -ENOTCONN;
-    }
-
-  hp = gethostbyname(host);
-  if (hp == NULL)
-    {
-      /* 允许 IP 直连：inet_addr 转换 */
-      in_addr_t ip = inet_addr(host);
-
-      if (ip == INADDR_NONE)
-        {
-          return -ENOENT;
-        }
-
-      addr.sin_addr.s_addr = ip;
-    }
-  else
-    {
-      memcpy(&addr.sin_addr, hp->h_addr, hp->h_length);
-    }
-
-  fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (fd < 0)
-    {
-      return -errno;
-    }
-
-  tv.tv_sec  = timeout_ms / 1000;
-  tv.tv_usec = (timeout_ms % 1000) * 1000;
-  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-  setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-
-  addr.sin_family = AF_INET;
-  addr.sin_port   = htons(port);
-
-  ret = sb_connect_limited(fd, &addr, timeout_ms);   /* 有上限的建连 */
-  if (ret < 0)
-    {
-      close(fd);
-      return ret;
-    }
-
-  /* 协议 v2：注册成功后自动附带设备凭证头（无 token 阶段不发送） */
-
-  hl = snprintf(head, sizeof(head),
-                "POST %s HTTP/1.1\r\n"
-                "Host: %s:%u\r\n"
-                "Content-Type: %s\r\n"
-                "Content-Length: %zu\r\n",
-                path, host, (unsigned)port, content_type, body_len);
-
-  if (g_sb_token[0] != '\0')
-    {
-      hl += snprintf(head + hl, sizeof(head) - (size_t)hl,
-                     "X-Device-Token: %s\r\n", g_sb_token);
-    }
-
-  hl += snprintf(head + hl, sizeof(head) - (size_t)hl,
-                 "Connection: close\r\n\r\n");
-
-  /* 发送头部 + body */
-  ret = send(fd, head, hl, 0);
-  if (ret < 0)
-    {
-      close(fd);
-      return -errno;
-    }
-
-  {
-    size_t sent = 0;
-    size_t step = 1024;   /* 分小块发送：单次 send 过大时 lwIP 需一次
-                           * 提交大 pbuf（可能落在 PSRAM），WiFi TX 会
-                           * 立即 EIO；1KB/次与语音块上传同模式，可靠 */
-
-    while (sent < body_len)
-      {
-        size_t now = body_len - sent;
-
-        if (now > step)
-          {
-            now = step;
-          }
-
-        ret = send(fd, body + sent, now, 0);
-        if (ret <= 0)
-          {
-            printf("[Bridge] send body %u/%u B ret=%d errno=%d\n",
-                   (unsigned)sent, (unsigned)body_len, ret, errno);
-            close(fd);
-            return (ret < 0) ? -errno : -EIO;
-          }
-
-        sent += (size_t)ret;
-      }
+  struct sockaddr_in addr;struct timeval tv;
+  char head[768],hdr[512];int hdr_len=0,total=0,expected=-1,err=0;
+  bool header_done=false;
+  if(!resp||!resp_size||resp_size>INT_MAX)return -EINVAL;
+  resp[0]=0;
+  if(!host||!host[0])return -ENOTCONN;
+  int ret=sb_resolve_ipv4(host,&addr.sin_addr);if(ret<0)return ret;
+  int fd=socket(AF_INET,SOCK_STREAM,0);if(fd<0)return -errno;
+  tv.tv_sec=timeout_ms/1000;tv.tv_usec=(timeout_ms%1000)*1000;
+  setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&tv,sizeof(tv));
+  setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&tv,sizeof(tv));
+  addr.sin_family=AF_INET;addr.sin_port=htons(port);
+  ret=sb_connect_limited(fd,&addr,timeout_ms);if(ret<0){err=ret;goto failed;}
+  int hl=snprintf(head,sizeof(head),"POST %s HTTP/1.1\r\nHost: %s:%u\r\nContent-Type: %s\r\nContent-Length: %zu\r\n",path,host,(unsigned)port,content_type,body_len);
+  if(hl<0||(size_t)hl>=sizeof(head)){err=-EMSGSIZE;goto failed;}
+  if(g_sb_token[0]){
+    int n=snprintf(head+hl,sizeof(head)-(size_t)hl,"X-Device-Token: %s\r\n",g_sb_token);
+    if(n<0||(size_t)n>=sizeof(head)-(size_t)hl){err=-EMSGSIZE;goto failed;}hl+=n;
   }
-
-  /* 收响应：跳过 HTTP 头，body 收进 resp */
-  total = 0;
-  while (total < (int)resp_size - 1)
-    {
-      char tmp[256];
-      int n = recv(fd, tmp, sizeof(tmp) - 1, 0);
-
-      if (n <= 0)
-        {
-          break;
-        }
-
-      tmp[n] = '\0';   /* ⚠️ 2026-09-10 修复：recv 原始字节流无 NUL
-                        * 结尾，strstr 扫描无终止符缓冲是未定义行为 */
-
-      if (!header_done)
-        {
-          /* ⚠️ 2026-09-10 修复：头可能跨 recv 包（\r\n\r\n 落在包边界）。
-           * 旧实现找不到空行就 continue 丢整包 → body 开头被丢 →
-           * text/has_audio 解析不到 → 设备"不播放语音回复"。
-           * 改为先攒头，找到空行后把本包剩余 body 收进 resp。 */
-          char *p;
-          int skip;
-
-          int prev = hdr_len;   /* 本包之前已攒下的头字节数 */
-          int take = n;         /* 本包可并入头缓冲的字节数 */
-          int boff;             /* 本包中 body 的起始下标 */
-
-          if ((size_t)hdr_len + (size_t)take >= sizeof(hdr))
-            {
-              take = (int)sizeof(hdr) - 1 - hdr_len;
-            }
-
-          if (take < 0)
-            {
-              take = 0;
-            }
-
-          memcpy(hdr + hdr_len, tmp, (size_t)take);
-          hdr_len += take;
-          hdr[hdr_len] = '\0';
-
-          p = strstr(hdr, "\r\n\r\n");
-          if (p == NULL)
-            {
-              if (hdr_len >= (int)sizeof(hdr) - 1)
-                {
-                  break;   /* 头异常超长，放弃 */
-                }
-
-              continue;   /* 头还没收全，继续收 */
-            }
-
-          skip = (int)(p - hdr) + 4;
-          header_done = true;
-
-          /* ⚠️ 2026-09-10 修复：旧实现把本包长度 n 截断到 hdr
-           * 容量后再从 hdr 里取 body，导致本包中超出 hdr 容量的
-           * 那部分 body 被整段丢弃（实测每轮固定丢 3585 B）。
-           * 改为直接从本包取 body，下标 = skip - prev。 */
-
-          boff = skip - prev;
-          if (boff < 0)
-            {
-              boff = 0;
-            }
-
-          if (boff > n)
-            {
-              boff = n;
-            }
-
-          if (n - boff > 0 && total + (n - boff) < (int)resp_size)
-            {
-              memcpy(resp + total, tmp + boff, (size_t)(n - boff));
-              total += n - boff;
-            }
-
-          hdr_len = 0;
-          continue;
-        }
-
-      if (total + n < (int)resp_size)
-        {
-          memcpy(resp + total, tmp, n);
-          total += n;
-        }
+  int tail=snprintf(head+hl,sizeof(head)-(size_t)hl,"Connection: close\r\n\r\n");
+  if(tail<0||(size_t)tail>=sizeof(head)-(size_t)hl){err=-EMSGSIZE;goto failed;}hl+=tail;
+  /* TCP may accept only part of a header or body. Complete both. */
+  for(size_t sent=0;sent<(size_t)hl;){
+    int n=send(fd,head+sent,(size_t)hl-sent,0);
+    if(n<0&&errno==EINTR)continue;
+    if(n<=0){int why=errno;err=n<0?-(why?why:EIO):-EIO;goto failed;}sent+=(size_t)n;
+  }
+  for(size_t sent=0;sent<body_len;){
+    size_t count=body_len-sent;if(count>1024)count=1024;
+    int n=send(fd,body+sent,count,0);
+    if(n<0&&errno==EINTR)continue;
+    if(n<=0){int why=errno;err=n<0?-(why?why:EIO):-EIO;goto failed;}sent+=(size_t)n;
+  }
+  /* The request has been copied into TCP. Only now may idle reuse its
+   * body buffer. No idle callback runs during DNS/connect/send. A single
+   * response deadline also bounds fragmented/slow responses. */
+  uint32_t waiting=sb_monotonic_ms();
+  for(;;){
+    if(idle){
+      if((uint32_t)(sb_monotonic_ms()-waiting)>=(uint32_t)timeout_ms){err=-ETIMEDOUT;goto failed;}
+      struct pollfd ready={.fd=fd,.events=POLLIN};
+      int available=poll(&ready,1,10);
+      if(available<0){if(errno==EINTR)continue;err=-errno;goto failed;}
+      if(!available){int step=idle(idle_arg);if(step){err=step<0?step:-ECANCELED;goto failed;}continue;}
     }
+    char tmp[256];int n=recv(fd,tmp,sizeof(tmp)-1,0);
+    if(n<0){int why=errno;if(why==EINTR)continue;err=(why==EAGAIN||why==EWOULDBLOCK)?-ETIMEDOUT:-(why?why:EIO);goto failed;}
+    if(n==0){if(!header_done||(expected>=0&&total!=expected)){err=-ECONNRESET;goto failed;}break;}
+    tmp[n]=0;int offset=0;
+    if(!header_done){
+      int previous=hdr_len,take=n;
+      if(take>(int)sizeof(hdr)-1-hdr_len)take=(int)sizeof(hdr)-1-hdr_len;
+      memcpy(hdr+hdr_len,tmp,(size_t)take);hdr_len+=take;hdr[hdr_len]=0;
+      char *end=strstr(hdr,"\r\n\r\n");
+      if(!end){if(hdr_len==(int)sizeof(hdr)-1){err=-EMSGSIZE;goto failed;}continue;}
+      /* Finish on Content-Length, not on a later close/receive timeout.
+       * Never return an incomplete JSON prefix as a successful response. */
+      for(char *line=hdr;line<end;){
+        char *next=strstr(line,"\r\n");if(!next||next>end){err=-EBADMSG;goto failed;}
+        if(next-line>=15&&!strncasecmp(line,"Content-Length:",15)){
+          char *value=line+15;while(value<next&&(*value==' '||*value=='\t'))value++;
+          if(value>=next||*value<'0'||*value>'9'){err=-EBADMSG;goto failed;}
+          char *after;unsigned long length=strtoul(value,&after,10);
+          while(after<next&&(*after==' '||*after=='\t'))after++;
+          if(after!=next){err=-EBADMSG;goto failed;}
+          if(length>=resp_size){err=-EMSGSIZE;goto failed;}
+          if(expected>=0&&expected!=(int)length){err=-EBADMSG;goto failed;}
+          expected=(int)length;
+        }
+        line=next+2;
+      }
+      offset=(int)(end-hdr)+4-previous;if(offset<0)offset=0;if(offset>n)offset=n;
+      header_done=true;
+    }
+    int count=n-offset;
+    if(expected>=0&&count>expected-total)count=expected-total;
+    if((size_t)total+(size_t)count>=resp_size){err=-EMSGSIZE;goto failed;}
+    if(count>0){memcpy(resp+total,tmp+offset,(size_t)count);total+=count;}
+    if(expected>=0&&total==expected)break;
+  }
+  resp[total]=0;close(fd);return total;
+failed:
+  printf("[Bridge] POST incomplete error=%d received=%d expected=%d\n",err,total,expected);
+  resp[0]=0;close(fd);return err;
+}
 
-  resp[total] = '\0';
-  close(fd);
-  return total;
+static int sb_http_post(const char *host,uint16_t port,
+    const char *path,const char *content_type,const uint8_t *body,size_t body_len,
+    char *resp,size_t resp_size,int timeout_ms)
+{
+  return sb_http_post_idle(host,port,path,content_type,body,body_len,
+      resp,resp_size,timeout_ms,NULL,NULL);
 }
 
 /* 裸 socket HTTP GET（小响应，收进内存）：跳过头，body 收进 resp。
@@ -388,7 +355,6 @@ static int sb_http_get(const char *host, uint16_t port,
 {
   struct sockaddr_in addr;
   struct timeval tv;
-  struct hostent *hp;
   char req[256];
   char hdr[512];          /* 响应头累积区（头可能跨 recv 包） */
   int  hdr_len = 0;
@@ -402,22 +368,8 @@ static int sb_http_get(const char *host, uint16_t port,
       return -ENOTCONN;
     }
 
-  hp = gethostbyname(host);
-  if (hp == NULL)
-    {
-      in_addr_t ip = inet_addr(host);
-
-      if (ip == INADDR_NONE)
-        {
-          return -ENOENT;
-        }
-
-      addr.sin_addr.s_addr = ip;
-    }
-  else
-    {
-      memcpy(&addr.sin_addr, hp->h_addr, hp->h_length);
-    }
+  ret = sb_resolve_ipv4(host, &addr.sin_addr);
+  if (ret < 0) return ret;
 
   fd = socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0)
@@ -1203,7 +1155,6 @@ static int sb_http_get_to_file(const char *host, uint16_t port,
 {
   struct sockaddr_in addr;
   struct timeval tv;
-  struct hostent *hp;
   char req[256];
   static uint8_t buf[4097] __attribute__((aligned(4)));  /* 写盘见 sd_write.h */
   char hdr[512];              /* 响应头累积区（头可能跨 recv 包） */
@@ -1219,22 +1170,8 @@ static int sb_http_get_to_file(const char *host, uint16_t port,
       return -ENOTCONN;
     }
 
-  hp = gethostbyname(host);
-  if (hp == NULL)
-    {
-      in_addr_t ip = inet_addr(host);
-
-      if (ip == INADDR_NONE)
-        {
-          return -ENOENT;
-        }
-
-      addr.sin_addr.s_addr = ip;
-    }
-  else
-    {
-      memcpy(&addr.sin_addr, hp->h_addr, hp->h_length);
-    }
+  ret = sb_resolve_ipv4(host, &addr.sin_addr);
+  if (ret < 0) return ret;
 
   fd = socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0)
@@ -1464,251 +1401,107 @@ static int sb_http_get_to_file(const char *host, uint16_t port,
  * 见 server_bridge.h 的说明；这里只负责 HTTP 层：建连、校验 200、
  * 跳过响应头（允许跨包）、把 body 原样交给回调。 */
 
-int server_bridge_get_stream(const char *path,
-                             server_bridge_stream_cb_t cb, void *arg,
-                             int stall_timeout_ms, size_t max_bytes)
+/* HTTP body completion is independent of a later peer close. Reject a
+ * truncated declared body instead of treating a timeout as successful speech. */
+static int sb_stream_length(const char *hdr, size_t *length)
 {
-  struct sockaddr_in addr;
-  struct timeval tv;
-  struct hostent *hp;
-  const char *host = g_sb_host;
-  /* ⚠️ 2026-09-16 实测：请求头里 X-Device-Token 是 ~180B 的 JWT，
-   * 加上请求行/Host/Accept-Encoding/Connection 一共 ~250B，256 字节的
-   * 缓冲会被 snprintf 截断 → 结尾的 
-
- 丢失 → uvicorn 回 400
-   * （日志：[Bridge] STREAM ... -> HTTP/1.1 400 Bad Request）。
-   * 老函数 sb_http_get_to_file 同为 256B 但没发 Accept-Encoding，刚好够。 */
-  char req[512];
-  static uint8_t buf[2049] __attribute__((aligned(4)));
-  char hdr[384];
-  int  hdr_len = 0;
-  int fd;
-  int rl;
-  int ret;
-  size_t total = 0;
-  bool header_done = false;
-
-  if (host[0] == '\0' || path == NULL || cb == NULL)
-    {
-      return -ENOTCONN;
+  const char *line=strstr(hdr,"\r\n"),*end=strstr(hdr,"\r\n\r\n");
+  bool found=false;size_t result=0;
+  if(!line||!end)return -EIO;
+  for(line+=2;line<end;){
+    const char *next=strstr(line,"\r\n");if(!next||next>end)return -EIO;
+    if(next-line>=15&&!strncasecmp(line,"Content-Length:",15)){
+      const char *p=line+15;size_t value=0;
+      while(p<next&&(*p==' '||*p=='\t'))p++;
+      if(p==next||*p<'0'||*p>'9')return -EIO;
+      while(p<next&&*p>='0'&&*p<='9'){
+        unsigned digit=(unsigned)(*p++-'0');
+        if(value>(SIZE_MAX-digit)/10)return -EOVERFLOW;
+        value=value*10+digit;
+      }
+      while(p<next&&(*p==' '||*p=='\t'))p++;
+      if(p!=next||(found&&result!=value))return -EIO;
+      result=value;found=true;
     }
+    line=next+2;
+  }
+  *length=result;return found?1:0;
+}
 
-  if (stall_timeout_ms <= 0)
-    {
-      stall_timeout_ms = 20000;
+/* Read either a fixed-length WAV or a properly terminated chunked stream. */
+int server_bridge_get_stream(const char *path,server_bridge_stream_cb_t cb,
+                            void *arg,int stall_timeout_ms,size_t max_bytes)
+{
+  const char *host=(g_notice_remote&&path&&strstr(path,"/voice/audio?"))?"api.seesoil.com":g_sb_host;
+  uint16_t port=(g_notice_remote&&path&&strstr(path,"/voice/audio?"))?80:g_sb_port;
+  struct sockaddr_in addr;struct timeval tv;
+  char req[512],hdr[512];size_t hdr_len=0,total=0,expected=0;
+  static uint8_t buf[2048] __attribute__((aligned(4)));
+  bool ready=false,known=false,chunked=false;int error=0;
+  struct box_http_chunks chunks={.limit=max_bytes?max_bytes:INT_MAX};
+  if(!host[0]||!path||!cb)return -ENOTCONN;
+  if(stall_timeout_ms<=0)stall_timeout_ms=20000;
+  int ret=sb_resolve_ipv4(host,&addr.sin_addr);if(ret<0)return ret;
+  int fd=socket(AF_INET,SOCK_STREAM,0);if(fd<0)return -errno;
+  tv.tv_sec=stall_timeout_ms/1000;tv.tv_usec=stall_timeout_ms%1000*1000;
+  setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&tv,sizeof(tv));setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&tv,sizeof(tv));
+  addr.sin_family=AF_INET;addr.sin_port=htons(port);
+  ret=sb_connect_limited(fd,&addr,stall_timeout_ms);if(ret<0){error=ret;goto done;}
+  int length=snprintf(req,sizeof(req),"GET %s HTTP/1.1\r\nHost: %s:%u\r\nAccept-Encoding: identity\r\nX-Device-Token: %s\r\nConnection: close\r\n\r\n",path,host,(unsigned)port,g_sb_token);
+  if(length<0||(size_t)length>=sizeof(req)){error=-EMSGSIZE;goto done;}
+  for(int sent=0;sent<length;){
+    int n=send(fd,req+sent,(size_t)(length-sent),0);
+    if(n<0&&errno==EINTR)continue;
+    if(n<=0){error=n<0?-errno:-EIO;goto done;}sent+=n;
+  }
+  for(;;){
+    int n=recv(fd,buf,sizeof(buf),0);
+    if(n<0&&errno==EINTR)continue;
+    if(n<=0){
+      if(n<0)error=-(errno?errno:EIO);
+      else if(!ready||(chunked&&chunks.state!=5)||(known&&total!=expected))error=-ENODATA;
+      break;
     }
-
-  hp = gethostbyname(host);
-  if (hp == NULL)
-    {
-      in_addr_t ip = inet_addr(host);
-
-      if (ip == INADDR_NONE)
-        {
-          return -ENOENT;
+    size_t offset=0;
+    if(!ready){
+      size_t previous=hdr_len,take=(size_t)n;
+      if(take>sizeof(hdr)-1-hdr_len)take=sizeof(hdr)-1-hdr_len;
+      memcpy(hdr+hdr_len,buf,take);hdr_len+=take;hdr[hdr_len]=0;
+      char *end=strstr(hdr,"\r\n\r\n");
+      if(!end){if(hdr_len==sizeof(hdr)-1){error=-EMSGSIZE;break;}continue;}
+      char *space=strchr(hdr,' ');
+      if(!space||strncmp(hdr,"HTTP/1.",7)||atoi(space+1)!=200){error=-EIO;break;}
+      for(char *line=strstr(hdr,"\r\n")+2;line<end;){
+        char *next=strstr(line,"\r\n");if(!next){error=-EBADMSG;break;}
+        if(next-line>=18&&!strncasecmp(line,"Transfer-Encoding:",18)){
+          char *value=line+18;while(value<next&&(*value==' '||*value=='\t'))value++;
+          char *last=next;while(last>value&&(last[-1]==' '||last[-1]=='\t'))last--;
+          if(last-value!=7||strncasecmp(value,"chunked",7)){error=-ENOSYS;break;}chunked=true;
         }
-
-      addr.sin_addr.s_addr = ip;
+        line=next+2;
+      }
+      if(error)break;
+      ret=sb_stream_length(hdr,&expected);if(ret<0){error=ret;break;}known=ret>0;
+      if(chunked&&known){error=-EBADMSG;break;}
+      if(known&&(expected>INT_MAX||(max_bytes&&expected>max_bytes))){error=-EFBIG;break;}
+      size_t boundary=(size_t)(end-hdr)+4;offset=boundary>previous?boundary-previous:0;
+      if(offset>(size_t)n){error=-EBADMSG;break;}ready=true;
     }
-  else
-    {
-      memcpy(&addr.sin_addr, hp->h_addr, hp->h_length);
+    size_t bytes=(size_t)n-offset;
+    if(chunked){
+      ret=box_http_chunks_feed(&chunks,buf+offset,bytes,cb,arg);total=chunks.total;
+      if(ret<0){error=ret;break;}if(ret==1)break;
+    }else{
+      if(known&&bytes>expected-total)bytes=expected-total;
+      if(bytes>INT_MAX-total||(max_bytes&&bytes>max_bytes-total)){error=-EFBIG;break;}
+      if(bytes){ret=cb(buf+offset,bytes,arg);if(ret<0){error=ret;break;}total+=bytes;}
+      if(known&&total==expected)break;
     }
-
-  fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (fd < 0)
-    {
-      return -errno;
-    }
-
-  /* 收数据停滞超时（不是总超时）：音频可能播几十秒，期间一直有数据
-   * 到达就不该断；连着 stall_timeout_ms 收不到才判定掉线。 */
-
-  tv.tv_sec  = stall_timeout_ms / 1000;
-  tv.tv_usec = (stall_timeout_ms % 1000) * 1000;
-  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-  setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-
-  addr.sin_family = AF_INET;
-  addr.sin_port   = htons(g_sb_port);
-
-  ret = sb_connect_limited(fd, &addr, stall_timeout_ms);   /* 有上限的建连 */
-  if (ret < 0)
-    {
-      close(fd);
-      return ret;
-    }
-
-  rl = snprintf(req, sizeof(req),
-                "GET %s HTTP/1.1\r\n"
-                "Host: %s:%u\r\n"
-                "Accept-Encoding: identity\r\n",
-                path, host, (unsigned)g_sb_port);
-
-  if (g_sb_token[0] != '\0')
-    {
-      rl += snprintf(req + rl, sizeof(req) - (size_t)rl,
-                     "X-Device-Token: %s\r\n", g_sb_token);
-    }
-
-  rl += snprintf(req + rl, sizeof(req) - (size_t)rl,
-                 "Connection: close\r\n\r\n");
-
-  ret = send(fd, req, rl, 0);
-  if (ret < 0)
-    {
-      close(fd);
-      return -errno;
-    }
-
-  for (;;)
-    {
-      int n = recv(fd, buf, sizeof(buf) - 1, 0);
-
-      if (n <= 0)
-        {
-          if (n < 0)
-            {
-              printf("[Bridge] STREAM %s recv 结束 errno=%d (已收 %u B)\n",
-                     path, errno, (unsigned)total);
-            }
-
-          break;
-        }
-
-      buf[n] = '\0';
-
-      if (!header_done)
-        {
-          char *p;
-          int prev = hdr_len;
-          int take = n;
-          int boff;
-
-          if ((size_t)hdr_len + (size_t)take >= sizeof(hdr))
-            {
-              take = (int)sizeof(hdr) - 1 - hdr_len;
-            }
-
-          if (take < 0)
-            {
-              take = 0;
-            }
-
-          memcpy(hdr + hdr_len, buf, (size_t)take);
-          hdr_len += take;
-          hdr[hdr_len] = '\0';
-
-          p = strstr(hdr, "\r\n\r\n");
-          if (p == NULL)
-            {
-              if (hdr_len >= (int)sizeof(hdr) - 1)
-                {
-                  printf("[Bridge] STREAM %s 响应头超长，放弃\n", path);
-                  close(fd);
-                  return -EIO;
-                }
-
-              continue;
-            }
-
-          /* 状态行必须是 200：404/502 的 JSON 体不能当音频播 */
-
-          {
-            char *sp = strstr(hdr, " ");
-
-            if (sp == NULL || strncmp(hdr, "HTTP/1.", 7) != 0 ||
-                atoi(sp + 1) != 200)
-              {
-                printf("[Bridge] STREAM %s -> %.48s（非 200，放弃）\n",
-                       path, hdr);
-                close(fd);
-                return -EIO;
-              }
-          }
-
-          /* ⚠️ 若服务器改用 chunked 传输，必须补解码再回调，否则会把
-           * chunk 长度行当 PCM 播成噪音。当前 plant_server 的音频接口
-           * 返回 Content-Length，所以这里直接失败更好排查。 */
-
-          if (strstr(hdr, "Transfer-Encoding: chunked") != NULL ||
-              strstr(hdr, "transfer-encoding: chunked") != NULL)
-            {
-              printf("[Bridge] STREAM %s 用了 chunked 编码，暂不支持\n",
-                     path);
-              close(fd);
-              return -ENOSYS;
-            }
-
-          header_done = true;
-          boff = (int)((size_t)(p - hdr) + 4) - prev;
-          hdr_len = 0;
-
-          if (boff < 0)
-            {
-              boff = 0;
-            }
-
-          if (boff > n)
-            {
-              boff = n;
-            }
-
-          if (n - boff > 0)
-            {
-              if (max_bytes > 0 && (size_t)(n - boff) > max_bytes)
-                {
-                  printf("[Bridge] STREAM %s 超过上限 %u B，中止\n",
-                         path, (unsigned)max_bytes);
-                  close(fd);
-                  return -EIO;
-                }
-
-              ret = cb(buf + boff, (size_t)(n - boff), arg);
-              if (ret < 0)
-                {
-                  printf("[Bridge] STREAM %s 回调中止(%d)，已收 %u B\n",
-                         path, ret, (unsigned)total);
-                  close(fd);
-                  return ret;
-                }
-
-              total += (size_t)(n - boff);
-            }
-
-          continue;
-        }
-
-      if (max_bytes > 0 && total + (size_t)n > max_bytes)
-        {
-          printf("[Bridge] STREAM %s 超过上限 %u B，中止\n",
-                 path, (unsigned)max_bytes);
-          close(fd);
-          return -EIO;
-        }
-
-      ret = cb(buf, (size_t)n, arg);
-      if (ret < 0)
-        {
-          printf("[Bridge] STREAM %s 回调中止(%d)，已收 %u B\n",
-                 path, ret, (unsigned)total);
-          close(fd);
-          return ret;
-        }
-
-      total += (size_t)n;
-    }
-
+  }
+done:
   close(fd);
-
-  if (!header_done)
-    {
-      printf("[Bridge] STREAM %s 未收到完整响应头\n", path);
-      return -EIO;
-    }
-
-  return (int)total;
+  if(error)printf("[Bridge] audio stream error=%d received=%lu chunked=%d\n",error,(unsigned long)total,chunked);
+  return error?error:(int)total;
 }
 
 /****************************************************************************
@@ -1771,9 +1564,11 @@ int server_bridge_device_login(void)
       return -ENOTCONN;
     }
 
+  if (sb_sn()[0] == '\0') return -ENODEV;
+
   snprintf(body, sizeof(body),
            "{\"sn\":\"%s\",\"model\":\"%s\",\"fw_version\":\"%s\"}",
-           SB_DEVICE_SN, SB_DEVICE_MODEL, SB_DEVICE_FW);
+           sb_sn(), SB_DEVICE_MODEL, SB_DEVICE_FW);
 
   ret = sb_http_post(g_sb_host, g_sb_port,
                      SB_API_PREFIX "/devices/register",
@@ -1795,7 +1590,7 @@ int server_bridge_device_login(void)
     }
 
   printf("[Bridge] 设备注册成功 SN=%s token=%.10s…\n",
-         SB_DEVICE_SN, g_sb_token);
+         sb_sn(), g_sb_token);
   return 0;
 }
 
@@ -1810,6 +1605,7 @@ int server_bridge_session_begin(void)
       return -ENOTCONN;
     }
 
+  g_notice_remote = false;
   g_sid[0] = '\0';
 
   /* 协议 v2：服务器建会话返回字符串 session_id（如 vs_xxx） */
@@ -1935,6 +1731,36 @@ int server_bridge_finalize(char *text_out, size_t text_size,
   return 0;
 }
 
+/* Uses the same audio session and renderer as conversational speech. */
+int server_bridge_notice(const char *text)
+{
+  char body[1024], resp[512];
+  size_t n=0;
+  const char *prefix="{\"text\":\"";
+  if(!server_bridge_configured())return -ENOTCONN;
+  if(!text||strlen(text)>400)return -EINVAL;
+  strcpy(body,prefix);n=strlen(body);
+  for(const unsigned char *p=(const unsigned char *)text;*p;p++){
+    if(*p<32)return -EINVAL;
+    if(*p=='"'||*p=='\\')body[n++]='\\';
+    body[n++]=*p;
+  }
+  strcpy(body+n,"\",\"stream_audio\":true}");
+  /* BOX child voice is isolated from the shared product speech profile. */
+  int ret=sb_http_post("api.seesoil.com",80,SB_API_PREFIX "/box/voice/notice",
+      "application/json",(const uint8_t *)body,strlen(body),resp,sizeof(resp),45000);
+  char sid[64];
+  const char *audio=ret>=0?sb_find_key(resp,"has_audio"):NULL;
+  bool valid=audio&&strncmp(audio,"true",4)==0&&
+      sb_json_get_string(resp,"session_id",sid,sizeof(sid))>=0&&sid[0];
+  g_notice_remote=false;
+  if(ret<0)return ret;
+  if(!valid)return -ENODATA;
+  g_notice_remote=true;
+  snprintf(g_sid,sizeof(g_sid),"%s",sid);g_session=1;
+  return 0;
+}
+
 int server_bridge_fetch_audio(const char *filepath)
 {
   char path[160];
@@ -1960,7 +1786,7 @@ int server_bridge_voice_audio_path(char *buf, size_t cap)
       return -ENOTCONN;
     }
 
-  snprintf(buf, cap, SB_API_PREFIX "/voice/audio?session_id=%s", g_sid);
+  snprintf(buf, cap, g_notice_remote ? SB_API_PREFIX "/box/voice/audio?session_id=%s" : SB_API_PREFIX "/voice/audio?session_id=%s", g_sid);
   return 0;
 }
 
@@ -1985,14 +1811,19 @@ int server_bridge_fetch_path(const char *path, const char *filepath)
  * 服务器把 RGB565 转 JPEG 后走 MiMo 视觉，返回结构化 result。
  ****************************************************************************/
 
-int server_bridge_image_diagnose(const uint8_t *frame, size_t frame_len,
-                                 struct sb_diag_result_s *out)
+/* Large JSON responses are CPU-only. Keep them out of the internal
+ * Wi-Fi/DMA/stack reserve and give simultaneous requests separate storage. */
+struct sb_diag_buffers {char media[SB_RESP_MEDIA],diagnosis[SB_RESP_BIG];};
+static int server_bridge_image_diagnose_impl(const uint8_t *frame,
+                                           size_t frame_len,
+                                           struct sb_diag_result_s *out,
+                                           bool fast_fail,
+                                           struct sb_diag_buffers *buffers)
 {
   char path[128];
   char media_id[64];
-  char body[128];
-  static char resp_media[SB_RESP_MEDIA];   /* media 上传响应 */
-  static char resp[SB_RESP_BIG];            /* diagnose 响应（大） */
+  char *resp_media=buffers->media;
+  char *resp=buffers->diagnosis;
   const char *rp;                           /* result 对象值起点 */
   const char *re;                           /* result 对象结束 */
   const char *vp;
@@ -2025,9 +1856,16 @@ int server_bridge_image_diagnose(const uint8_t *frame, size_t frame_len,
       return -EINVAL;
     }
 
-  /* ① 上传原始帧拿 media_id */
+  /* ① 上传原始帧拿 media_id；按 SOI 标记自动区分 JPEG / raw565。 */
 
-  snprintf(path, sizeof(path), SB_API_PREFIX "/media/image?fmt=raw565");
+  if (frame_len >= 2 && frame[0] == 0xff && frame[1] == 0xd8)
+    {
+      snprintf(path, sizeof(path), SB_API_PREFIX "/media/image?fmt=jpeg");
+    }
+  else
+    {
+      snprintf(path, sizeof(path), SB_API_PREFIX "/media/image?fmt=raw565");
+    }
   /* 2026-09-09 根因澄清：此前误判为“WiFi 刚关联后大包上传 EINVAL”，
    * 实为调用方在驱动 DMA 初始化前取帧得到 NULL（见 cmd_srv diag），
    * send(NULL, 1024) 触发内核 EINVAL。此处保留有界退避仅作网络瞬时
@@ -2036,29 +1874,40 @@ int server_bridge_image_diagnose(const uint8_t *frame, size_t frame_len,
   {
     static const int waits_ms[7] =
       { 2000, 5000, 10000, 20000, 30000, 45000, 60000 };
+    static const int fast_waits_ms[2] = { 1000, 2000 };
+    int attempts = fast_fail ? 3 : 8;
+    int timeout_ms = fast_fail ? 6000 : SB_MEDIA_TMO;
     int attempt;
 
-    for (attempt = 0; attempt < 8; attempt++)
+    /* 2026-09-27 (v55): fast_fail 从 1 次改为 3 次短退避重试。
+     * 实测 WiFi 链路会在 50KB 上传 body 中段瞬时断流（errno=11），
+     * 但同期心跳秒级恢复 —— 单次放弃直接把整次 AI 识别判死太冤；
+     * 断网时连接失败是秒回的，3 次尝试代价只有几秒。 */
+
+    for (attempt = 0; attempt < attempts; attempt++)
       {
         ret = sb_http_post(g_sb_host, g_sb_port, path,
                            "application/octet-stream",
                            frame, frame_len,
-                           resp_media, sizeof(resp_media), SB_MEDIA_TMO);
+                           resp_media, sizeof(buffers->media), timeout_ms);
         if (ret >= 0)
           {
             break;
           }
 
-        if (attempt < 7)
+        if (attempt + 1 < attempts)
           {
-            printf("[Bridge] media/image 上传失败(%d) 第%d/8次，%d秒后重试\n",
-                   ret, attempt + 1, waits_ms[attempt] / 1000);
-            usleep(waits_ms[attempt] * 1000);
+            int wait_ms = fast_fail ? fast_waits_ms[attempt] :
+                                      waits_ms[attempt];
+
+            printf("[Bridge] media/image 上传失败(%d) 第%d/%d次，%d秒后重试\n",
+                   ret, attempt + 1, attempts, wait_ms / 1000);
+            usleep((useconds_t)wait_ms * 1000);
           }
         else
           {
-            printf("[Bridge] media/image 上传失败(%d) 第%d/8次，放弃\n",
-                   ret, attempt + 1);
+            printf("[Bridge] media/image 上传失败(%d) 第%d/%d次，放弃\n",
+                   ret, attempt + 1, attempts);
           }
       }
   }
@@ -2094,17 +1943,23 @@ int server_bridge_image_diagnose(const uint8_t *frame, size_t frame_len,
 
   /* ② 发起 AI 诊断 */
 
-  snprintf(body, sizeof(body), "{\"media_id\":\"%s\"}", media_id);
-  ret = sb_http_post(g_sb_host, g_sb_port,
-                     SB_API_PREFIX "/ai/diagnose",
-                     "application/json",
-                     (const uint8_t *)body, strlen(body),
-                     resp, sizeof(resp), SB_DIAG_TMO);
+  ret = sb_http_post("api.seesoil.com",80,SB_API_PREFIX "/box/diagnose",
+                     "application/octet-stream",frame,frame_len,
+                     resp,sizeof(buffers->diagnosis),SB_DIAG_TMO);
   if (ret < 0)
     {
       printf("[Bridge] ai/diagnose 请求失败: %d\n", ret);
       return ret;
     }
+
+  const char *ok=sb_find_key(resp,"ok");
+  if(!ok||strncmp(ok,"true",4)!=0)return -EIO;
+  const char *recognized=sb_find_key(resp,"recognized");
+  if(!recognized)return -EIO;
+  if(strncmp(recognized,"true",4)!=0){
+    printf("[Bridge] image not recognized; no plant result saved\n");
+    return -ENODATA;
+  }
 
   /* result{} 作用域内解析（防止 raw_model_text 字符串里的同名 key） */
 
@@ -2163,11 +2018,34 @@ int server_bridge_image_diagnose(const uint8_t *frame, size_t frame_len,
       sb_collect_lines(vp, "text", out->advice, sizeof(out->advice), 3);
     }
 
+  if(!out->name[0])return -ENODATA;
   out->ok = true;
   printf("[Bridge] 诊断: %s 健康分=%d 匹配=%d\n",
          out->name[0] != '\0' ? out->name : "(未知)", out->health_score,
          out->match);
   return 0;
+}
+
+static int server_bridge_image_diagnose_ex(const uint8_t *frame,size_t frame_len,
+                                         struct sb_diag_result_s *out,bool fast_fail)
+{
+  struct sb_diag_buffers *buffers=malloc(sizeof(*buffers));
+  if(!buffers)return -ENOMEM;
+  int ret=server_bridge_image_diagnose_impl(frame,frame_len,out,fast_fail,buffers);
+  free(buffers);
+  return ret;
+}
+
+int server_bridge_image_diagnose(const uint8_t *frame, size_t frame_len,
+                                 struct sb_diag_result_s *out)
+{
+  return server_bridge_image_diagnose_ex(frame, frame_len, out, false);
+}
+
+int server_bridge_image_diagnose_fast(const uint8_t *frame, size_t frame_len,
+                                      struct sb_diag_result_s *out)
+{
+  return server_bridge_image_diagnose_ex(frame, frame_len, out, true);
 }
 
 /* 兼容壳：结构化诊断拼文本（名字/健康分/问题/建议/总结，UI 可显示） */
@@ -2259,6 +2137,127 @@ int server_bridge_report_telemetry(float moisture, float temp, float ec,
  * 未配置服务器或尚未注册（无 token）返回 -ENOTCONN，不发请求——无 token 时
  * 服务器会 401，白跑一趟还刷不上 last_seen_at。
  ****************************************************************************/
+
+/* ── 无线土壤：从服务器拉 latest_telemetry ───────────────────────────
+ * GET /api/v1/devices/sync（自动带 X-Device-Token），
+ * 解析 latest_telemetry 里的 8 个浮点字段。
+ * 本地无土壤硬件 / RS485 无应答时，数据页仍可显示云端值。 */
+
+static int sb_json_float_at(const char *p, float *out)
+{
+  char *endp;
+  double v;
+
+  if (p == NULL)
+    {
+      return -EINVAL;
+    }
+
+  v = strtod(p, &endp);
+  if (endp == p)
+    {
+      return -EINVAL;
+    }
+
+  *out = (float)v;
+  return 0;
+}
+
+static int sb_soil_field(const char *obj, const char *key, float *out)
+{
+  const char *p;
+
+  if (obj == NULL)
+    {
+      return -EINVAL;
+    }
+
+  p = sb_find_key(obj, key);
+  if (p == NULL)
+    {
+      return -ENOENT;
+    }
+
+  return sb_json_float_at(p, out);
+}
+
+int server_bridge_cloud_soil_enabled(void)
+{
+  return access("/data/box_soil_cloud", R_OK) == 0;
+}
+
+int server_bridge_fetch_soil(struct sb_soil_s *out)
+{
+  static char resp[1024];   /* v191: 收敛，sync 响应够用 */
+  const char *lt;
+  const char *end;
+  int ret;
+
+  if (out == NULL)
+    {
+      return -EINVAL;
+    }
+
+  memset(out, 0, sizeof(*out));
+
+  if (g_sb_host[0] == '\0' || g_sb_token[0] == '\0')
+    {
+      return -ENOTCONN;
+    }
+
+  bool bound_cloud = server_bridge_cloud_soil_enabled();
+  ret = sb_http_get(bound_cloud ? "api.seesoil.com" : g_sb_host,
+                    bound_cloud ? 80 : g_sb_port,
+                    bound_cloud ? SB_API_PREFIX "/box/soil" :
+                                  SB_API_PREFIX "/telemetry/latest",
+                    resp, sizeof(resp), SB_TIMEOUT_MS * 2);
+  if (ret < 0)
+    {
+      printf("[Bridge] fetch_soil http %d\n", ret);
+      return ret;
+    }
+
+  lt = sb_find_key(resp, "latest_telemetry");
+  if (lt == NULL || *lt != '{')
+    {
+      printf("[Bridge] fetch_soil parse fail resp=%.80s\n", resp);
+      return -ENOENT;
+    }
+
+  end = sb_matching_end(lt);
+  if (end == NULL)
+    {
+      return -EINVAL;
+    }
+
+  /* 在 latest_telemetry 对象范围内取字段，避免匹配到外层同名 */
+
+  /* Bound parsing to this object, preserve valid zero and per-field absence. */
+  char object[1024];
+  size_t size = (size_t)(end-lt+1);
+  if (size >= sizeof(object)) return -EOVERFLOW;
+  memcpy(object,lt,size); object[size]=0;
+  float *values[]={&out->moisture,&out->temp,&out->ec,&out->salt,
+                   &out->ph,&out->nitrogen,&out->phosphorus,&out->potassium};
+  const char *keys[]={"moisture","temp","ec","salt","ph","nitrogen","phosphorus","potassium"};
+  float checked[8];
+  for(int i=0;i<8;i++) {
+    if(sb_soil_field(object,keys[i],values[i])==0) out->field_mask|=1u<<i;
+    checked[i]=*values[i];
+  }
+  out->field_mask &= sensor_valid_fields(checked);
+  if(!out->field_mask) return -ENOENT;
+  sb_json_get_string(object,"ts",out->measured_at,sizeof(out->measured_at));
+  sb_json_get_string(object,"source",out->source_id,sizeof(out->source_id));
+  if (bound_cloud)
+    sb_json_get_string(object,"device_id",out->source_id,sizeof(out->source_id));
+  out->sample_unix_s=plant_sample_epoch(out->measured_at);
+  out->valid = 1;
+  printf("[Bridge] cloud soil 水分=%.1f 温度=%.1f EC=%.0f pH=%.1f\n",
+         out->moisture, out->temp, out->ec, out->ph);
+  return 0;
+}
+
 
 int server_bridge_heartbeat(int *interval_s_out)
 {
@@ -2657,4 +2656,51 @@ int server_bridge_ack_job(const char *job_id, int ok, const char *detail)
    * 保持响应体打印即可。 */
 
   return 0;
+}
+
+/* ASR only: no conversation or TTS is produced before wake-word gating. */
+int server_bridge_transcribe_idle(const int16_t *pcm,size_t samples,char *text,size_t capacity,
+    int (*idle)(void *),void *idle_arg)
+{
+  char response[2048];
+  if(!pcm||!samples||samples>16000*12||!text||!capacity)return -EINVAL;
+  text[0]=0;
+  if(!server_bridge_configured())return -ENOTCONN;
+  size_t offset,selected;voice_pcm_window(pcm,samples,&offset,&selected);
+  printf("[Bridge] ASR window samples=%lu of=%lu offset=%lu\n",(unsigned long)selected,(unsigned long)samples,(unsigned long)offset);
+  int ret=sb_http_post_idle(g_sb_host,g_sb_port,SB_API_PREFIX "/voice/transcribe",
+      "application/octet-stream",(const uint8_t *)(pcm+offset),selected*2,
+      response,sizeof(response),12000,idle,idle_arg);
+  if(ret<0)return ret;
+  if(sb_json_get_string(response,"text",text,capacity)<0)return -ENOMSG;
+  return text[0]?0:-ENOMSG;
+}
+
+int server_bridge_transcribe(const int16_t *pcm,size_t samples,char *text,size_t capacity)
+{
+  return server_bridge_transcribe_idle(pcm,samples,text,capacity,NULL,NULL);
+}
+
+/* BOX AI has no plant/binding writes. Device data remains on g_sb_host. */
+int server_bridge_box_answer(const char *question,char *reply,size_t capacity)
+{
+ if(!question||!question[0]||strlen(question)>400||!reply||!capacity)return -EINVAL;
+ reply[0]=0;if(!server_bridge_configured())return -ENOTCONN;
+ char body[840];size_t n=0;const char *prefix="{\"text\":\"";
+ strcpy(body,prefix);n=strlen(prefix);
+ for(const unsigned char *q=(const unsigned char *)question;*q;q++){
+  if(*q<32)return -EINVAL;
+  if(*q=='"'||*q=='\\')body[n++]='\\';
+  body[n++]=*q;
+ }
+ strcpy(body+n,"\"}");
+ char *response=malloc(4096);if(!response)return -ENOMEM;
+ int ret=sb_http_post("api.seesoil.com",80,SB_API_PREFIX "/box/answer",
+  "application/json",(const uint8_t *)body,strlen(body),response,4096,30000);
+ if(ret>=0){
+  const char *ok=sb_find_key(response,"ok");
+  if(!ok||strncmp(ok,"true",4)!=0||sb_json_get_string(response,"text",reply,capacity)<0||!reply[0])ret=-ENODATA;
+  else ret=0;
+ }
+ free(response);return ret;
 }

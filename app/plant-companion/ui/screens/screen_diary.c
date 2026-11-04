@@ -64,6 +64,30 @@ static const char *diary_dot_icon(uint32_t color)
     }
 }
 
+static lv_obj_t *s_diary_indicator;
+static lv_obj_t *voice_list,*voice_root;
+static void diary_deleted(lv_event_t *e){if(voice_root==lv_event_get_target(e)){voice_list=NULL;voice_root=NULL;s_diary_indicator=NULL;}}
+
+static void diary_update_indicator(lv_obj_t *list)
+{
+  int page;
+  char buf[16];
+
+  if (s_diary_indicator == NULL)
+    {
+      return;
+    }
+
+  page = lv_obj_get_scroll_y(list) / 42;
+  snprintf(buf, sizeof(buf), "%d/%d", page + 1, record_diary_get_count());
+  lv_label_set_text(s_diary_indicator, buf);
+}
+
+static void diary_page_changed_cb(lv_event_t *e)
+{
+  diary_update_indicator((lv_obj_t *)lv_event_get_user_data(e));
+}
+
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
@@ -86,7 +110,9 @@ static lv_obj_t *diary_entry_create(lv_obj_t *parent, int idx)
 
   row = lv_obj_create(parent);
   lv_obj_remove_style_all(row);
-  lv_obj_set_size(row, LV_PCT(100), 42);
+  lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_size(row, LV_PCT(100), 38);
+  lv_obj_add_flag(row, LV_OBJ_FLAG_SNAPPABLE);
   lv_obj_set_style_pad_column(row, 8, 0);
   lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
@@ -94,6 +120,7 @@ static lv_obj_t *diary_entry_create(lv_obj_t *parent, int idx)
 
   dot = lv_obj_create(row);
   lv_obj_remove_style_all(dot);
+  lv_obj_remove_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_size(dot, 22, 22);
   lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(dot, lv_color_hex(d.color), 0);
@@ -105,7 +132,8 @@ static lv_obj_t *diary_entry_create(lv_obj_t *parent, int idx)
 
   card = lv_obj_create(row);
   lv_obj_remove_style_all(card);
-  lv_obj_set_height(card, 42);
+  lv_obj_remove_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_height(card, 38);
   lv_obj_set_flex_grow(card, 1);
   lv_obj_set_style_bg_color(card, lv_color_hex(0xffffff), 0);
   lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
@@ -118,6 +146,7 @@ static lv_obj_t *diary_entry_create(lv_obj_t *parent, int idx)
 
   body = lv_obj_create(card);
   lv_obj_remove_style_all(body);
+  lv_obj_remove_flag(body, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_flex_grow(body, 1);
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(body, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START,
@@ -263,22 +292,47 @@ lv_obj_t *screen_diary_create(plant_nav_cb_t cb, void *user_data)
 
   /* ── 时间轴（166，可滚动） ──────────────────────────────────── */
 
-  list = lv_obj_create(scr);
+  voice_root=scr;voice_list=list = lv_obj_create(scr);
+  lv_obj_add_event_cb(scr,diary_deleted,LV_EVENT_DELETE,NULL);
   lv_obj_remove_style_all(list);
   lv_obj_set_size(list, 456, 166);
   lv_obj_set_pos(list, 12, 86);
-  lv_obj_set_style_pad_row(list, 4, 0);
+  lv_obj_set_style_bg_color(list, lv_color_hex(TP_CLR_DIARY_BG_A), 0);
+  lv_obj_set_style_bg_opa(list, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(list, 0, 0);
+  lv_obj_set_style_pad_row(list, 0, 0);
   lv_obj_set_style_pad_hor(list, 0, 0);
   lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(list, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START,
                         LV_FLEX_ALIGN_START);
-  lv_obj_set_scroll_dir(list, LV_DIR_VER);
-  lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
+
+  if (record_diary_get_count() > 4)
+    {
+      lv_obj_set_scroll_dir(list, LV_DIR_VER);
+      lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
+      lv_obj_remove_flag(list, LV_OBJ_FLAG_SCROLL_ELASTIC);
+      lv_obj_add_flag(list, LV_OBJ_FLAG_SCROLL_ONE);
+      lv_obj_set_scroll_snap_y(list, LV_SCROLL_SNAP_START);
+    }
+  else
+    {
+      lv_obj_remove_flag(list, LV_OBJ_FLAG_SCROLLABLE);
+      lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_OFF);
+    }
 
   for (i = 0; i < record_diary_get_count(); i++)
     {
       diary_entry_create(list, i);
     }
+
+  s_diary_indicator = lv_label_create(scr);
+  lv_label_set_text(s_diary_indicator, "1/1");
+  lv_obj_set_style_text_font(s_diary_indicator, TP_FONT_CAPTION, 0);
+  lv_obj_set_style_text_color(s_diary_indicator,
+                              lv_color_hex(TP_CLR_TEXT_MUTED), 0);
+  lv_obj_align(s_diary_indicator, LV_ALIGN_TOP_RIGHT, -18, 252);
+  lv_obj_add_event_cb(list, diary_page_changed_cb, LV_EVENT_SCROLL_END, list);
+  diary_update_indicator(list);
 
   /* ── 底部 Tab（52） ─────────────────────────────────────────── */
 
@@ -287,3 +341,6 @@ lv_obj_t *screen_diary_create(plant_nav_cb_t cb, void *user_data)
 
   return scr;
 }
+
+int screen_diary_voice_step(int delta)
+{if(!voice_list)return -1;lv_obj_scroll_by(voice_list,0,-delta*42,LV_ANIM_OFF);return 0;}

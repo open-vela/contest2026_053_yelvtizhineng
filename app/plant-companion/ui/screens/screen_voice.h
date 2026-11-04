@@ -1,8 +1,7 @@
 /****************************************************************************
  * apps/plant-companion/ui/screens/screen_voice.h
  *
- * ⑥ 语音对话 — 和小绿聊天（UI_SPEC ⑥）
- *   波形动画 + 对话气泡 + 🎙️ 说话按钮
+ * 语音对话 — 和小伴说话：豌豆表情、状态反馈和会话按钮
  ****************************************************************************/
 
 #ifndef __PLANT_UI_SCREEN_VOICE_H
@@ -20,6 +19,8 @@ extern "C"
  * @return 屏幕对象
  */
 lv_obj_t *screen_voice_create(void);
+/** Read-only maintenance counters. Does not access LVGL from NSH. */
+void screen_voice_status(void);
 
 /** 追加一条 AI 回复气泡（文本） */
 void screen_voice_add_ai_reply(lv_obj_t *scr, const char *text);

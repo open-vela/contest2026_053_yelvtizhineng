@@ -1295,4 +1295,3 @@ uint32_t zh_font_utf8_first(const char *text)
 
   return zh_utf8_decode(text, &len);
 }
-

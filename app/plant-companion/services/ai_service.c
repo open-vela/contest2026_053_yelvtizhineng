@@ -11,6 +11,7 @@
 
 #include <nuttx/config.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 #include <errno.h>
@@ -30,6 +31,7 @@ static bool g_inited;
 
 struct ai_job_s
 {
+  struct ai_service_result_s result; /* heap workspace, never a worker stack */
   int  req_type;
   uint8_t *jpeg;          /* 图像数据（默认拷贝；borrowed 时不拷贝） */
   size_t jpeg_len;
@@ -48,12 +50,12 @@ struct ai_job_s
 static void *ai_worker(void *arg)
 {
   struct ai_job_s *job = (struct ai_job_s *)arg;
-  struct ai_service_result_s result;
+  struct ai_service_result_s *result=&job->result;
   int ret;
 
-  memset(&result, 0, sizeof(result));
-  result.req_type = job->req_type;
-  result.success = false;
+  memset(result, 0, sizeof(*result));
+  result->req_type = job->req_type;
+  result->success = false;
 
   /* 协议 v2：设备端无任何大模型密钥。图像诊断 = RGB565 帧上传服务器
    * → /media/image 拿 media_id → /ai/diagnose 结构化 result（薄端只
@@ -62,50 +64,53 @@ static void *ai_worker(void *arg)
   if (job->req_type == AI_REQ_DIAGNOSE &&
       job->jpeg != NULL && job->jpeg_len > 0)
     {
-      struct sb_diag_result_s diag;
+      struct sb_diag_result_s *diag=&result->diag;
 
-      ret = server_bridge_image_diagnose(job->jpeg, job->jpeg_len, &diag);
-      if (ret == 0 && diag.ok)
+      /* Interactive photo flow: fail fast instead of blocking the UI state
+       * for minutes while an offline network retries the upload. */
+
+      ret = server_bridge_image_diagnose_fast(job->jpeg, job->jpeg_len,
+                                              diag);
+      if (ret == 0 && diag->ok)
         {
-          result.diag = diag;
-          result.success = true;
-          result.from_server = true;
-          result.server_err = 0;
+          result->success = true;
+          result->from_server = true;
+          result->server_err = 0;
 
-          if (diag.summary[0] != '\0')
+          if (diag->summary[0] != '\0')
             {
-              snprintf(result.server_text, sizeof(result.server_text), "%s",
-                       diag.summary);
+              snprintf(result->server_text, sizeof(result->server_text), "%s",
+                       diag->summary);
             }
           else
             {
-              snprintf(result.server_text, sizeof(result.server_text),
-                       "%s 健康 %d 分", diag.name, diag.health_score);
+              snprintf(result->server_text, sizeof(result->server_text),
+                       "%s 健康 %d 分", diag->name, diag->health_score);
             }
 
           printf("[AI-Service] 服务器诊断: %s / 健康%d / 匹配%d\n",
-                 diag.name, diag.health_score, diag.match);
+                 diag->name, diag->health_score, diag->match);
         }
       else
         {
-          result.server_err = ret;
+          result->server_err = ret;
           printf("[AI-Service] 服务器诊断失败(%d)，降级本地引擎\n", ret);
         }
     }
 
   /* 服务器失败 / 无帧：本地引擎兜底（离线可演示） */
 
-  if (!result.success)
+  if (!result->success)
     {
       ret = ai_engine_run(job->has_soil ? &job->soil : NULL,
                           job->jpeg, job->jpeg_len,
-                          &result.engine);
-      result.success = (ret == 0);
+                          &result->engine);
+      result->success = (ret == 0);
     }
 
   if (job->cb != NULL)
     {
-      job->cb(job->user_data, &result);
+      job->cb(job->user_data, result);
     }
 
   if (job->jpeg != NULL && !job->borrowed)
@@ -170,10 +175,11 @@ bool ai_service_busy(void)
   return busy;
 }
 
-int ai_service_analyze_async(const uint8_t *jpeg_data, size_t jpeg_len,
+static int ai_service_submit(const uint8_t *jpeg_data, size_t jpeg_len,
                              bool borrowed,
                              const struct soil_data_s *soil,
-                             ai_service_done_cb_t cb, void *user_data)
+                             ai_service_done_cb_t cb, void *user_data,
+                             bool on_worker)
 {
   struct ai_job_s *job;
   pthread_t tid;
@@ -184,6 +190,7 @@ int ai_service_analyze_async(const uint8_t *jpeg_data, size_t jpeg_len,
   if (g_busy)
     {
       pthread_mutex_unlock(&g_lock);
+      printf("[AI-Service] start rejected stage=busy error=%d\n",-EBUSY);
       return -EBUSY;
     }
 
@@ -196,6 +203,7 @@ int ai_service_analyze_async(const uint8_t *jpeg_data, size_t jpeg_len,
       pthread_mutex_lock(&g_lock);
       g_busy = false;
       pthread_mutex_unlock(&g_lock);
+      printf("[AI-Service] start rejected stage=job error=%d\n",-ENOMEM);
       return -ENOMEM;
     }
 
@@ -229,12 +237,22 @@ int ai_service_analyze_async(const uint8_t *jpeg_data, size_t jpeg_len,
               pthread_mutex_lock(&g_lock);
               g_busy = false;
               pthread_mutex_unlock(&g_lock);
+              printf("[AI-Service] start rejected stage=image-copy bytes=%lu error=%d\n",
+                     (unsigned long)jpeg_len,-ENOMEM);
               return -ENOMEM;
             }
 
           memcpy(job->jpeg, jpeg_data, jpeg_len);
           job->jpeg_len = jpeg_len;
         }
+    }
+
+  /* The camera already owns a background worker. Reuse its capture stack
+   * instead of allocating another 16 KiB internal-RAM pthread stack. */
+  if (on_worker)
+    {
+      ai_worker(job);
+      return 0;
     }
 
   pthread_attr_init(&attr);
@@ -251,7 +269,7 @@ int ai_service_analyze_async(const uint8_t *jpeg_data, size_t jpeg_len,
 
   if (ret != 0)
     {
-      if (job->jpeg != NULL)
+      if (job->jpeg != NULL && !job->borrowed)
         {
           free(job->jpeg);
         }
@@ -260,8 +278,24 @@ int ai_service_analyze_async(const uint8_t *jpeg_data, size_t jpeg_len,
       pthread_mutex_lock(&g_lock);
       g_busy = false;
       pthread_mutex_unlock(&g_lock);
+      printf("[AI-Service] start rejected stage=thread error=%d\n",-ret);
       return -ret;
     }
 
   return 0;
+}
+
+int ai_service_analyze_async(const uint8_t *jpeg_data, size_t jpeg_len,
+                             bool borrowed, const struct soil_data_s *soil,
+                             ai_service_done_cb_t cb, void *user_data)
+{
+  return ai_service_submit(jpeg_data,jpeg_len,borrowed,soil,cb,user_data,false);
+}
+
+int ai_service_analyze_on_worker(const uint8_t *jpeg_data, size_t jpeg_len,
+                                 const struct soil_data_s *soil,
+                                 ai_service_done_cb_t cb, void *user_data)
+{
+  /* Synchronous on caller's background worker; frame lives until return. */
+  return ai_service_submit(jpeg_data,jpeg_len,true,soil,cb,user_data,true);
 }

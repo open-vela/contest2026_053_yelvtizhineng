@@ -4,11 +4,8 @@
  * (2) AI拍照 —— 对齐《嵌入式 UI V3 大字版》
  *   顶栏 34 + 取景区 202 + 控件行 82 = 318（本页无底部 Tab）
  *
- * 预览 = `plant cam preview` 的逻辑同步到 UI：
- *   - camera_preview_start(33,45,414,184) 启动后台线程：连续 capture
- *     （静默）→ lcd_put_rgb565 直接把每帧画到取景框内部（绕过 LVGL
- *     渲染器 —— 本 LVGL 版本 lv_image 渲染 RGB565 缩放有 bug，是
- *     彩屏/彩色丝往下刷的根因之一）。
+ * 预览=直接取 OV3660 1024×768 JPEG，板端 TJpgDec 解码到 512×384 RGB565，
+ * 再由 lcd_put_rgb565_cover 直写取景框（绕过 LVGL 图像渲染器）。
  *   - 画面尺寸 = 绿框内部 (33,45,414,184)，与 3px 绿框严丝合缝。
  *   - 取景框内部不放任何 LVGL 对象（不失效该区）→ LVGL 不会重绘盖掉
  *     画面；lv_nuttx_lcd.c flush_cb 已按列分块 <=320px，消除 rowbuff_be
@@ -16,12 +13,9 @@
  *   - V3 稿在取景框内画的虚线框/四角括弧/扫描线/提示胶囊未搬：直写线程
  *     会把它们当画面内容盖掉，故只保留 3px 绿框 + 外层深色圆角取景区。
  *
- * 拍照（2026-09-10 改）：预览只走 160×120（快，可以糊），拍照时【切
- * 320×240】再上传 —— 160×120 的图服务器交给大模型后只能猜；640×480 是
- * 逐像素输出，亮部红先撞顶会出粉块（实测），320×240 走 2×2 binning 不过曝。
- * 流程：take() 冻结 → preview_stop() 杀线程/DMA → camera_mode_photo()
- * 切几何 → camera_photo_capture() 抓一帧 → worker 零拷贝上传识别。
- * 返回本页时 camera_preview_start() 内部会自动切回 160×120 预览几何。
+ * 拍照：take() 冻结 → preview_stop() 杀线程/DMA → 取预览线程最后一次
+ * 成功解码并显示的那份 JPEG 原始字节上传。屏上定格和云端原图是同一份
+ * 字节，不再在按快门时重新取一帧。
  ****************************************************************************/
 
 #include <lvgl/lvgl.h>
@@ -31,9 +25,12 @@
 #include <errno.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "screen_camera.h"
 #include "screen_diagnose.h"
+#include "../../services/handsfree_service.h"
+#include "../../services/voice_service.h"
 #include "../ui_app.h"
 #include "../theme/theme_plant.h"
 #include "../widgets/widget_bottomnav.h"
@@ -45,6 +42,7 @@
 #ifdef CONFIG_PLANT_AI_MODULE
 #  include "../../services/ai_service.h"
 #  include "../../services/server_bridge.h"
+#  include "../../services/pokedex_service.h"
 #endif
 
 #ifdef CONFIG_PLANT_SOIL_SENSOR
@@ -72,18 +70,31 @@ extern void esp32s3_uart0_reclaim_pins(void);
 static lv_obj_t *s_status_label;   /* 「AI识别中…」状态文字 */
 
 #ifdef CONFIG_PLANT_CAMERA_CAPTURE
-/* 取景框（绿框）内部：viewport(30,42,420,190) + 3px 边框 → 内部
- * x 33..446, y 45..228 = 414×184，与 plant cam preview 直写区域一致
- * （V3 取景区 14,36,452,202，绿框居中其中，画面尺寸与旧版一致不改） */
-#define CAM_VIEW_X     33
-#define CAM_VIEW_Y     45
-#define CAM_VIEW_W     414
-#define CAM_VIEW_H     184
+/* 大取景框：铺满 480×256，底部 64px 只留控制栏。
+ * 预览源 320×240 按目标宽高比居中裁剪后写入，避免 4:3 被拉伸。 */
+/* 撕裂（"油膜"）控制见 camera_capture.c 中的说明：写屏行速 63us/行
+ * 慢于面板扫描 52us/行，写入期间必留错位带；面积越小带越窄。
+ * 320x240 是"尺寸可用 + 撕裂可控"的折中（高度 160 太小影响取景体验）。 */
+
+#define CAM_SCREEN_H   320
+#define CAM_VIEW_X     0
+#define CAM_VIEW_Y     0
+#define CAM_VIEW_W     480
+#define CAM_VIEW_H     CAM_SCREEN_H   /* v166：整屏取景 */
+
+/* v165：控制栏 64px -> 40px，取景框 480x256 -> 480x280。
+ * 取景框已经是「整宽 + 控制栏之外的最大高度」，再大就必须叠加在画面上；
+ * 而叠加会让 LVGL 重绘把直写的画面刷掉（v160 已定位的根因）。 */
+
+#define CAM_BAR_H      40
+#define CAM_BAR_Y      (CAM_SCREEN_H - CAM_BAR_H)   /* 控件行的竖向起点 */
 
 static lv_timer_t *s_frame_timer;   /* 帧计数显示定时器（ui_task 上下文） */
 static lv_obj_t *s_frame_label;     /* 右上角帧计数（调试用，不挡画面） */
 static bool s_cam_stopped;          /* 拍照后已杀摄像头进程（返回需重启）*/
 static bool s_cam_busy;             /* ⚠️ 诊断进行中：等待期禁止重启预览 */
+static volatile bool s_shoot_worker_running;
+static volatile bool s_photo_ready;
 
 /* ⚠️ 3C-2 跨线程结果投递（照抄 voice 页成熟模式）：
  * ai_worker 线程完成服务器诊断后，只能写这个共享缓冲 + 置 flag；
@@ -94,8 +105,18 @@ static bool s_cam_busy;             /* ⚠️ 诊断进行中：等待期禁止�
 static char      s_ai_result[1024]; /* 服务器诊断文本（日志/兜底用） */
 static struct sb_diag_result_s s_ai_diag;  /* 结构化诊断（worker 写，ui_task 读）*/
 static volatile bool s_ai_pending;  /* 有结果待上屏 */
+static int s_ai_error_code;
 static bool s_ai_failed;             /* ⚠️ 2026-09-09：识别失败如实上屏 */
 static char s_ai_error[192];         /* 失败原因（诊断页直接显示） */
+static uint32_t s_shoot_t0;          /* 快门按下时刻（[Perf] 全链路计时） */
+
+static uint32_t cam_now_ms(void)
+{
+  struct timespec ts;
+
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (uint32_t)(ts.tv_sec * 1000u + ts.tv_nsec / 1000000u);
+}
 #endif
 
 /****************************************************************************
@@ -104,20 +125,7 @@ static char s_ai_error[192];         /* 失败原因（诊断页直接显示） 
 
 static void cam_on_back(lv_event_t *e)
 {
-  (void)e;
-
-#ifdef CONFIG_PLANT_CAMERA_CAPTURE
-  /* ⚠️ 必须先冻结预览再切页：预览线程是 ioctl 直写 LCD（绕过 LVGL）的，
-   * 页面切走后它还会继续往取景框区域画帧 —— 上一级页面已经画好了又被
-   * 摄像头画面盖回去，用户看到的就是"退出拍照页一大片拖尾"。
-   * 与 cam_on_gallery 同样的处理（那条路径早就这么做了，返回键漏了）。
-   * 冻结后线程只空转，延迟删除里 preview_stop() 的 join 也能立刻返回，
-   * 不会再把 UI 任务卡住。 */
-
-  camera_preview_take();
-#endif
-
-  ui_app_pop_screen();
+  (void)e;screen_camera_leave_if_active();
 }
 
 /* AI 完成回调（ai_worker 线程触发）：
@@ -125,13 +133,39 @@ static void cam_on_back(lv_event_t *e)
  * s_frame_timer（ui_task）轮询消费后真正上屏。
  * 无服务器结果（失败/演示）时同样投递，由 ui_task 统一走演示兜底。 */
 
+static bool s_cam_page_active;
+static bool s_voice_preview_paused;
+static bool s_cam_was_visible;
+static bool s_cam_first_frame_ready;
+static uint32_t s_cam_enter_t0;
+static uint32_t s_cam_generation;
+
+/* Network waits do not own the audio bus. Only live RX or playback should
+ * pause DVP, and an old hearing flag after RX must not hold it stopped. */
+static bool cam_voice_needs_priority(void)
+{
+  int state=voice_service_get_state();
+  return (voice_service_busy() &&
+          (state==VOICE_STATE_LISTENING || state==VOICE_STATE_SPEAKING)) ||
+         (handsfree_service_capturing() && handsfree_service_hearing() &&
+          handsfree_service_interacting());
+}
+
 static void cam_ai_done(void *user_data,
                         const struct ai_service_result_s *result)
 {
+#ifdef CONFIG_PLANT_AI_MODULE
+  if (!s_cam_page_active || (uint32_t)(uintptr_t)user_data != s_cam_generation)
+    {
+      return;
+    }
+#else
   (void)user_data;
+#endif
 
 #ifdef CONFIG_PLANT_AI_MODULE
   s_ai_failed = true;
+  s_ai_error_code = result ? result->server_err : -ENODATA;
   s_ai_error[0] = '\0';
 
   if (result != NULL && result->success && result->from_server)
@@ -142,6 +176,9 @@ static void cam_ai_done(void *user_data,
       snprintf(s_ai_result, sizeof(s_ai_result), "%s",
                result->server_text[0] != '\0' ?
                result->server_text : s_ai_diag.summary);
+
+      /* 图鉴模式：成功识别即更新本地图鉴，下次快门秒回植物名 */
+      pokedex_update(&result->diag);
     }
   else
     {
@@ -158,6 +195,12 @@ static void cam_ai_done(void *user_data,
            * “重启后 WiFi/服务器地址丢失”，新固件已支持开机自动恢复。 */
           switch (result->server_err)
             {
+              case -ENOMEM:
+                snprintf(s_ai_error,sizeof(s_ai_error),"识别暂时忙不过来，请稍等再拍一张。");
+                break;
+              case -ENODATA:
+                snprintf(s_ai_error, sizeof(s_ai_error),"画面里的植物还看不清，请对准植物、保持稳定并补光后重试。");
+                break;
               case -ENOTCONN:
                 snprintf(s_ai_error, sizeof(s_ai_error),
                          "识别失败：设备还没连上服务器（WiFi/地址丢失）。"
@@ -202,6 +245,9 @@ static void cam_ai_done(void *user_data,
     }
 
   s_ai_pending = true;
+
+  printf("[Perf][Cam] 快门->AI结果 全程 %u ms\n",
+         (unsigned)(cam_now_ms() - s_shoot_t0));
 #else
   s_ai_failed = true;
   s_ai_result[0] = '\0';
@@ -211,11 +257,87 @@ static void cam_ai_done(void *user_data,
 #endif
 }
 
-/* 拍照：预览线程已持续直写取景框；拍照 = 定格当前帧 + 杀掉摄像头进程
- * （用户要求：诊断期间摄像头进程不应继续跑，省 DMA/线程资源）。
- * 流程：取帧（rxbuf 静态 DRAM，stop 不清零）→ camera_preview_stop()
- * 杀线程+DMA → worker 借用 rxbuf 上传诊断 → 诊断页显示。
- * 从诊断页返回本页时，screen_camera_create 重新启动预览。 */
+/* 拍照：冻结并停止高清预览线程，把线程最后一次成功显示的那份 JPEG
+ * 交给 worker 上传；诊断期间不再继续跑摄像头 DMA。 */
+
+#ifdef CONFIG_PLANT_CAMERA_CAPTURE
+static void __attribute__((noinline)) cam_start_failed(uint32_t generation,int error,size_t bytes)
+{
+  struct ai_service_result_s failure={0};
+  failure.server_err=error;
+  printf("[Cam] photo pipeline failed error=%d jpeg_bytes=%lu\n",error,(unsigned long)bytes);
+  cam_ai_done((void *)(uintptr_t)generation,&failure);
+}
+
+static void *cam_shoot_worker(void *arg)
+{
+  const uint8_t *fb = NULL;
+  size_t flen = 0;
+  uint32_t t0 = cam_now_ms();
+  uint32_t generation=s_cam_generation;
+  int ret;
+
+  (void)arg;
+
+  camera_preview_take();          /* 冻结：线程进入空转，stop 不等待 */
+  camera_preview_stop();
+  s_cam_stopped = true;
+
+  printf("[Perf][Cam] 冻结+停预览 %u ms\n",
+         (unsigned)(cam_now_ms() - t0));
+
+  /* v61：预览是 RGB565 640x480 直采，没有现成 JPEG。快门 = 停预览后
+   * 切 JPEG 1024x768 冷拍（静模式链路实测 100% 完好），严格解码验证
+   * +失败重抓，解码帧定格取景框（所见即所传），原始 JPEG 上传。 */
+
+  ret = camera_hd_jpeg_capture_verified(&fb, &flen,
+                                        CAM_VIEW_X, CAM_VIEW_Y,
+                                        CAM_VIEW_W, CAM_VIEW_H, 6);
+
+  /* A bounded receive retry cannot reset the sensor's JPEG state. If
+   * all normal attempts failed, perform one complete sensor restart and
+   * one smaller retry batch. Keep strict JPEG validation and never upload
+   * an incomplete frame. Do not restart a page that has been closed. */
+  if ((ret == -ENODATA || ret == -EIO || ret == -ETIMEDOUT) &&
+      s_cam_page_active && generation == s_cam_generation)
+    {
+      printf("[Cam] full sensor restart after shot error=%d\n", ret);
+      camera_shutdown();
+      ret = camera_init();
+      if (ret == 0)
+        {
+          ret = camera_hd_jpeg_capture_verified(&fb, &flen,
+                                                CAM_VIEW_X, CAM_VIEW_Y,
+                                                CAM_VIEW_W, CAM_VIEW_H, 3);
+        }
+    }
+
+  printf("[Perf][Cam] 取JPEG快照 %u ms (%u B)\n",
+         (unsigned)(cam_now_ms() - t0), (unsigned)flen);
+
+  if (ret == 0 && fb != NULL && flen != 0)
+    {
+      if (!s_cam_page_active || generation != s_cam_generation)
+        {
+          s_shoot_worker_running = false;
+          return NULL;
+        }
+      s_photo_ready = true;
+      printf("[Cam] diagnosis on photo worker jpeg_bytes=%lu\n",(unsigned long)flen);
+      ret = ai_service_analyze_on_worker(fb, flen, NULL,
+                                         cam_ai_done,
+                                         (void *)(uintptr_t)generation);
+    }
+
+  if (ret != 0)
+    {
+      cam_start_failed(generation,ret,flen);
+    }
+
+  s_shoot_worker_running = false;
+  return NULL;
+}
+#endif
 
 static void cam_on_shoot(lv_event_t *e)
 {
@@ -234,68 +356,77 @@ static void cam_on_shoot(lv_event_t *e)
     {
       if (s_status_label != NULL)
         {
-          lv_label_set_text(s_status_label, "识别中，请稍候…");
+          lv_label_set_text(s_status_label, "识别中…");
         }
 
       return;
     }
 #  endif
 
-  if (s_status_label != NULL)
+  /* 镜头被挡拦截（2026-09-26）：连续单色帧 = 手捂住镜头或传感器异常，
+   * 不浪费一次上传识别，直接提示（秒回，孩子立刻知道怎么回事）。 */
+
+  if (camera_preview_mono_streak() >= 3)
     {
-      lv_label_set_text(s_status_label, "识别中…");
+      if (s_status_label != NULL)
+        {
+          lv_label_set_text(s_status_label, "镜头被挡住啦？");
+        }
+
+      printf("[Cam] 单色帧连击 %u，快门转提示不上传\n",
+             camera_preview_mono_streak());
+      return;
     }
+
+  if(s_status_label!=NULL)lv_label_set_text(s_status_label,"让我看看这张照片…");
 
 #  ifdef CONFIG_PLANT_AI_MODULE
   {
-    /* 真实链路（零拷贝 + 杀进程 + 高清）：
-     * 1) take()（freeze）：预览线程退出 capture 路径进入空转
-     *    （否则 stop 的 join 会等当前 capture 超时 ~10s，UI 卡）；
-     * 2) camera_preview_stop() 杀掉预览线程 + DMA —— 必须先停再切几何，
-     *    有并发取帧时改分辨率会拿到半帧；
-     * 3) camera_mode_photo() 切到 320×240（约 0.15s，不重跑软复位）；
-     * 4) camera_photo_capture() 抓一帧：帧本体留在驱动 rxbuf；
-     * 5) worker 借用 rxbuf（borrowed=true）上传 —— 设备端堆只有 ~17KB，
-     *    无论如何都 malloc 不出 153600B，零拷贝是唯一路径；
+    /* 真实链路（零拷贝 + 杀线程 + 所见即所传）：
+     * 1) take() 冻结，不再更新屏上画面；
+     * 2) preview_stop() 等当前高清帧收尾并停 DMA；
+     * 3) camera_preview_get_jpeg() 取最后一次成功显示的 JPEG 快照；
+     * 4) worker 零拷贝上传同一份字节；
      * ⚠️ s_cam_busy=true：诊断等待期（上传 + 服务器识别 10-40s）禁止
      * frame_timer 重启预览 —— 否则预览会覆盖 worker 正在读的帧。 */
-    const uint8_t *fb = NULL;
-    size_t flen = 0;
-    int ret;
-
-    camera_preview_take();          /* 先冻结：线程进入空转，stop 不等待 */
-    camera_preview_stop();
-    s_cam_stopped = true;
-    s_cam_busy = true;
-
-    ret = camera_mode_photo();
-    if (ret == 0)
+    if (!s_shoot_worker_running)
       {
-        ret = camera_photo_capture(&fb, &flen);
-      }
+        pthread_attr_t attr;
+        pthread_t tid;
 
-    if (ret == 0 && fb != NULL && flen != 0)
-      {
-        ret = ai_service_analyze_async(fb, flen, true, NULL,
-                                       cam_ai_done, NULL);
-        if (ret != 0)
+        s_shoot_t0 = cam_now_ms();
+        s_photo_ready = false;
+        s_shoot_worker_running = true;
+        s_cam_busy = true;
+
+        /* Preview owns two stacks and SPI DMA staging. Release them before
+         * allocating the photo stack; stopping inside that new thread is
+         * too late when internal RAM is tight (pthread_create -> ENOMEM).
+         * The displayed frame remains frozen and all leases are returned. */
+        camera_preview_take();
+        camera_preview_stop();
+        s_cam_stopped = true;
+
+        pthread_attr_init(&attr);
+        /* Diagnosis workspace lives on the heap; reuse the capture stack. */
+        pthread_attr_setstacksize(&attr, 8192);
+        int started=pthread_create(&tid, &attr, cam_shoot_worker, NULL);
+        if (started == 0)
           {
+            pthread_detach(tid);
+          }
+        else
+          {
+            printf("[Cam] photo worker start failed error=%d\n",-started);
+            s_shoot_worker_running = false;
+            s_cam_busy = false;
             if (s_status_label != NULL)
               {
-                lv_label_set_text(s_status_label, "识别忙，稍后再试");
+                lv_label_set_text(s_status_label, "失败重试");
               }
           }
-      }
-    else
-      {
-        /* 拍照/切模式失败：如实提示，不编答案（用户要求） */
 
-        if (s_status_label != NULL)
-          {
-            lv_label_set_text(s_status_label, "拍照失败，请重试");
-          }
-
-        cam_ai_done(NULL, NULL);
+        pthread_attr_destroy(&attr);
       }
   }
 #  else
@@ -315,11 +446,15 @@ static void cam_on_shoot(lv_event_t *e)
  * timer 仍访问 s_frame_label/s_ai_result → use-after-free（voice 页
  * 同款 PANIC 教训）。 */
 
+   /* 拍照页激活中（用于外部强制离开） */
+
 static void cam_on_delete(lv_event_t *e)
 {
   (void)e;
 
 #ifdef CONFIG_PLANT_CAMERA_CAPTURE
+  s_cam_page_active = false;
+  s_voice_preview_paused = false;
   camera_preview_stop();
 
   /* M2：完整关闭摄像头（停 CAM/DMA + SCCB 软复位 OV3660）；传感器被软复位
@@ -335,6 +470,7 @@ static void cam_on_delete(lv_event_t *e)
   s_ai_diag.health_score = -1;
   s_cam_stopped = false;
   s_cam_busy = false;
+  s_cam_was_visible=false;
 
   if (s_frame_timer != NULL)
     {
@@ -368,6 +504,14 @@ static void frame_timer_cb(lv_timer_t *timer)
   /* 3C-2：消费跨线程诊断结果（worker 写 s_ai_pending，ui_task 上屏）。
    * 先于帧计数处理：拍照后首个 tick 即跳诊断页。 */
 
+  /* UI owner updates a small masked label while the photo worker waits.
+   * Retain the captured picture; never restart DVP during diagnosis. */
+  if(s_cam_page_active && s_cam_busy && !s_ai_pending && s_status_label){
+    if(s_photo_ready)lv_label_set_text_fmt(s_status_label,"识别中 %u秒",
+      (unsigned)((cam_now_ms()-s_shoot_t0)/1000));
+    else lv_label_set_text(s_status_label,"拍照中…");
+  }
+
   if (s_ai_pending)
     {
       lv_obj_t *diag;
@@ -383,6 +527,7 @@ static void frame_timer_cb(lv_timer_t *timer)
 
       s_ai_pending = false;   /* 消费（先清，防 timer 重入） */
       snprintf(local, sizeof(local), "%s", s_ai_result);
+      bool failed = s_ai_failed;
 
       printf("[Cam] 诊断结果到达，准备上屏 (len=%d)\n",
              (int)strlen(local));
@@ -392,19 +537,19 @@ static void frame_timer_cb(lv_timer_t *timer)
           printf("[Cam] 服务器回复: %.240s\n", local);
         }
 
-      if (s_ai_failed)
+      if (failed)
         {
-          /* ⚠️ 2026-09-09 调试要求：失败明确提示，且内容框必须显示
-           * （此前 has_issue=false 会把失败原因一起藏掉，用户只看到
-           * “识别失败”四个字）。 */
+          /* Explain recovery to children; keep server diagnostics in logs. */
+          printf("[Cam] diagnosis unavailable: %s\n",s_ai_error);
           name = "识别失败";
           latin[0] = '\0';
           match_pct = 0;
-          box_title = "⚠ 识别失败";
-          snprintf(issue_desc, sizeof(issue_desc), "%s",
-                   s_ai_error[0] != '\0' ? s_ai_error : "服务器没有返回结果");
-          snprintf(advice, sizeof(advice),
-                   "可稍后重拍一次；具体原因请看串口日志。");
+          box_title = "这次没认出来";
+          snprintf(issue_desc, sizeof(issue_desc), "%s",s_ai_error_code==-ENODATA?
+                   "画面里的植物还看不清。":"小伴暂时没有拿到识别结果。");
+          snprintf(advice, sizeof(advice),"%s",s_ai_error_code==-ENODATA?
+                   "对准植物、保持稳定并补光，再说帮我拍照。":
+                   "请大人帮我检查网络，稍后再说帮我拍照。");
           snprintf(tags, sizeof(tags), "#需重试");
           has_issue = true;
           s_ai_failed = false;
@@ -559,6 +704,14 @@ static void frame_timer_cb(lv_timer_t *timer)
       screen_diagnose_set(diag, name, latin, match_pct, tags, box_title,
                           has_issue, issue_desc, advice);
       ui_app_push_screen(diag);
+      if(handsfree_service_enabled()){
+        char spoken[401];
+        if(failed)snprintf(spoken,sizeof(spoken),"%s",s_ai_error_code==-ENODATA?
+          "我还看不清植物。请对准植物，保持稳定，在明亮一点的地方，再说帮我拍照。":
+          "这次没有拿到识别结果。可以稍后再说帮我拍照。如果一直不成功，请大人帮我检查网络。");
+        else snprintf(spoken,sizeof(spoken),"%s%s。%s。%s。可以说保存到日记。",match_pct<80?"我还不太确定，可能是":"看起来像",name,s_ai_diag.summary,s_ai_diag.advice);
+        handsfree_service_announce(spoken);
+      }
 
       /* 双保险：也让 LVGL 重绘诊断页（覆盖取景框外的所有残留） */
 
@@ -571,7 +724,7 @@ static void frame_timer_cb(lv_timer_t *timer)
 
       if (s_status_label != NULL)
         {
-          lv_label_set_text(s_status_label, "识别完成 ✅");
+          lv_label_set_text(s_status_label, failed?"再试一张吧":"识别完成");
         }
     }
 #endif
@@ -585,13 +738,14 @@ static void frame_timer_cb(lv_timer_t *timer)
      * ⚠️ s_cam_busy（诊断进行中）禁止重启：worker 上传期间拍照页
      * 仍可见，误重启会把摄像头画面盖回取景框（用户反馈）。 */
 
-    if (!lv_obj_has_flag(scr, LV_OBJ_FLAG_HIDDEN) && !s_cam_busy)
+    bool visible=!lv_obj_has_flag(scr,LV_OBJ_FLAG_HIDDEN);
+    if(visible&&!s_cam_was_visible)camera_preview_invalidate();
+    s_cam_was_visible=visible;
+    if (visible && !s_cam_busy && !s_voice_preview_paused && !cam_voice_needs_priority())
       {
         if (s_cam_stopped)
           {
-            camera_preview_start(CAM_VIEW_X, CAM_VIEW_Y,
-                                 CAM_VIEW_W, CAM_VIEW_H);
-            s_cam_stopped = false;
+            if(camera_preview_start_rgb(CAM_VIEW_X,CAM_VIEW_Y,CAM_VIEW_W,CAM_VIEW_H)==0)s_cam_stopped=false;
           }
         else
           {
@@ -614,14 +768,7 @@ static void frame_timer_cb(lv_timer_t *timer)
 
 static void cam_on_gallery(lv_event_t *e)
 {
-  (void)e;
-
-#ifdef CONFIG_PLANT_CAMERA_CAPTURE
-  camera_preview_take();        /* 冻结：线程进入空转，不再写 LCD */
-#endif
-
-  ui_app_pop_screen();          /* 弹出本页（延迟删除 → cam_on_delete 停线程） */
-  ui_app_nav_to(PLANT_TAB_DIARY);
+  (void)e;screen_camera_leave_if_active();ui_app_nav_to(PLANT_TAB_DIARY);
 }
 
 /* 右键（重来）：重新取景 —— 清掉上一轮状态并重启实时预览。
@@ -645,12 +792,12 @@ static void cam_on_retry(lv_event_t *e)
 #  endif
 
   camera_preview_take();
-  camera_preview_start(CAM_VIEW_X, CAM_VIEW_Y, CAM_VIEW_W, CAM_VIEW_H);
+  camera_preview_start_rgb(CAM_VIEW_X, CAM_VIEW_Y, CAM_VIEW_W, CAM_VIEW_H);
   s_cam_stopped = false;
 
   if (s_status_label != NULL)
     {
-      lv_label_set_text(s_status_label, "AI识别中");
+      lv_label_set_text(s_status_label, "AI就绪");
     }
 #endif
 }
@@ -662,12 +809,8 @@ static void cam_on_retry(lv_event_t *e)
 lv_obj_t *screen_camera_create(void)
 {
   lv_obj_t *scr = lv_obj_create(lv_screen_active());
-  lv_obj_t *top;
   lv_obj_t *back;
-  lv_obj_t *title;
   lv_obj_t *ai_tag;
-  lv_obj_t *viewfinder;
-  lv_obj_t *viewport;
   lv_obj_t *ctl;
   lv_obj_t *btn;
   lv_obj_t *shoot;
@@ -675,13 +818,24 @@ lv_obj_t *screen_camera_create(void)
   lv_obj_remove_style_all(scr);
   lv_obj_set_size(scr, 480, 320);
   lv_obj_remove_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_bg_color(scr, lv_color_hex(TP_CLR_CAMERA_BG), 0);
-  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+  /* v160：页面背景改为透明，并在取景框四周显式铺 4 块背景。
+   * 原因：取景框是相机线程直写 LCD 的，LVGL 不知道 —— 只要 LVGL 重画页面
+   * 背景（例如帧计数标签每 500ms 更新、或任何页内对象变化），就会把取景框
+   * 那块一起刷成背景色。两者交替刷屏正是"油膜横扫/闪烁/黑屏"的真因：
+   *  - 预览连续写（7fps）时多数抢赢 → 可见但伴随错位带；
+   *  - 预览低频写（快照模式）时 LVGL 抢赢 → 取景框被刷黑。
+   * 让 LVGL 完全不绘制取景框区域后，预览写进去的内容不再被覆盖。 */
+
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_TRANSP, 0);
 
 #ifdef CONFIG_PLANT_CAMERA_CAPTURE
   /* ⚠️ 防残留：上次会话（页面销毁时 worker 未完成）可能留下 pending，
    * 新建页面时必须清掉，否则一进页面就跳诊断页。 */
 
+  s_cam_first_frame_ready = false;
+  s_cam_was_visible = false;
+  s_cam_enter_t0 = cam_now_ms();
   s_ai_pending = false;
   s_ai_failed = false;
   s_ai_error[0] = '\0';
@@ -691,85 +845,79 @@ lv_obj_t *screen_camera_create(void)
   s_ai_diag.health_score = -1;
   s_cam_stopped = false;
   s_cam_busy = false;
+
+#  ifdef CONFIG_PLANT_AI_MODULE
+  pokedex_preload();        /* 图鉴模式：进页即备货，快门秒回 */
+#  endif
 #endif
 
-  /* ── 顶栏（34）：✕ 返回 + 📷 拍一拍 + AI 状态胶囊 ───────────── */
+  /* ── 取景框四周的背景（v160）：LVGL 不画取景框本体，只画这四块 ── */
 
-  top = lv_obj_create(scr);
-  lv_obj_remove_style_all(top);
-  lv_obj_set_size(top, 480, 34);
-  lv_obj_set_pos(top, 0, 0);
-  lv_obj_set_style_pad_hor(top, 6, 0);
-  lv_obj_set_style_pad_column(top, 7, 0);
-  lv_obj_set_flex_flow(top, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(top, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
-                        LV_FLEX_ALIGN_CENTER);
+  {
+    static const struct
+    {
+      int x;
+      int y;
+      int w;
+      int h;
+    } k_bg[4] =
+    {
+      { 0, 0, 480, CAM_VIEW_Y },                              /* 上 */
+      { 0, CAM_VIEW_Y + CAM_VIEW_H, 480,
+        CAM_BAR_Y - CAM_VIEW_Y - CAM_VIEW_H },                /* 下（控制栏之上） */
+      { 0, CAM_VIEW_Y, CAM_VIEW_X, CAM_VIEW_H },              /* 左 */
+      { CAM_VIEW_X + CAM_VIEW_W, CAM_VIEW_Y,
+        480 - CAM_VIEW_X - CAM_VIEW_W, CAM_VIEW_H }           /* 右 */
+    };
+    int bi;
 
-  back = lv_button_create(top);
-  lv_obj_remove_style_all(back);
-  lv_obj_set_size(back, 44, 30);
-  lv_obj_set_style_text_color(back, lv_color_hex(0xffffff), 0);
-  lv_obj_set_style_text_font(back, TP_FONT_TITLE, 0);
-  theme_btn_set_text(back, LV_SYMBOL_CLOSE);
-  lv_obj_add_event_cb(back, cam_on_back, LV_EVENT_CLICKED, NULL);
+    for (bi = 0; bi < 4; bi++)
+      {
+        if (k_bg[bi].w <= 0 || k_bg[bi].h <= 0)
+          {
+            continue;
+          }
 
-  title = lv_label_create(top);
-  lv_label_set_text(title, IC_CAMERA " 拍一拍");
-  lv_obj_set_style_text_font(title, TP_FONT_TITLE, 0);
-  lv_obj_set_style_text_color(title, lv_color_hex(0xffffff), 0);
+        lv_obj_t *bg = lv_obj_create(scr);
 
-  btn = lv_obj_create(top);          /* 撑开：把 AI 胶囊顶到最右 */
-  lv_obj_remove_style_all(btn);
-  lv_obj_set_size(btn, 4, 4);
-  lv_obj_set_flex_grow(btn, 1);
+        lv_obj_remove_style_all(bg);
+        lv_obj_set_size(bg, k_bg[bi].w, k_bg[bi].h);
+        lv_obj_set_pos(bg, k_bg[bi].x, k_bg[bi].y);
+        lv_obj_set_style_bg_color(bg, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(bg, LV_OPA_COVER, 0);
+        lv_obj_remove_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_remove_flag(bg, LV_OBJ_FLAG_CLICKABLE);
+      }
+  }
 
-  ai_tag = lv_label_create(top);
-  lv_label_set_text(ai_tag, "AI识别中");
-  lv_obj_set_style_text_font(ai_tag, TP_FONT_CAPTION, 0);
-  lv_obj_set_style_text_color(ai_tag, lv_color_hex(0x34d399), 0);
-  lv_obj_set_style_bg_color(ai_tag, lv_color_hex(0x14333a), 0);
-  lv_obj_set_style_bg_opa(ai_tag, LV_OPA_COVER, 0);
-  lv_obj_set_style_radius(ai_tag, 8, 0);
-  lv_obj_set_style_pad_hor(ai_tag, 9, 0);
-  lv_obj_set_style_pad_ver(ai_tag, 3, 0);
-  s_status_label = ai_tag;
+  /* ── 取景框本体（80,8,320,240）由摄像头线程直写；底部 64px 控制栏 ── */
 
-  /* ── 取景区（202）：外层深色圆角 + 内层 3px 绿框 ─────────────
-   * 绿框内部 (33,45,414,184) 只给直写预览用，不放任何 LVGL 对象。 */
-
-  viewfinder = lv_obj_create(scr);
-  lv_obj_remove_style_all(viewfinder);
-  lv_obj_set_size(viewfinder, 452, 202);
-  lv_obj_set_pos(viewfinder, 14, 36);
-  lv_obj_set_style_radius(viewfinder, TP_RADIUS_TILE, 0);
-  lv_obj_set_style_clip_corner(viewfinder, true, 0);
-  lv_obj_set_style_bg_color(viewfinder, lv_color_hex(0x1e293b), 0);
-  lv_obj_set_style_bg_opa(viewfinder, LV_OPA_COVER, 0);
-  lv_obj_set_style_bg_grad_color(viewfinder, lv_color_hex(0x334155), 0);
-  lv_obj_set_style_bg_grad_dir(viewfinder, LV_GRAD_DIR_VER, 0);
-
-  viewport = lv_obj_create(scr);
-  lv_obj_remove_style_all(viewport);
-  lv_obj_set_size(viewport, 420, 190);
-  lv_obj_set_pos(viewport, 30, 42);
-  lv_obj_set_style_border_width(viewport, 3, 0);
-  lv_obj_set_style_border_color(viewport, lv_color_hex(0x34d399), 0);
-  lv_obj_set_style_border_side(viewport, LV_BORDER_SIDE_FULL, 0);
-  lv_obj_set_style_radius(viewport, TP_RADIUS_SMALL, 0);
-  lv_obj_set_style_bg_color(viewport, lv_color_hex(TP_CLR_CAMERA_BG), 0);
-  lv_obj_set_style_bg_opa(viewport, LV_OPA_COVER, 0);
-
-  /* ── 控件行（82）：相框（成长日记） / 拍照 / 重来 ───────────── */
+  s_status_label = NULL;
 
   ctl = lv_obj_create(scr);
   lv_obj_remove_style_all(ctl);
-  lv_obj_set_size(ctl, 480, 82);
-  lv_obj_set_pos(ctl, 0, 238);
+  lv_obj_set_size(ctl, 480, CAM_BAR_H);
+  lv_obj_set_pos(ctl, 0, CAM_BAR_Y);
+  /* v186：还原 v166 浮动按钮（无底栏背景，相机从缝隙透出）。
+   * 油膜已由 v184 分片写 + v185 短帧不上屏解决，不再需要整条遮罩。 */
+  lv_obj_remove_flag(ctl, LV_OBJ_FLAG_CLICKABLE);
+
+  back = lv_button_create(ctl);
+  lv_obj_remove_style_all(back);
+  lv_obj_set_size(back, 36, 36);
+  lv_obj_set_pos(back, 6, 2);
+  lv_obj_set_style_radius(back, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_color(back, lv_color_hex(0x202a3b), 0);
+  lv_obj_set_style_bg_opa(back, LV_OPA_COVER, 0);
+  lv_obj_set_style_text_color(back, lv_color_hex(0xe2e8f0), 0);
+  lv_obj_set_style_text_font(back, TP_ICON_M, 0);
+  theme_btn_set_text(back, LV_SYMBOL_CLOSE);
+  lv_obj_add_event_cb(back, cam_on_back, LV_EVENT_CLICKED, NULL);
 
   btn = lv_button_create(ctl);
   lv_obj_remove_style_all(btn);
-  lv_obj_set_size(btn, TP_TOUCH_MIN + 2, TP_TOUCH_MIN + 2);
-  lv_obj_set_pos(btn, 66, 16);
+  lv_obj_set_size(btn, 36, 36);
+  lv_obj_set_pos(btn, 50, 2);
   lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(btn, lv_color_hex(0x202a3b), 0);
   lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
@@ -778,14 +926,27 @@ lv_obj_t *screen_camera_create(void)
   theme_btn_set_text(btn, IC_ALBUM);
   lv_obj_add_event_cb(btn, cam_on_gallery, LV_EVENT_CLICKED, NULL);
 
+  ai_tag = lv_label_create(ctl);
+  lv_label_set_text(ai_tag, "AI就绪");
+  lv_obj_set_size(ai_tag, 96, 32);
+  lv_obj_set_pos(ai_tag, 272, 4);
+  lv_obj_set_style_text_font(ai_tag, TP_FONT_CAPTION, 0);
+  lv_obj_set_style_text_color(ai_tag, lv_color_hex(0x34d399), 0);
+  lv_obj_set_style_text_align(ai_tag, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_bg_color(ai_tag, lv_color_hex(0x14333a), 0);
+  lv_obj_set_style_bg_opa(ai_tag, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(ai_tag, 8, 0);
+  lv_obj_set_style_pad_all(ai_tag, 4, 0);
+  s_status_label = ai_tag;
+
   shoot = lv_button_create(ctl);
   lv_obj_remove_style_all(shoot);
-  lv_obj_set_size(shoot, 60, 60);
-  lv_obj_set_pos(shoot, 210, 11);
+  lv_obj_set_size(shoot, 36, 36);
+  lv_obj_set_pos(shoot, 222, 2);
   lv_obj_set_style_radius(shoot, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(shoot, lv_color_hex(0xffffff), 0);
   lv_obj_set_style_bg_opa(shoot, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(shoot, 4, 0);
+  lv_obj_set_style_border_width(shoot, 3, 0);
   lv_obj_set_style_border_color(shoot, lv_color_hex(0x34d399), 0);
   lv_obj_set_style_border_side(shoot, LV_BORDER_SIDE_FULL, 0);
   lv_obj_set_style_text_color(shoot, lv_color_hex(TP_CLR_GREEN), 0);
@@ -795,8 +956,8 @@ lv_obj_t *screen_camera_create(void)
 
   btn = lv_button_create(ctl);
   lv_obj_remove_style_all(btn);
-  lv_obj_set_size(btn, TP_TOUCH_MIN + 2, TP_TOUCH_MIN + 2);
-  lv_obj_set_pos(btn, 364, 16);
+  lv_obj_set_size(btn, 36, 36);
+  lv_obj_set_pos(btn, 438, 2);
   lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(btn, lv_color_hex(0x202a3b), 0);
   lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
@@ -804,6 +965,17 @@ lv_obj_t *screen_camera_create(void)
   lv_obj_set_style_text_font(btn, TP_ICON_M, 0);
   theme_btn_set_text(btn, IC_RETRY);
   lv_obj_add_event_cb(btn, cam_on_retry, LV_EVENT_CLICKED, NULL);
+
+  /* v166：把控件的屏幕矩形注册给相机线程（写屏时让位）。
+   * 坐标 = 上面控件的局部坐标 + ctl 原点 (0, CAM_BAR_Y)，
+   * 改控件位置/尺寸时必须一起改（否则画面会啧掉控件）。 */
+
+  camera_preview_mask_clear();
+  camera_preview_mask_add(6,   CAM_BAR_Y + 2, 36, 36, 18);   /* 返回 */
+  camera_preview_mask_add(50,  CAM_BAR_Y + 2, 36, 36, 18);   /* 相册 */
+  camera_preview_mask_add(222, CAM_BAR_Y + 2, 36, 36, 18);   /* 快门 */
+  camera_preview_mask_add(272, CAM_BAR_Y + 4, 96, 32,  8);   /* 状态 */
+  camera_preview_mask_add(438, CAM_BAR_Y + 2, 36, 36, 18);   /* 重来 */
 
 #ifdef CONFIG_PLANT_CAMERA_CAPTURE
   /* 手机相机式预览（直写 LCD，= plant cam preview 的逻辑）：
@@ -814,29 +986,28 @@ lv_obj_t *screen_camera_create(void)
    * 避免与 DVP 抢线），再挂起手动读；随后 camera_init 把引脚配成 DVP 输入 */
 
 #ifdef CONFIG_PLANT_SOIL_SENSOR
-  sensor_service_stop();
+  /* A bound cloud reader never touches the camera's shared UART pins. */
+  if (!server_bridge_cloud_soil_enabled()) sensor_service_stop();
   soil_sensor_set_paused(true);
 #endif
 
   if (camera_init() == 0)
     {
-      /* 每次都调 camera_mode_preview()：已配置且已在预览模式 → 零开销
-       * 立即返回；摄像头被 camera_shutdown() 软复位过（上次离页时）→
-       * 这里会自动重跑完整 RGB565 配置（含 1s 收敛等待），
-       * 保证第 2、3… 次进页面画面依然正常。 */
+      /* 高清取景：线程内部配置 2048x1536 JPEG，持续解码/直写 LCD
+       * （解码不过即重抓，只显示完整帧）。预览帧同时保留为快门要
+       * 上传的原始 JPEG。 */
 
-      (void)camera_mode_preview();
+      camera_preview_start_rgb(CAM_VIEW_X, CAM_VIEW_Y,
+                              CAM_VIEW_W, CAM_VIEW_H);
 
-      camera_preview_start(CAM_VIEW_X, CAM_VIEW_Y,
-                           CAM_VIEW_W, CAM_VIEW_H);
-
-      /* 帧计数（调试辅助）：放在控件行左侧空白处，不进取景区 */
+      /* 帧计数仍保留用于调试和预览恢复逻辑，但不在大画面上显示。 */
 
       s_frame_label = lv_label_create(scr);
       lv_label_set_text(s_frame_label, "帧 0");
       lv_obj_set_style_text_font(s_frame_label, TP_FONT_CAPTION, 0);
       lv_obj_set_style_text_color(s_frame_label, lv_color_hex(0x475569), 0);
-      lv_obj_set_pos(s_frame_label, 6, 271);
+      lv_obj_set_pos(s_frame_label, 0, 0);
+      lv_obj_add_flag(s_frame_label, LV_OBJ_FLAG_HIDDEN);
 
       if (s_frame_timer == NULL)
         {
@@ -859,6 +1030,83 @@ lv_obj_t *screen_camera_create(void)
   /* 页面销毁（返回）时停止预览线程 */
 
   lv_obj_add_event_cb(scr, cam_on_delete, LV_EVENT_DELETE, NULL);
+  ++s_cam_generation;
+  s_cam_page_active = true;
 
   return scr;
+}
+
+/* 外部（CLI/导航）切屏时调用：若拍照页仍激活则正常弹出，
+ * 走 cam_on_delete → camera_preview_stop + camera_shutdown。
+ * 否则预览线程会继续往新页面上刷相机画面（实测"切首页后画面异常"）。 */
+
+void screen_camera_leave_if_active(void)
+{
+  if (s_cam_page_active)
+    {
+      s_cam_page_active = false;
+
+      /* v175：同步冻结再切页 —— 否则预览线程会把相机画面盖到新页面上 */
+      camera_preview_take();
+
+      ui_app_pop_screen();
+    }
+}
+
+/* Called only by the LVGL owner. Preview blits otherwise compete with
+ * speech DMA/network playback on this single-core device. */
+void screen_camera_voice_speech_pause(bool speaking)
+{
+#ifdef CONFIG_PLANT_CAMERA_CAPTURE
+  speaking = speaking && cam_voice_needs_priority();
+  if(!s_cam_page_active||s_cam_stopped||s_cam_busy||s_shoot_worker_running){s_voice_preview_paused=false;return;}
+  /* Page creation starts DVP before LVGL commits the new page. Wait for
+   * its visible refresh epoch to reach LCD, not merely a captured frame. */
+  if(!s_cam_first_frame_ready && s_cam_was_visible && camera_preview_refresh_complete()){
+    s_cam_first_frame_ready=true;
+    printf("[Perf][Cam] first preview frame %lu ms voice_state=%d\n",
+           (unsigned long)(cam_now_ms()-s_cam_enter_t0),voice_service_get_state());
+  }
+  if(speaking && !s_cam_first_frame_ready)return;
+  if(s_voice_preview_paused==speaking)return;
+  s_voice_preview_paused=speaking;
+  if(speaking){
+    camera_preview_take();
+    /* Freezing LCD writes alone leaves rolling DVP DMA and its interrupts
+     * active. Stop the preview owner while the microphone/speaker needs
+     * the shared CPU and memory bus; retain the last displayed frame. */
+    camera_preview_stop();
+  }else{
+    int ret=camera_preview_start_rgb(CAM_VIEW_X,CAM_VIEW_Y,CAM_VIEW_W,CAM_VIEW_H);
+    if(ret<0){s_cam_stopped=true;printf("[Cam] preview resume deferred=%d\n",ret);}
+  }
+#else
+  (void)speaking;
+#endif
+}
+
+int screen_camera_voice_shoot(void)
+{
+#ifdef CONFIG_PLANT_CAMERA_CAPTURE
+  if(!s_cam_page_active)return -ENOENT;
+  if(s_cam_busy||s_shoot_worker_running)return -EBUSY;
+  if(!camera_preview_get_frame())return -EAGAIN;
+  cam_on_shoot(NULL);
+  return s_shoot_worker_running?0:-EAGAIN;
+#else
+  return -ENODEV;
+#endif
+}
+
+bool screen_camera_power_active(void){return s_cam_page_active;}
+int screen_camera_voice_busy(void){return s_shoot_worker_running||s_cam_busy;}
+
+bool screen_camera_voice_visible(void)
+{
+#ifdef CONFIG_PLANT_CAMERA_CAPTURE
+  return s_cam_page_active && s_frame_label &&
+    !lv_obj_has_flag(lv_obj_get_parent(s_frame_label),LV_OBJ_FLAG_HIDDEN);
+#else
+  return false;
+#endif
 }

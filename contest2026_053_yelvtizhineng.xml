@@ -15,6 +15,7 @@
       因此映射到 apps/plant-companion，clone 后无需改动任何路径即可编译。
     -->
     <linkfile src="app/plant-companion" dest="apps/plant-companion"/>
+    <linkfile src="board/box/configs/contest_v239" dest="nuttx/boards/xtensa/esp32s3/esp32s3-box/configs/contest_v239"/>
     <!-- Wireless soil node: independent ESP32-WROOM-32E target. -->
     <linkfile src="app/soil-node" dest="apps/soil-node"/>
     <linkfile src="board/soil-node/configs/soilnode" dest="nuttx/boards/xtensa/esp32/esp32-devkitc/configs/soilnode"/>

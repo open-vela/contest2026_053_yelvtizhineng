@@ -463,6 +463,7 @@ int wifi_manager_disconnect(void)
 
 int wifi_manager_reconnect_saved(void)
 {
+  static int s_heal_fails;
   char ssid[33];
   char pwd[65];
   int ret;
@@ -480,11 +481,54 @@ int wifi_manager_reconnect_saved(void)
   strncpy(pwd, g_password, sizeof(pwd) - 1);
   pwd[sizeof(pwd) - 1] = '\0';
 
+  /* 2026-09-27 (v54): 连续自愈失败时升级手段 —— ifdown/ifup 重启无线
+   * 驱动。现场观察：AP 关联连续失败（"关联=0"）后 esp32 驱动会卡在
+   * "STA is connecting" 态，wapi disconnect 清不掉，之后每次关联都
+   * 失败，只有重启驱动（或整板复位）能恢复。这里失败两轮就先弹一次
+   * 驱动再连，免掉用户断电重启。 */
+
+  if (s_heal_fails >= 2)
+    {
+      FAR char *argv_if[3];
+      pid_t if_pid;
+      int if_status;
+
+      printf("[WIFI] 自愈连续失败 %d 次，重启无线驱动\n", s_heal_fails);
+
+      argv_if[0] = "ifdown";
+      argv_if[1] = "wlan0";
+      argv_if[2] = NULL;
+      if (posix_spawn(&if_pid, "ifdown", NULL, NULL, argv_if, NULL) == 0)
+        {
+          waitpid(if_pid, &if_status, 0);
+        }
+
+      usleep(1000 * 1000);
+
+      argv_if[0] = "ifup";
+      if (posix_spawn(&if_pid, "ifup", NULL, NULL, argv_if, NULL) == 0)
+        {
+          waitpid(if_pid, &if_status, 0);
+        }
+
+      usleep(1000 * 1000);
+      s_heal_fails = 0;
+    }
+
   printf("[WIFI] 网络不通，自动重连 %s\n", ssid);
 
   pthread_mutex_lock(&g_op_lock);
   ret = wifi_connect_locked(ssid, pwd);
   pthread_mutex_unlock(&g_op_lock);
+
+  if (ret == 0)
+    {
+      s_heal_fails = 0;
+    }
+  else
+    {
+      s_heal_fails++;
+    }
 
   return ret;
 }

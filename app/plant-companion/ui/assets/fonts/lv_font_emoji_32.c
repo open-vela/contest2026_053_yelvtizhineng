@@ -2433,4 +2433,3 @@ lv_font_t lv_font_emoji_32 = {
 
 
 #endif /*#if LV_FONT_EMOJI_32*/
-

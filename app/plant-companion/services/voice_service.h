@@ -13,6 +13,9 @@
 #ifndef __PLANT_SERVICES_VOICE_SERVICE_H
 #define __PLANT_SERVICES_VOICE_SERVICE_H
 
+#include <stdbool.h>
+#include "../ai_module/ai_voice/ai_voice.h"
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -54,6 +57,16 @@ int voice_service_get_state(void);
 
 /** 是否有一轮会话正在跑（控制台 plant voice talk 回归用） */
 int voice_service_busy(void);
+int voice_service_last_error(void);
+int voice_service_say(const char *text);
+int voice_service_reply_text(const char *text);
+int voice_service_reply_pcm(const int16_t *pcm,size_t samples);
+int voice_service_background_record(ai_voice_stream_cb_t cb,void *arg,int seconds);
+int voice_service_background_monitor(ai_voice_stream_cb_t cb,void *arg,int seconds);
+int voice_service_background_should_stop(void);
+void voice_service_copy_spoken(char *text,size_t capacity);
+/* Explicit maintenance readback; never persist or log ordinary speech. */
+void voice_service_copy_heard(char *text,size_t capacity);
 
 /**
  * ⚠️ 2026-08-31 立即中止进行中的会话（页面销毁时调用）：
@@ -69,6 +82,10 @@ void voice_service_abort(void);
  * 不必重启板卡。放在 ui_task 是因为它最稳且界面就在这里。
  */
 void voice_service_watchdog_poll(void);
+
+/* Unique for each actual playback; zero while idle, thinking or cancelled. */
+uint32_t voice_service_speaking_token(void);
+bool voice_service_abort_playback(uint32_t token);
 
 #ifdef __cplusplus
 }

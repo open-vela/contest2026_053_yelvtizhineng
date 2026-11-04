@@ -60,6 +60,12 @@ app/soil-node/soil_cloud_config.local.h
 # Keep logs/**/*.jsonl trackable: contest AI logs are required.
 !/app/soil-node/certs/isrgrootx1.pem
 
+# Required Espressif speech archives are vendor dependencies, not build output.
+!/app/plant-companion/components/box_phrase/vendor/lib/*.a
+/artifacts/box/*.bin
+/artifacts/box/*.elf
+/artifacts/box/*.map
+
 # Server runtime state and generated FAQ index; source resources remain tracked.
 /server/**/.venv/
 /server/**/venv/

@@ -1,0 +1,6 @@
+=== contest-log-upload validation ===
+Logs dir:       C:\Users\admin\Documents\ChatGPT\植小伴\_out\contest_box_v239_submission_20261104\logs
+Files checked:  16
+Events checked: 51728
+
+✅ ALL OK

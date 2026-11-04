@@ -1,3 +1,4 @@
+#include "../services/handsfree_interrupt_queue.h"
 /****************************************************************************
  * apps/plant-companion/ui/ui_app.c
  *
@@ -19,6 +20,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <stdatomic.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <malloc.h>
@@ -28,19 +31,25 @@
 #include <lvgl/lvgl.h>
 
 #include "ui_app.h"
+#include "screens/screen_camera.h"
+#include "../services/power_service.h"
+#include "../services/ai_service.h"
 #include "screens/screen_home.h"
 #include "screens/screen_data.h"
 #include "screens/screen_tasks.h"
 #include "screens/screen_diary.h"
+#include "screens/screen_voice.h"
 #include "widgets/widget_bottomnav.h"
 #include "theme/theme_plant.h"
 #include "assets/fonts/zh_font.h"
 #include "../services/sensor_service.h"
+#include "../components/camera_capture/camera_capture.h"
 #include "../services/sd_write.h"
 #include "../services/plant_state.h"
 #include "../services/record_service.h"
 #ifdef CONFIG_PLANT_AI_VOICE
 #  include "../services/voice_service.h"
+#  include "../services/handsfree_service.h"
 #endif
 
 #ifdef CONFIG_PLANT_AI_VOICE
@@ -86,6 +95,28 @@ static lv_nuttx_result_t g_ui_result;
 static lv_obj_t *g_screens[PLANT_TAB_COUNT];
 static int g_active_tab = PLANT_TAB_HOME;
 static volatile bool g_ui_running;
+static _Atomic bool g_render_pause_request;
+static _Atomic bool g_render_pause_ack;
+static _Atomic bool g_render_owner_ready;
+static pthread_t g_render_owner;
+
+/* A worker can reserve a short display-quiet window without touching LVGL
+ * objects. The UI acknowledges only between complete rendering passes. */
+int ui_app_render_pause(bool pause)
+{
+  if(!pause){atomic_store(&g_render_pause_request,false);return 0;}
+  if(!g_ui_running)return 0;
+  if(atomic_load(&g_render_owner_ready)&&pthread_equal(pthread_self(),g_render_owner))return -EDEADLK;
+  bool expected=false;
+  if(!atomic_compare_exchange_strong(&g_render_pause_request,&expected,true))return -EBUSY;
+  for(unsigned i=0;i<1000;i++){
+    if(atomic_load(&g_render_pause_ack))return 0;
+    usleep(1000);
+  }
+  atomic_store(&g_render_pause_request,false);
+  return -ETIMEDOUT;
+}
+
 
 /* LVGL 9.2.1 输入设备缺陷规避（2026-09-08 实机 + 模拟手指复现）：
  * 在 LVGL pointer indev 的 CLICKED 事件回调里 lv_obj_delete 当前页面
@@ -101,6 +132,8 @@ static volatile bool g_ui_running;
 
 static lv_obj_t *g_delayed[UI_DELAYED_DEL_MAX];
 static int g_delayed_cnt;
+
+static void ui_sweep_orphans(void);
 
 static void ui_delete_deferred(lv_obj_t *obj)
 {
@@ -132,6 +165,8 @@ static void ui_flush_deferred(void)
     }
 
   g_delayed_cnt = 0;
+
+  ui_sweep_orphans();
 }
 
 /* 调试：plant nav <tab> 跨线程切页请求（-1=无请求）。
@@ -146,6 +181,7 @@ static volatile int g_nav_pending = -1;
  * （LVGL indev 每 ~33ms 读一次，3 次 ≈100ms，低于长按阈值）。 */
 
 static lv_indev_t *g_syn_indev;
+static int ui_capture_ascii_do(void);
 static int g_syn_x;
 static int g_syn_y;
 static volatile int g_syn_press_life;
@@ -153,6 +189,18 @@ static volatile bool g_syn_report_hit;   /* plant tap：命中诊断只报一次
 static volatile int g_syn_left;
 static volatile bool g_syn_busy;
 static volatile int g_syn_done_cnt;
+
+/* Synthetic drag (diagnostic only): inject a press + N moves + release
+ * through the same LVGL pointer indev used by plant tap. */
+
+static volatile bool g_scroll_busy;
+static volatile int g_scroll_step;
+static volatile int g_scroll_steps;
+static volatile bool g_scroll_release;
+static int g_scroll_x;
+static int g_scroll_y;
+static int g_scroll_dx;
+static int g_scroll_dy;
 
 /* Real-touch diag (plant tdiag on|off|now):
  * - driver-side GT911 counters come from board gt911_diag_snapshot()
@@ -188,6 +236,7 @@ static volatile int g_cap_req;
 static volatile int g_cap_done;
 static volatile int g_cap_status;
 static volatile int g_cap_mode;  /* 0=BMP 文件, 1=串口 ASCII */
+static volatile int g_cap_ink;
 static int g_cap_win_x;
 static int g_cap_win_y;
 static int g_cap_win_w;
@@ -251,6 +300,11 @@ static volatile bool g_img_pending;
 static int64_t g_time_unix;         /* 北京时间 unix（抓取时刻基准，已偏移） */
 static clock_t g_tick_at_fetch;     /* 抓取时刻的系统 tick（clock_systime_ticks） */
 static bool g_time_valid;           /* 是否已抓到基准（true 才显示推算时间） */
+int64_t ui_app_unix_time(void)
+{
+  return g_time_valid ? g_time_unix - 28800 +
+      (clock_systime_ticks()-g_tick_at_fetch)/TICK_PER_SEC : 0;
+}
 static char g_time_str[8];          /* "HH:MM"（顶栏显示，worker 每秒推算） */
 static char g_date_str[16];         /* "YYYY-MM-DD"（抓取时更新，阶段 C 用） */
 static volatile bool g_time_pending;
@@ -304,6 +358,34 @@ static void ui_syn_hit_report(void)
 static void ui_syn_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 {
   (void)indev;
+
+  if (g_scroll_busy)
+    {
+      int denom = g_scroll_steps > 0 ? g_scroll_steps : 1;
+
+      data->point.x = g_scroll_x + g_scroll_dx * g_scroll_step / denom;
+      data->point.y = g_scroll_y + g_scroll_dy * g_scroll_step / denom;
+
+      if (!g_scroll_release)
+        {
+          data->state = LV_INDEV_STATE_PRESSED;
+          if (g_scroll_step >= g_scroll_steps)
+            {
+              g_scroll_release = true;
+            }
+          else
+            {
+              g_scroll_step++;
+            }
+        }
+      else
+        {
+          data->state = LV_INDEV_STATE_RELEASED;
+          g_scroll_busy = false;
+        }
+
+      return;
+    }
 
   data->point.x = g_syn_x;
   data->point.y = g_syn_y;
@@ -492,6 +574,12 @@ static void ui_nav_cb(void *user_data, int tab_id)
       sensor_service_read_now();
     }
 
+  /* Tab bodies are entirely different.  Coalesce the complete transition
+   * into one full-screen dirty area so the full-size LVGL buffer produces
+   * one full-frame DMA submission. */
+
+  lv_obj_invalidate(lv_screen_active());
+
   g_memlog_pending_tab = tab_id;
 }
 
@@ -512,6 +600,7 @@ static void *ui_time_worker(void *arg)
   clock_t last_attempt = 0;
   clock_t last_ok = 0;
   clock_t last_hb = 0;
+  unsigned power_hb_failures=0;
   int net_fail = 0;              /* 心跳连续失败次数（网络自愈用） */
   clock_t last_heal = 0;         /* 上次自愈时刻（节流用） */
   int last_epoch = -1;
@@ -541,7 +630,7 @@ static void *ui_time_worker(void *arg)
       else if (!g_time_valid)
         {
           need_fetch = (now - last_attempt) >=
-                       (clock_t)(UI_TIME_RETRY_SEC * TICK_PER_SEC);
+                       (clock_t)((box_power_standby()?60:UI_TIME_RETRY_SEC) * TICK_PER_SEC);
         }
 
       /* ③ 已成功：1h 校准一次（晶振漂移 1h <0.1s，分钟显示无感） */
@@ -583,7 +672,7 @@ static void *ui_time_worker(void *arg)
         {
           clock_t gap = (now - last_hb) / TICK_PER_SEC;
 
-          need_hb = gap >= (clock_t)(hb_ok ? hb_interval : UI_HB_RETRY_SEC);
+          need_hb = gap >= (clock_t)(hb_ok ? hb_interval : box_power_retry_seconds(power_hb_failures,box_power_standby()));
         }
 
       if (need_hb)
@@ -594,6 +683,7 @@ static void *ui_time_worker(void *arg)
           if (server_bridge_heartbeat(&new_interval) == 0)
             {
               hb_ok = true;
+              power_hb_failures=0;
               net_fail = 0;
               if (new_interval > 0)
                 {
@@ -603,6 +693,7 @@ static void *ui_time_worker(void *arg)
           else
             {
               hb_ok = false;
+              if(power_hb_failures<5)power_hb_failures++;
               /* 网络自愈：连着几次都发不出去 → 用保存的凭据重连一次。
                * （板卡"看着连着、其实不通"时的兜底，见 wifi_manager.c
                *   wifi_manager_reconnect_saved 的注释。） */
@@ -620,9 +711,26 @@ static void *ui_time_worker(void *arg)
                       (now - last_heal) >=
                       (clock_t)(UI_NET_HEAL_GAP_SEC * TICK_PER_SEC))
                     {
-                      last_heal = now;
-                      printf("[UI] 网络疑似断了，尝试自动重连\n");
-                      wifi_manager_reconnect_saved();
+                      /* 2026-09-27 (v56): 相机活动中推迟自愈。
+                       * 实测 wapi 重连（posix_spawn + waitpid + 驱动
+                       * ioctl）与相机 DVP DMA 高负载并发时整机死锁
+                       * （无看门狗，静默卡死只能手动复位）。心跳失败
+                       * 在相机页只影响快门上传（会优雅报错重试），
+                       * 退页后再愈。 */
+
+#ifdef CONFIG_PLANT_CAMERA_CAPTURE
+                      if (camera_preview_is_running())
+                        {
+                          last_heal = now;
+                          printf("[UI] 相机使用中，推迟网络自愈\n");
+                        }
+                      else
+#endif
+                        {
+                          last_heal = now;
+                          printf("[UI] 网络疑似断了，尝试自动重连\n");
+                          wifi_manager_reconnect_saved();
+                        }
                     }
                 }
 #endif
@@ -671,6 +779,7 @@ static void *ui_time_worker(void *arg)
 
       for (i = 0; i < UI_TIME_LOOP_SEC && g_ui_running; i++)
         {
+          /* Interrupt ASR has its own queue worker. */
           sleep(1);
         }
     }
@@ -737,6 +846,43 @@ static void ui_stdout_restore(int save, FAR FILE *fp)
     }
 }
 
+extern int board_box_backlight(int percent);
+extern void board_box_amplifier(bool enabled);
+static lv_obj_t *g_power_shield;
+static int g_power_brightness=100;
+static void ui_power_touch(lv_event_t *e)
+{
+ lv_event_code_t c=lv_event_get_code(e);
+ if(c==LV_EVENT_PRESSED)box_power_activity();
+ if(c==LV_EVENT_RELEASED||c==LV_EVENT_PRESS_LOST){
+   if(g_power_shield){lv_obj_delete_async(g_power_shield);g_power_shield=NULL;}
+ }
+}
+static void ui_power_poll(void)
+{
+ unsigned busy=box_power_busy_mask(voice_service_busy(),handsfree_service_hearing(),
+   handsfree_service_interacting(),handsfree_ui_busy(),ai_service_busy(),screen_camera_voice_busy());
+ int pct=box_power_poll(busy);
+ if(!pct&&g_power_brightness!=0){
+   if(screen_camera_power_active())ui_app_voice_root(PLANT_TAB_HOME);
+   if(!g_power_shield){
+     g_power_shield=lv_obj_create(lv_layer_top());
+     lv_obj_remove_style_all(g_power_shield);lv_obj_set_size(g_power_shield,480,320);
+     lv_obj_add_flag(g_power_shield,LV_OBJ_FLAG_CLICKABLE);
+     lv_obj_remove_flag(g_power_shield,LV_OBJ_FLAG_SCROLLABLE);
+     lv_obj_add_event_cb(g_power_shield,ui_power_touch,LV_EVENT_ALL,NULL);
+   }
+ }
+ if(pct!=g_power_brightness){
+   int ret=board_box_backlight(pct);box_power_applied(pct,ret);
+   if(!ret){g_power_brightness=pct;board_box_amplifier(pct!=0);if(pct>0)sensor_service_read_now();printf("[Power] backlight=%d busy=%d\n",pct,busy);}
+ }
+ /* A voice wake removes the shield; a touch wake keeps it through release. */
+ if(pct>0&&g_power_shield&&g_ui_result.indev&&lv_indev_get_state(g_ui_result.indev)!=LV_INDEV_STATE_PRESSED){
+   lv_obj_delete_async(g_power_shield);g_power_shield=NULL;
+ }
+}
+
 /* LVGL 定时器：在 ui_task 上下文刷新当前可见屏（每 500ms） */
 
 extern int gt911_diag_snapshot(uint32_t out[8]);
@@ -758,6 +904,7 @@ static void ui_touch_watch_cb(lv_timer_t *timer)
     {
       lv_point_t pt;
 
+      box_power_activity();
       g_tdiag_lv_press++;
       lv_indev_get_point(g_ui_result.indev, &pt);
       g_tdiag_lv_x = (uint32_t)pt.x;
@@ -834,6 +981,9 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
   /* 先执行延迟删除（上一拍切页/弹回时藏起来的页面，事件派发早已结束） */
 
   ui_flush_deferred();
+  handsfree_ui_poll();
+  ui_power_poll();
+  if(box_power_standby())return;
   ui_memlog_flush_print();
 
   /* SD 卡挂载晚于 UI 启动（实测 [SD] Mounted 在 UI 起来之后），所以 SD 全量
@@ -871,7 +1021,13 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
       g_nav_pending = -1;
       printf("[UI] nav request -> tab %d\n", tab);
       ui_nav_cb(NULL, tab);
-      lv_obj_invalidate(lv_screen_active());
+
+      /* 显示优化①（2026-09-22）：这里原来还有一次整屏 invalidate。
+       * 实测多余——LVGL 对 HIDDEN 标志的增删本身就会 invalidate 该对象
+       * 占据的区域（lv_obj.c: "invalidate the area occupied by the object
+       * before we hide it"），而 Tab 页都是整屏对象，所以整屏早就已经
+       * 脏了。去掉这次重复的 invalidate，少一次脏区并集计算。 */
+
       return;
     }
 
@@ -892,6 +1048,10 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
           g_cap_status = ui_capture_ascii_do();
 
           ui_stdout_restore(asave, afp);
+        }
+      else if (g_cap_mode == 2)
+        {
+          g_cap_status = ui_capture_ascii_do();
         }
       else
         {
@@ -1009,10 +1169,13 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
 #endif
 
 #ifdef CONFIG_PLANT_SYSTEM_MONITOR
-      if (battery_read_pct(&bat) < 0)
-        {
-          bat = -1;
-        }
+      static uint32_t battery_last;static int battery_cached=-1;
+      uint32_t battery_now=lv_tick_get();
+      if(!battery_last||(uint32_t)(battery_now-battery_last)>=30000u){
+        if(battery_read_pct(&battery_cached)<0)battery_cached=-1;
+        battery_last=battery_now;
+      }
+      bat=battery_cached;
 #endif
 
       screen_home_set_status(g_time_valid ? g_time_str : NULL,
@@ -1024,20 +1187,7 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
   switch (g_active_tab)
     {
       case PLANT_TAB_HOME:
-        {
-          struct plant_state_s ps;
-
-          /* 用传感器规则更新健康分/心情（离线） */
-
-          plant_state_update_from_sensor(view.moisture, view.temp,
-                                         view.ec / 1000.0f);
-          plant_state_get(&ps);
-
-          screen_home_refresh(ps.health_score, (int)view.moisture,
-                              (int)view.temp,
-                              (int)(view.ph * 10.0f + 0.5f),
-                              (int)(view.ec + 0.5f), view.valid ? 1 : 0);
-        }
+        /* Home is a companion; observations are shown on the status page. */
         break;
 
       case PLANT_TAB_DATA:
@@ -1276,6 +1426,49 @@ static int ui_capture_ascii_do(void)
 
   src = (const uint8_t *)db.data;
   stride = db.header.stride;
+
+  if (g_cap_mode == 2)
+    {
+      uint32_t ink = 0;
+      uint32_t ink_rows = 0;
+      uint32_t q[4] = {0, 0, 0, 0};
+      int yy;
+
+      for (yy = y0; yy < y0 + h; yy++)
+        {
+          const uint8_t *rowp = src + (size_t)yy * stride + (size_t)x0 * 2u;
+          uint32_t row_ink = 0;
+          int xx;
+
+          for (xx = x0; xx < x0 + w; xx++, rowp += 2)
+            {
+              uint16_t v = (uint16_t)(rowp[0] | (rowp[1] << 8));
+              int r8 = (v >> 8) & 0xf8u;
+              int g8 = (v >> 3) & 0xfcu;
+              int b8 = (v << 3) & 0xf8u;
+              int lum = (r8 * 299 + g8 * 587 + b8 * 114) / 1000;
+
+              if (lum < 210)
+                {
+                  ink++;
+                  row_ink++;
+                }
+            }
+
+          if (row_ink >= 8)
+            {
+              ink_rows++;
+              q[(yy - y0) * 4 / h] += row_ink;
+            }
+        }
+
+      g_cap_ink = (int)ink;
+      printf("[InkA] region=%d,%d %dx%d ink=%u rows=%u q=%u,%u,%u,%u\n",
+             x0, y0, w, h, (unsigned)ink, (unsigned)ink_rows,
+             (unsigned)q[0], (unsigned)q[1], (unsigned)q[2], (unsigned)q[3]);
+      fflush(stdout);
+      return 0;
+    }
 
   hstep = (w > 240) ? 4 : ((w > 120) ? 2 : 1);
   vstep = (h > 160) ? 2 : 1;
@@ -1656,6 +1849,66 @@ static int ui_obj_dump_do(void)
   return 0;
 }
 
+/* 幽灵页清扫（2026-09-26）：lv_screen_active() 的直接子对象必须恰好是
+ * 4 个 Tab 屏 + 二级栈里的页 + 调试图（g_img_test）。历史 bug：诊断
+ * 结果回传后首页出现可点的幽灵层（诊断页 act/go 卡片泄漏在首页上层，
+ * 盖住拍照/浇水/说话按钮），重启才恢复。这里加兜底清扫：凡不在白名单
+ * 里的直接子对象一律删除 —— 任何异常路径都留不下可点击残留。
+ * 只在 ui_task 的刷新定时器里跑（随 ui_flush_deferred，同一安全上下文）。 */
+
+static void ui_sweep_orphans(void)
+{
+  lv_obj_t *scr = lv_screen_active();
+  int cnt;
+  int i;
+  int j;
+
+  if (scr == NULL)
+    {
+      return;
+    }
+
+  cnt = (int)lv_obj_get_child_cnt(scr);
+
+  for (i = cnt - 1; i >= 0; i--)   /* 倒序删，索引不漂移 */
+    {
+      lv_obj_t *child = lv_obj_get_child(scr, (int32_t)i);
+      bool keep = false;
+
+      if (child == NULL || child == g_img_test)
+        {
+          continue;
+        }
+
+      for (j = 0; j < PLANT_TAB_COUNT; j++)
+        {
+          if (child == g_screens[j])
+            {
+              keep = true;
+              break;
+            }
+        }
+
+      if (!keep)
+        {
+          for (j = 0; j < g_secondary_depth; j++)
+            {
+              if (child == g_secondary[j])
+                {
+                  keep = true;
+                  break;
+                }
+            }
+        }
+
+      if (!keep)
+        {
+          printf("[UI] ⚠ 孤儿页面清扫: %p（幽灵层拦截）\n", (void *)child);
+          lv_obj_delete(child);
+        }
+    }
+}
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -1689,9 +1942,7 @@ void ui_app_push_screen(lv_obj_t *scr)
   g_secondary[g_secondary_depth++] = scr;
   lv_obj_remove_flag(scr, LV_OBJ_FLAG_HIDDEN);
 
-  /* 2026-09-11 修复：点说话进入的语音页被上层/残留图层盖住。
-   * 二级页显式提到父对象子链末尾 = 最上面一层，并整屏 invalidate
-   * 强制整屏重绘，确保不被 Tab 页或残留像素压住。 */
+  /* 二级页显式提到父对象子链末尾 = 最上面一层，并合并为整屏一次提交。 */
 
   lv_obj_move_foreground(scr);
   lv_obj_invalidate(lv_screen_active());
@@ -1742,7 +1993,7 @@ void ui_app_pop_screen(void)
         }
     }
 
-  /* 与 push 对称：恢复的页面同样置顶并整屏重绘 */
+  /* 与 push 对称：恢复的页面置顶并整屏提交。 */
 
   lv_obj_invalidate(lv_screen_active());
 }
@@ -1800,6 +2051,11 @@ int ui_app_start(void)
       return -1;
     }
 
+  /* Product pages manage their own scrolling.  Never let a drag scroll the
+   * display root and move an entire page sideways/vertically. */
+
+  lv_obj_remove_flag(lv_screen_active(), LV_OBJ_FLAG_SCROLLABLE);
+
   printf("[UI] LVGL display ready, %dx%d\n",
          lv_display_get_horizontal_resolution(g_ui_result.disp),
          lv_display_get_vertical_resolution(g_ui_result.disp));
@@ -1828,6 +2084,7 @@ int ui_app_start(void)
   else
     {
       printf("[UI] touch indev OK\n");
+      lv_indev_set_scroll_limit(g_ui_result.indev, 3);
     }
 
   /* 设计系统初始化 */
@@ -1917,12 +2174,14 @@ int ui_app_start(void)
   lv_timer_create(ui_touch_watch_cb, 25, NULL);
 
 #ifdef CONFIG_PLANT_AI_VOICE
+  handsfree_service_start();
   lv_timer_create(ui_voice_wd_timer_cb, 1000, NULL);   /* 语音看门狗 */
 #endif
 
   /* ⚠️ 必须先置运行标志再起时间 worker：worker 循环条件读
    * g_ui_running，若在置位前创建会立刻退出（首轮时间抓不到）。 */
 
+  g_render_owner=pthread_self();atomic_store(&g_render_owner_ready,true);
   g_ui_running = true;
 
   /* 自动执行层（2026-09-12）：配置执行引脚为输出并保持关断。
@@ -1964,17 +2223,45 @@ int ui_app_start(void)
 
   {
     int loop_cnt = 0;
+    uint32_t stat_last = lv_tick_get();
+    uint32_t render_sum = 0;
+    uint32_t idle_sum = 0;
 
     while (g_ui_running)
       {
+        if(atomic_load(&g_render_pause_request)){
+          atomic_store(&g_render_pause_ack,true);usleep(1000);continue;
+        }
+        atomic_store(&g_render_pause_ack,false);
+        uint32_t t_start = lv_tick_get();
         uint32_t idle = lv_timer_handler();
+        uint32_t render_ms = lv_tick_get() - t_start;
 
+        render_sum += render_ms;
         idle = idle ? idle : 1;
+        idle_sum += idle;
         usleep(idle * 1000);
 
-        /* loop_cnt kept for future diagnostics (prints removed) */
-
         loop_cnt++;
+
+        {
+          uint32_t now = lv_tick_get();
+
+          if (now - stat_last >= 5000u)
+            {
+              uint32_t el = now - stat_last;
+
+              printf("[UI] 循环 %u 次/%ums = %.1f Hz（渲染均 %u ms, 空闲均 %u ms）\n",
+                     (unsigned)loop_cnt, (unsigned)el,
+                     (double)loop_cnt * 1000.0 / (double)(el ? el : 1),
+                     (unsigned)(render_sum / (loop_cnt ? loop_cnt : 1)),
+                     (unsigned)(idle_sum / (loop_cnt ? loop_cnt : 1)));
+              loop_cnt = 0;
+              render_sum = 0;
+              idle_sum = 0;
+              stat_last = now;
+            }
+        }
       }
   }
 
@@ -2084,6 +2371,36 @@ int ui_app_capture_ascii(void *buf, size_t bufsize,
     }
 
   return g_cap_status;
+}
+
+int ui_app_capture_ink(int x, int y, int w, int h)
+{
+  int i;
+
+  g_cap_win_x = x;
+  g_cap_win_y = y;
+  g_cap_win_w = w;
+  g_cap_win_h = h;
+  g_cap_buf = malloc(480 * 320 * 2u + 512u);
+  if (g_cap_buf == NULL)
+    {
+      return -1;
+    }
+
+  g_cap_bufsize = 480 * 320 * 2u + 512u;
+  g_cap_done = 0;
+  g_cap_status = -1;
+  g_cap_mode = 2;
+  g_cap_req = 1;
+
+  for (i = 0; i < 1200 && !g_cap_done; i++)
+    {
+      usleep(50 * 1000);
+    }
+
+  free(g_cap_buf);
+  g_cap_buf = NULL;
+  return (g_cap_status == 0) ? g_cap_ink : -1;
 }
 
 /* 调试对象树转储（plant objs）：请求 ui_task 遍历当前可见屏并打印
@@ -2211,6 +2528,46 @@ int ui_app_tap_at(int x, int y)
   return 0;
 }
 
+int ui_app_scroll_at(int x, int y, int dy, int steps)
+{
+  if (g_syn_indev == NULL)
+    {
+      return -1;
+    }
+
+  if (g_syn_press_life > 0 || g_scroll_busy)
+    {
+      return -2;
+    }
+
+  if (steps < 2)
+    {
+      steps = 2;
+    }
+
+  if (x < 0) x = 0;
+  if (y < 0) y = 0;
+  if (x > 479) x = 479;
+  if (y > 319) y = 319;
+
+  g_scroll_x = x;
+  g_scroll_y = y;
+  g_scroll_dx = 0;
+  g_scroll_dy = dy;
+  g_scroll_step = 0;
+  g_scroll_steps = steps;
+  g_scroll_release = false;
+  g_scroll_busy = true;
+  printf("[SynScroll] start at %d,%d dy=%d steps=%d\n", x, y, dy, steps);
+  fflush(stdout);
+  return 0;
+}
+
+int ui_app_scroll_left(void)
+{
+  return g_scroll_busy ? (g_scroll_steps - g_scroll_step + 1) : -1;
+}
+
 /* plant tdiag on|off|now: mode=1 periodic, mode=0 stop, mode=2 once */
 
 void ui_app_tdiag_ctl(int mode)
@@ -2268,4 +2625,70 @@ int ui_app_capture_to_file(const char *path, void *buf, size_t bufsize)
     }
 
   return g_cap_status;
+}
+
+/* Finish voice-triggered page cleanup while still on the LVGL owner,
+ * before acknowledging the action to a worker that may start new speech.
+ * Touch-event handlers retain their normal deferred deletion semantics. */
+void ui_app_voice_finish_navigation(void)
+{
+  ui_flush_deferred();
+}
+
+/* Invoked exclusively by the LVGL action queue. */
+void ui_app_voice_root(int tab)
+{
+  camera_preview_take();
+  while(g_secondary_depth>0)ui_app_pop_screen();
+  ui_flush_deferred();
+  ui_nav_cb(NULL,tab);
+}
+
+/* Only an in-use data/diary root is retained under a conversation. Explicit
+ * tab navigation still destroys it through ui_nav_cb. Other roots keep the
+ * existing home-first behavior, including camera and memory-heavy tasks. */
+static lv_obj_t *g_voice_chat_root;
+static int g_voice_chat_origin = -1;
+static void ui_voice_chat_deleted(lv_event_t *e)
+{
+  if (lv_event_get_target(e) == g_voice_chat_root)
+    {g_voice_chat_root = NULL; g_voice_chat_origin = -1;}
+}
+void ui_app_voice_open_chat(void)
+{
+  if (g_secondary_depth > 0 &&
+      g_secondary[g_secondary_depth - 1] == g_voice_chat_root)return;
+  int origin = g_active_tab;
+  bool preserve = g_secondary_depth == 0 &&
+                  (origin == PLANT_TAB_DATA || origin == PLANT_TAB_DIARY);
+  if (!preserve)ui_app_voice_root(PLANT_TAB_HOME);
+  lv_obj_t *scr = screen_voice_create();
+  if (scr == NULL)return;
+  g_voice_chat_root = scr;g_voice_chat_origin = preserve ? origin : -1;
+  lv_obj_add_event_cb(scr, ui_voice_chat_deleted, LV_EVENT_DELETE, NULL);
+  ui_app_push_screen(scr);
+  printf("[HFContext] chat_open origin=%d preserved=%d depth=%d\n",
+         origin, preserve, g_secondary_depth);
+}
+bool ui_app_voice_close_chat(bool only_paging_context)
+{
+  bool closed = false;
+  if (g_secondary_depth > 0 && g_voice_chat_root != NULL &&
+      g_secondary[g_secondary_depth - 1] == g_voice_chat_root &&
+      (!only_paging_context || g_voice_chat_origin == PLANT_TAB_DATA ||
+       g_voice_chat_origin == PLANT_TAB_DIARY))
+    {
+      ui_app_pop_screen();closed = true;
+      printf("[HFContext] chat_close tab=%d depth=%d paging=%d\n",
+             g_active_tab, g_secondary_depth, only_paging_context);
+    }
+  if (only_paging_context)
+    printf("[HFContext] paging tab=%d depth=%d\n",g_active_tab,g_secondary_depth);
+  return closed;
+}
+void ui_app_voice_back_to_parent(void)
+{
+  if (g_secondary_depth > 0)ui_app_pop_screen();
+  else ui_app_voice_root(PLANT_TAB_HOME);
+  printf("[HFContext] parent tab=%d depth=%d\n",g_active_tab,g_secondary_depth);
 }

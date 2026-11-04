@@ -1495,4 +1495,3 @@ lv_font_t lv_font_emoji_24 = {
 
 
 #endif /*#if LV_FONT_EMOJI_24*/
-

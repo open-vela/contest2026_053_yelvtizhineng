@@ -46,7 +46,7 @@ typedef struct afe_fetch_result_t {
     int ret_value;           // the return state of fetch function
     int16_t *raw_data;       // the multi-channel output data of audio.
     int raw_data_channels;   // the channel number of raw data
-    float ringbuff_free_pct; // the percent of ringbuff free size. if the value is larger than 0.5, it means the ringbuff is buzy. 
+    float ringbuff_free_pct; // the percent of ringbuff free size. if the value is larger than 0.5, it means the ringbuff is buzy.
     void *reserved;          // reserved for future use
 } afe_fetch_result_t;
 
@@ -132,8 +132,8 @@ typedef afe_fetch_result_t *(*esp_afe_sr_iface_op_fetch_with_delay_t)(esp_afe_sr
 typedef int (*esp_afe_sr_iface_op_reset_buffer_t)(esp_afe_sr_data_t *afe);
 
 /**
- * @brief Set wakenet detection threshold 
- * 
+ * @brief Set wakenet detection threshold
+ *
  * @param afe           The AFE_SR object to query
  * @param index         The wakenet index, just support 1: wakenet1 or  2: wakenet2
  * @param threshold     The wakenet detection threshold, the value is between 0.4 and 0.9999.
@@ -143,7 +143,7 @@ typedef int (*esp_afe_sr_iface_op_set_wakenet_threshold_t)(esp_afe_sr_data_t *af
 
 /**
  * @brief Reset wakenet detection threshold to inital state
- * 
+ *
  * @param afe           The AFE_SR object to query
  * @param index         The wakenet index, just support 1: wakenet1 or  2: wakenet2
  * @return             -1: fail, 1: success

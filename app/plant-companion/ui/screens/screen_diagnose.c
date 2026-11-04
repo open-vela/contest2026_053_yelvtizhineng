@@ -29,6 +29,9 @@
  * Private Data
  ****************************************************************************/
 
+static bool s_diag_active;
+static bool s_diary_saved;
+static void diag_deleted(lv_event_t *e){(void)e;s_diag_active=false;}
 static lv_obj_t *s_name;
 static lv_obj_t *s_meta;
 static lv_obj_t *s_match;
@@ -40,6 +43,7 @@ static lv_obj_t *s_diag_desc;
 static lv_obj_t *s_advice;
 static lv_obj_t *s_diary_btn_label;
 static char      s_keep_name[96];   /* 保存本次识别结果，供"存日记"用 */
+static int       s_keep_match;
 
 /****************************************************************************
  * Private Functions
@@ -58,16 +62,22 @@ static void diag_on_save_diary(lv_event_t *e)
   struct record_diary_s d;
 
   (void)e;
+  if(!s_diag_active||s_diary_saved||!s_keep_name[0]||!strcmp(s_keep_name,"识别失败"))return;
 
   memset(&d, 0, sizeof(d));
   d.color = 0x22c55e;
   d.day_offset = 0;
   snprintf(d.title, sizeof(d.title), "拍到了%s",
            s_keep_name[0] != '\0' ? s_keep_name : "一株植物");
-  snprintf(d.detail, sizeof(d.detail), "AI识别记录");
+  snprintf(d.detail, sizeof(d.detail), "AI参考识别 %d%%，%s",s_keep_match,s_keep_match<80?"待确认":"仅供参考");
 
-  record_diary_add(&d);
-  record_diary_save();
+  int save_result=record_diary_add(&d);
+  printf("[DiagSave] persist=%d count=%d\n",save_result,record_diary_get_count());
+  if(save_result<0){
+    if(s_diary_btn_label)lv_label_set_text(s_diary_btn_label,"没有保存成功，请再试一次");
+    return;
+  }
+  s_diary_saved=true;
 
   if (s_diary_btn_label != NULL)
     {
@@ -90,6 +100,8 @@ lv_obj_t *screen_diagnose_create(void)
   lv_obj_t *box;
   lv_obj_t *l;
 
+  s_diary_saved=false;
+  s_diag_active=true;lv_obj_add_event_cb(scr,diag_deleted,LV_EVENT_DELETE,NULL);
   s_keep_name[0] = '\0';
 
   lv_obj_remove_style_all(scr);
@@ -332,6 +344,7 @@ void screen_diagnose_set(lv_obj_t *scr,
 {
   char buf[192];
   (void)scr;
+  s_keep_match=match<0?0:match>100?100:match;
 
   if (s_name != NULL)
     {
@@ -413,4 +426,18 @@ void screen_diagnose_set(lv_obj_t *scr,
     {
       zh_label_set_text_safe(s_advice, advice != NULL ? advice : "");
     }
+}
+
+int screen_diagnose_voice_save(void)
+{
+ printf("[DiagSave] active=%d saved=%d name=%s\n",s_diag_active,s_diary_saved,s_keep_name);
+ if(!s_diag_active||!s_keep_name[0]||!strcmp(s_keep_name,"识别失败"))return -1;
+ diag_on_save_diary(NULL);return s_diary_saved?0:-2;
+}
+int screen_diagnose_voice_result(char *text,size_t size)
+{
+ if(!s_diag_active)return -1;
+ const char *name=s_name?lv_label_get_text(s_name):"";
+ const char *prefix=!strcmp(s_keep_name,"识别失败")?"":s_keep_match<80?"我还不太确定，可能是":"看起来像";
+ snprintf(text,size,"%s%s。%s。%s。",prefix,name,s_diag_desc?lv_label_get_text(s_diag_desc):"",s_advice?lv_label_get_text(s_advice):"");return 0;
 }

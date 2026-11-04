@@ -25,6 +25,9 @@ extern "C"
  * @return 屏幕对象（挂到 lv_screen_active()）
  */
 lv_obj_t *screen_data_create(plant_nav_cb_t cb, void *user_data);
+int screen_data_voice_view(int mode,int metric);
+int screen_data_voice_back(void);
+int screen_data_voice_step(int delta,char *text,size_t size);
 
 /** 刷新数据页（由 sensor_service 回调/UI 定时器驱动） */
 void screen_data_refresh(const struct sensor_view_s *view,

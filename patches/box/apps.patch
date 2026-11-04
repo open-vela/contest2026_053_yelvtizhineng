@@ -1,0 +1,66 @@
+diff --git a/graphics/lvgl/Make.defs b/graphics/lvgl/Make.defs
+--- a/graphics/lvgl/Make.defs
++++ b/graphics/lvgl/Make.defs
+@@ -31,6 +31,14 @@
+ CFLAGS += ${INCDIR_PREFIX}$(APPDIR)/graphics/lvgl/lvgl
+ CXXFLAGS += ${INCDIR_PREFIX}$(APPDIR)/graphics/lvgl/lvgl
+ 
++# 2026-09-10 实测坑：字体 .c 一旦重编就编不过——NuttX 的 Kconfig 把
++# LV_ATTRIBUTE_LARGE_CONST / LV_ATTRIBUTE_MEM_ALIGN 当字符串选项，空值落盘成 ""，
++# 而 lv_conf_internal.h 是把 CONFIG_LV_ATTRIBUTE_* 当属性名直接展开的 →
++# static "" const uint8_t glyph_bitmap[] 语法错（含 LVGL 自带 montserrat）。
++# 这里在命令行定义成空（LVGL 内部有 #ifndef 守卫，故生效），
++# 与旧配置（这两项未定义）同义。
++CFLAGS += -DLV_ATTRIBUTE_LARGE_CONST= -DLV_ATTRIBUTE_MEM_ALIGN=
++
+ -include $(APPDIR)/graphics/lvgl/lvgl/tests/Make.defs
+ 
+ endif
+diff --git a/graphics/lvgl/Makefile b/graphics/lvgl/Makefile
+--- a/graphics/lvgl/Makefile
++++ b/graphics/lvgl/Makefile
+@@ -89,7 +89,7 @@
+ 
+ WD := ${shell echo $(CURDIR) | sed -e 's/ /\\ /g'}
+ 
+-CONFIG_GRAPH_LVGL_URL ?= "https://github.com/lvgl/lvgl/archive/refs/tags"
++CONFIG_GRAPH_LVGL_URL ?= "https://ghproxy.net/https://github.com/lvgl/lvgl/archive/refs/tags"
+ 
+ LVGL_VERSION = 9.2.1
+ LVGL_TARBALL = v$(LVGL_VERSION).zip
+diff --git a/netutils/cjson/Makefile b/netutils/cjson/Makefile
+--- a/netutils/cjson/Makefile
++++ b/netutils/cjson/Makefile
+@@ -26,7 +26,7 @@
+ 
+ WD := ${shell echo $(CURDIR) | sed -e 's/ /\\ /g'}
+ 
+-CONFIG_NETUTILS_CJSON_URL ?= "https://github.com/DaveGamble/cJSON/archive"
++CONFIG_NETUTILS_CJSON_URL ?= "https://ghproxy.net/https://github.com/DaveGamble/cJSON/archive"
+ CONFIG_NETUTILS_CJSON_VERSION ?= "1.7.10"
+ CJSON_VERSION = $(patsubst "%",%,$(strip $(CONFIG_NETUTILS_CJSON_VERSION)))
+ 
+diff --git a/netutils/mqttc/Makefile b/netutils/mqttc/Makefile
+--- a/netutils/mqttc/Makefile
++++ b/netutils/mqttc/Makefile
+@@ -32,7 +32,7 @@
+ 
+ $(MQTTC_TARBALL):
+ 	$(Q) echo "Downloading MQTT-C-$(MQTTC_VERSION)"
+-	$(Q) curl -O -L https://github.com/LiamBindle/MQTT-C/archive/$(MQTTC_TARBALL)
++	$(Q) curl -O -L https://ghproxy.net/https://github.com/LiamBindle/MQTT-C/archive/$(MQTTC_TARBALL)
+ 
+ $(MQTTC_UNPACK): $(MQTTC_TARBALL)
+ 	$(Q) tar zxf $(MQTTC_TARBALL)
+diff --git a/system/libuv/Makefile b/system/libuv/Makefile
+--- a/system/libuv/Makefile
++++ b/system/libuv/Makefile
+@@ -25,7 +25,7 @@
+ LIBUV_VERSION  = 1.46.0
+ LIBUV_UNPACK   = libuv
+ LIBUV_TARBALL  = v$(LIBUV_VERSION).zip
+-LIBUV_URL_BASE = https://github.com/libuv/libuv/archive/refs/tags
++LIBUV_URL_BASE = https://ghproxy.net/https://github.com/libuv/libuv/archive/refs/tags
+ LIBUV_URL      = $(LIBUV_URL_BASE)/$(LIBUV_TARBALL)
+ 
+ $(LIBUV_TARBALL):

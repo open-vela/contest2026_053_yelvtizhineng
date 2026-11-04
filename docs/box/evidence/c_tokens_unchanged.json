@@ -1,0 +1,9 @@
+{
+  "verified_files": 252,
+  "method": "C lexical token comparison preserving literals and ignoring comments/spacing; app_main factory WiFi defaults intentionally cleared before comparison",
+  "pass": true,
+  "intentional_runtime_configuration_changes": [
+    "CFG_DEFAULT_WIFI_SSID cleared",
+    "CFG_DEFAULT_WIFI_PASSWORD cleared"
+  ]
+}

@@ -51,8 +51,8 @@ int record_service_init(void);
 
 int  record_task_get_count(void);
 bool record_task_get(int idx, struct record_task_s *out);
-void record_task_set_done(int idx, bool done);   /* 修改并立即持久化 */
-void record_task_save(void);
+int record_task_set_done(int idx, bool done);   /* 修改并立即持久化 */
+int record_task_save(void);
 
 /* --- 成就（3D-2：徽章系统） --- */
 
@@ -84,8 +84,8 @@ void record_task_on_completed(void);
 
 int  record_diary_get_count(void);
 bool record_diary_get(int idx, struct record_diary_s *out);
-void record_diary_add(const struct record_diary_s *entry);  /* 头部插入 */
-void record_diary_save(void);
+int record_diary_add(const struct record_diary_s *entry);  /* 头部插入 */
+int record_diary_save(void);
 
 #ifdef __cplusplus
 }

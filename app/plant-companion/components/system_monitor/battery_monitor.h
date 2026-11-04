@@ -15,10 +15,12 @@
 extern "C" {
 #endif
 
+/* Legacy name: calibrated ADC-pin millivolts from the NuttX lower half. */
 int battery_read_raw(int *raw);
+/* Estimated pack mV after the board's 1:2 divider. Not externally calibrated. */
 int battery_read_mv(int *mv);
-/* 电量百分比：3.3V = 100%，3.0V = 0%（区间内线性，见 .c 里的标定说明）。
- * 返回 0 成功；负 errno 失败（读不到 ADC 时不要拿 0 冒充电量）。 */
+/* Percent is unknown until a valid device-specific voltage curve exists:
+ * sets *pct=-1 and returns -ENODATA. Never use this sentinel as low battery. */
 int battery_read_pct(int *pct);
 
 #ifdef __cplusplus

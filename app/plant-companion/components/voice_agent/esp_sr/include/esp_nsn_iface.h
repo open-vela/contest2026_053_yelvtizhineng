@@ -29,7 +29,7 @@ typedef int (*esp_nsn_iface_op_get_samp_chunksize_t)(esp_nsn_data_t *model);
  *
  *
  * @param model The model object to query
- * @param in_data An array of 16-bit signed audio samples. The array size used can be queried by the 
+ * @param in_data An array of 16-bit signed audio samples. The array size used can be queried by the
  *        get_samp_chunksize function.
  * @param out_data An array of 16-bit signed audio samples after process.
  * @return The state of return.

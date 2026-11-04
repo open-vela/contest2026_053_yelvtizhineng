@@ -35,7 +35,7 @@ typedef enum {
 /**
  * @brief Creates an instance to the AEC structure.
  * Please get frame size by aec_get_chunksize() function
- * 
+ *
  * @param sample_rate       The Sampling frequency (Hz) must be 16000.
  * @param filter_length     Number of filter, recommend to set 4. The larger the filter_length, the more resource consumption.
  * @param channel_num       The input microphone channel number
@@ -48,7 +48,7 @@ aec_handle_t *aec_create(int sample_rate, int filter_length, int channel_num, ae
 
 /**
  * @brief Creates an instance to the AEC structure, same with aec_create().
- * 
+ *
  * @param filter_length     Number of filter, recommend to set 4. The larger the filter_length, the more resource consumption.
  * @param channel_num       The input microphone channel number
  * @param mode              The mode of AEC, recommend to set AEC_MODE_SR_LOW_COST
@@ -62,7 +62,7 @@ aec_handle_t *aec_pro_create(int filter_length, int channel_num, aec_mode_t mode
  * @brief Performs echo cancellation a frame, based on the audio sent to the speaker and frame from mic.
  *
  * @warning The indata, refdata and outdata must be 16-bit signed. please allocate memory by heap_caps_aligned_alloc().
- * 
+ *
  * @param inst        The instance of AEC. Format for multi-channel data is "ch0 ch0 ch0 ..., ch1 ch1 ch1 ..."
  * @param indata      An array of 16-bit signed audio samples from mic.
  * @param refdata     An array of 16-bit signed audio samples sent to the speaker.
@@ -80,10 +80,10 @@ void aec_process(const aec_handle_t *handel, int16_t *indata, int16_t *refdata, 
 int aec_get_chunksize(const aec_handle_t *handle);
 
 /**
- * @brief Get AEC mode string 
- * 
+ * @brief Get AEC mode string
+ *
  * @param aec_mode  The mode of AEC.
- * 
+ *
  * @return AEC mode string
  */
 char * aec_get_mode_string(aec_mode_t aec_mode);

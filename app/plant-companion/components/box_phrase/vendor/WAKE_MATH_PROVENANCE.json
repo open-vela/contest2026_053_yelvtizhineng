@@ -1,0 +1,643 @@
+{
+  "pass": true,
+  "SDK_loaded_section_bytes_flags_alignment_unchanged": true,
+  "SDK_public_definitions_unchanged": true,
+  "only_undefined_math_bindings_changed": true,
+  "no_global_math_override": true,
+  "roots": [
+    "cos",
+    "cosf",
+    "exp",
+    "expf",
+    "floor",
+    "floorf",
+    "log",
+    "log10f",
+    "logf",
+    "pow",
+    "powf",
+    "sin",
+    "sinf",
+    "sqrt",
+    "sqrtf"
+  ],
+  "libraries": [
+    {
+      "library": "libmultinet.a",
+      "members": [
+        "ctc_decoder_v1.c.obj",
+        "language_model_v1.c.obj",
+        "ctc_decoder_v2.c.obj",
+        "language_model_v2.c.obj",
+        "ctc_decoder_v3.c.obj",
+        "language_model_v3.c.obj",
+        "multinet2_single_quantized_cn.c.obj",
+        "multinet4_single_quantized_cn.c.obj",
+        "multinet4_single_quantized8_cn.c.obj",
+        "multinet5_quantized8.c.obj",
+        "multinet6_quantized.c.obj",
+        "multinet7_quantized.c.obj",
+        "esp_mn_models.c.obj",
+        "rnnt_decoder.c.obj",
+        "ctc_decoder.c.obj"
+      ],
+      "changed_members": [
+        {
+          "member": "ctc_decoder_v1.c.obj",
+          "imports": [
+            "exp",
+            "log"
+          ]
+        },
+        {
+          "member": "ctc_decoder_v2.c.obj",
+          "imports": [
+            "exp",
+            "expf",
+            "log",
+            "logf"
+          ]
+        },
+        {
+          "member": "ctc_decoder_v3.c.obj",
+          "imports": [
+            "exp",
+            "logf"
+          ]
+        },
+        {
+          "member": "multinet2_single_quantized_cn.c.obj",
+          "imports": [
+            "exp"
+          ]
+        },
+        {
+          "member": "multinet6_quantized.c.obj",
+          "imports": [
+            "expf",
+            "floorf"
+          ]
+        },
+        {
+          "member": "multinet7_quantized.c.obj",
+          "imports": [
+            "expf",
+            "floorf"
+          ]
+        }
+      ],
+      "before_sha256": "c0c4b4c181534db181a2ff97bff5b082d020cebf2c65219d88314266f8161873",
+      "after_sha256": "1afe0ec970a1ebc845406ab9c1bab9faf79eb8efb0288046c54e6f9a58645888"
+    },
+    {
+      "library": "libdl_lib.a",
+      "members": [
+        "sr_ringbuf.c.obj",
+        "dl_lib_numpy.c.obj",
+        "dl_lib_coefgetter_numpy.c.obj",
+        "dl_lib.c.obj",
+        "dl_lib_matrix.c.obj",
+        "dl_lib_matrixq.c.obj",
+        "dl_lib_matrixq_s3.c.obj",
+        "dl_lib_matrixq8.c.obj",
+        "dl_lib_conv_queue.c.obj",
+        "dl_lib_convq_queue.c.obj",
+        "dl_lib_convq_queue_s3.c.obj",
+        "dl_lib_convq8_queue.c.obj",
+        "esp32s3_dsp.S.obj",
+        "dl_layer_attention.c.obj",
+        "dl_layer_fsmn.c.obj",
+        "dl_layer_glu.c.obj",
+        "dl_layer_liglu.c.obj",
+        "dl_layer_bottleneck_se.c.obj",
+        "dl_layer_pooling.c.obj",
+        "dl_layer_zipformer.c.obj",
+        "dl_nn_args_t.c.obj",
+        "dl_nn_atrous_conv1d.c.obj",
+        "dl_nn_depthwise_conv1d.c.obj",
+        "dl_nn_pointwise_conv1d.c.obj",
+        "dl_nn_activation.c.obj",
+        "dl_nn_normalization.c.obj",
+        "dl_nn_math.c.obj",
+        "dl_nn_conv2d.c.obj",
+        "dl_nn_embedding.c.obj",
+        "dl_tie728_memcpy.S.obj",
+        "dl_tie728_memset.S.obj",
+        "dl_tie728_bzero.S.obj",
+        "dl_tie728_s8.S.obj",
+        "dl_tie728_s8_conv2d.S.obj",
+        "dl_tie728_s16_conv2d_block.S.obj",
+        "dl_tie728_s16_conv2d_block_bc.S.obj",
+        "dl_xtensa_s16_block.S.obj",
+        "dl_c_atrous_conv1d_i16o16k16b16.c.obj",
+        "dl_c_atrous_conv1d_i16o16k8b16.c.obj",
+        "dl_c_atrous_conv1d_i8o16k8b8.c.obj",
+        "dl_c_atrous_conv1d_i8o8k8b8.c.obj",
+        "dl_c_conv2d_i16o16k16b16.c.obj",
+        "dl_c_conv2d_i8o8k8b8.c.obj",
+        "dl_c_depthwise_conv1d_i16o16k16b16.c.obj",
+        "dl_c_depthwise_conv1d_i16o16k8b16.c.obj",
+        "dl_c_depthwise_conv1d_i8o8k8b8.c.obj",
+        "dl_c_normalization_i16o16k16b16.c.obj",
+        "dl_c_normalization_i16o16kfbf.c.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k16.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k16_preload.c.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k16_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k16b16.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k16b16_preload.c.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k16b16_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k16be16.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k16be16_preload.c.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k16be16_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o16k8.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o16k8_preload.c.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o16k8_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o16k8b8.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o16k8b8_preload.c.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o16k8b8_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o8k8.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o8k8_preload.c.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o8k8_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o8k8b8.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o8k8b8_preload.c.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o8k8b8_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o8k8be8.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o8k8be8_preload.c.obj",
+        "dl_tie728_atrous_conv1d_accx_i8o8k8be8_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k8.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k8_preload.c.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k8_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k8b16.S.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k8b16_preload.c.obj",
+        "dl_tie728_atrous_conv1d_accx_i16o16k8b16_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k16.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k16_preload.c.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k16_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k16b16.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k16b16_preload.c.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k16b16_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k16be16.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k16be16_preload.c.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k16be16_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k8b16.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k8b16_preload.c.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k8b16_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k8_preload.c.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k8_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i16o16k8.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o16k8.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o16k8_preload.c.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o16k8_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o16k8b8.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o16k8b8_preload.c.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o16k8b8_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o8k8.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o8k8_preload.c.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o8k8_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o8k8b8.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o8k8b8_preload.c.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o8k8b8_preload_core.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o8k8be8.S.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o8k8be8_preload.c.obj",
+        "dl_tie728_atrous_conv1d_qacc_i8o8k8be8_preload_core.S.obj",
+        "dl_tie728_depthwise_conv1d_qacc_i16o16k16.S.obj",
+        "dl_tie728_depthwise_conv1d_qacc_i16o16k16b16.S.obj",
+        "dl_tie728_depthwise_conv1d_qacc_i16o16k8.S.obj",
+        "dl_tie728_depthwise_conv1d_qacc_i16o16k8b16.S.obj",
+        "dl_tie728_depthwise_conv1d_qacc_i8o8k8.S.obj",
+        "dl_tie728_depthwise_conv1d_qacc_i8o8k8b8.S.obj",
+        "dl_tie728_normalization_accx_i16o16k16.S.obj",
+        "dl_tie728_normalization_accx_i16o16k16b16.S.obj",
+        "dl_tie728_normalization_accx_i16o16.S.obj",
+        "dl_tie728_normalization_accx_i16o16kfbf.S.obj",
+        "dl_tie728_pointwise_conv1d_accx_i16o16k16.S.obj",
+        "dl_tie728_pointwise_conv1d_accx_i16o16k16_preload.c.obj",
+        "dl_tie728_pointwise_conv1d_accx_i16o16k16_preload_core.S.obj",
+        "dl_tie728_pointwise_conv1d_accx_i16o16k16b16.S.obj",
+        "dl_tie728_pointwise_conv1d_accx_i16o16k16b16_preload.c.obj",
+        "dl_tie728_pointwise_conv1d_accx_i16o16k16b16_preload_core.S.obj",
+        "dl_tie728_pointwise_conv1d_accx_i16o16k8.S.obj",
+        "dl_tie728_pointwise_conv1d_accx_i16o16k8_preload.c.obj",
+        "dl_tie728_pointwise_conv1d_accx_i16o16k8_preload_core.S.obj",
+        "dl_tie728_pointwise_conv1d_accx_i16o16k8b16.S.obj",
+        "dl_tie728_pointwise_conv1d_accx_i16o16k8b16_preload.c.obj",
+        "dl_tie728_pointwise_conv1d_accx_i16o16k8b16_preload_core.S.obj",
+        "dl_tie728_pointwise_conv1d_accx_i8o8k8.S.obj",
+        "dl_tie728_pointwise_conv1d_accx_i8o8k8_preload.c.obj",
+        "dl_tie728_pointwise_conv1d_accx_i8o8k8_preload_core.S.obj",
+        "dl_tie728_pointwise_conv1d_accx_i8o8k8b8.S.obj",
+        "dl_tie728_pointwise_conv1d_accx_i8o8k8b8_preload.c.obj",
+        "dl_tie728_pointwise_conv1d_accx_i8o8k8b8_preload_core.S.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i16o16k16.S.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i16o16k16_preload.c.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i16o16k16_preload_core.S.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i16o16k16b16.S.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i16o16k16b16_preload.c.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i16o16k16b16_preload_core.S.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i16o16k8.S.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i16o16k8_preload.c.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i16o16k8_preload_core.S.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i16o16k8b16.S.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i16o16k8b16_preload.c.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i16o16k8b16_preload_core.S.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i8o8k8.S.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i8o8k8_preload.c.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i8o8k8_preload_core.S.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i8o8k8b8.S.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i8o8k8b8_preload.c.obj",
+        "dl_tie728_pointwise_conv1d_qacc_i8o8k8b8_preload_core.S.obj"
+      ],
+      "changed_members": [
+        {
+          "member": "dl_lib.c.obj",
+          "imports": [
+            "floor",
+            "sqrt"
+          ]
+        },
+        {
+          "member": "dl_lib_matrix.c.obj",
+          "imports": [
+            "sqrt"
+          ]
+        },
+        {
+          "member": "dl_lib_matrixq8.c.obj",
+          "imports": [
+            "floor"
+          ]
+        },
+        {
+          "member": "dl_lib_convq8_queue.c.obj",
+          "imports": [
+            "floorf"
+          ]
+        },
+        {
+          "member": "dl_layer_attention.c.obj",
+          "imports": [
+            "sqrt"
+          ]
+        },
+        {
+          "member": "dl_layer_pooling.c.obj",
+          "imports": [
+            "floor"
+          ]
+        },
+        {
+          "member": "dl_nn_normalization.c.obj",
+          "imports": [
+            "floor",
+            "sqrtf"
+          ]
+        },
+        {
+          "member": "dl_nn_math.c.obj",
+          "imports": [
+            "expf",
+            "logf"
+          ]
+        },
+        {
+          "member": "dl_c_normalization_i16o16k16b16.c.obj",
+          "imports": [
+            "sqrtf"
+          ]
+        },
+        {
+          "member": "dl_c_normalization_i16o16kfbf.c.obj",
+          "imports": [
+            "sqrtf"
+          ]
+        }
+      ],
+      "before_sha256": "1c0421a45462a6bc0effbccc1b80f53c4242e945220e42db43eb96ff2da6126f",
+      "after_sha256": "ae415e7d78c09c6d3a143fcee7a829f6941bda44c459e56b26c9cd52d8b4dc51"
+    },
+    {
+      "library": "libhufzip.a",
+      "members": [
+        "hufzip_core.c.obj",
+        "hufzip_model.c.obj"
+      ],
+      "changed_members": [],
+      "before_sha256": "c359c70690abefabd14ce572e4e3cbdeca7a5f6046b8f7c20774ea95773d8c47",
+      "after_sha256": "c359c70690abefabd14ce572e4e3cbdeca7a5f6046b8f7c20774ea95773d8c47"
+    },
+    {
+      "library": "libc_speech_features.a",
+      "members": [
+        "esp_mfcc_fbank.c.obj",
+        "esp_mfcc_models.c.obj",
+        "esp_speech_features.c.obj",
+        "esp_kiss_fft.c.obj",
+        "fftutil.c.obj",
+        "kfc.c.obj",
+        "esp_kiss_fftr.c.obj",
+        "esp_kiss_fftnd.c.obj",
+        "fft.c.obj",
+        "c_speech_features.c.obj",
+        "mfcc_dsp.S.obj"
+      ],
+      "changed_members": [
+        {
+          "member": "esp_speech_features.c.obj",
+          "imports": [
+            "cos",
+            "log10f",
+            "logf",
+            "pow",
+            "powf",
+            "sin",
+            "sqrtf"
+          ]
+        },
+        {
+          "member": "esp_kiss_fft.c.obj",
+          "imports": [
+            "cos",
+            "floor",
+            "sin",
+            "sqrt"
+          ]
+        },
+        {
+          "member": "esp_kiss_fftr.c.obj",
+          "imports": [
+            "cos",
+            "sin"
+          ]
+        },
+        {
+          "member": "fft.c.obj",
+          "imports": [
+            "cos",
+            "sin"
+          ]
+        },
+        {
+          "member": "c_speech_features.c.obj",
+          "imports": [
+            "cosf",
+            "floorf",
+            "log10f",
+            "logf",
+            "powf",
+            "sinf",
+            "sqrtf"
+          ]
+        }
+      ],
+      "before_sha256": "bdeb1a1928c5263ddec97ee7fd62ee82497f87e0f69b64fda74cd1673696828c",
+      "after_sha256": "e8ed227939536ed6b89209a46b479d08a19b10bbb74871a0e80a4832f18bf59f"
+    },
+    {
+      "library": "libfst.a",
+      "members": [
+        "fst.c.obj",
+        "symbol.c.obj",
+        "command.c.obj",
+        "fst_determinize.c.obj",
+        "fst_minimize.c.obj",
+        "fst_draw.c.obj",
+        "fst_write.c.obj",
+        "subword.c.obj"
+      ],
+      "changed_members": [
+        {
+          "member": "subword.c.obj",
+          "imports": [
+            "expf",
+            "logf"
+          ]
+        }
+      ],
+      "before_sha256": "a9583109191fc56160609e4292e78cd48f8acd2aaa1c95d52210cc15a2a2ef93",
+      "after_sha256": "11bd30eff2f8c08a71c7afbe4d7ff84c34d5028385b778d3d702bf3802bed729"
+    },
+    {
+      "library": "libnewlib_setjmp.a",
+      "members": [
+        "lib_a-setjmp.o"
+      ],
+      "changed_members": [],
+      "before_sha256": "2a53a817497ffad5b8f6c8468cdd03d5267d250b146af146eb290ac888b684af",
+      "after_sha256": "2a53a817497ffad5b8f6c8468cdd03d5267d250b146af146eb290ac888b684af"
+    }
+  ],
+  "math_closure_sha256": "42c00757bbf0e3db89655ed3535bf446d17261dea47e17c0bde7dc77993fba07",
+  "math_closure_undefined": [
+    "__adddf3",
+    "__divdf3",
+    "__divsf3",
+    "__eqdf2",
+    "__fixdfsi",
+    "__floatsidf",
+    "__gedf2",
+    "__gtdf2",
+    "__ledf2",
+    "__ltdf2",
+    "__muldf3",
+    "plant_wake_math_errno",
+    "plant_wake_math_sqrtf",
+    "__subdf3",
+    "__unorddf2"
+  ],
+  "toolchain_libm_sha256": "2cc85d9ee2b9becb0c0a8dfdaa966366549d8ec123d1f16f5c4bbf256faeb9ca",
+  "cleanup_allowlist": [
+    "ctc_decoder_v1.c.obj",
+    "language_model_v1.c.obj",
+    "ctc_decoder_v2.c.obj",
+    "language_model_v2.c.obj",
+    "ctc_decoder_v3.c.obj",
+    "language_model_v3.c.obj",
+    "multinet2_single_quantized_cn.c.obj",
+    "multinet4_single_quantized_cn.c.obj",
+    "multinet4_single_quantized8_cn.c.obj",
+    "multinet5_quantized8.c.obj",
+    "multinet6_quantized.c.obj",
+    "multinet7_quantized.c.obj",
+    "esp_mn_models.c.obj",
+    "rnnt_decoder.c.obj",
+    "ctc_decoder.c.obj",
+    "sr_ringbuf.c.obj",
+    "dl_lib_numpy.c.obj",
+    "dl_lib_coefgetter_numpy.c.obj",
+    "dl_lib.c.obj",
+    "dl_lib_matrix.c.obj",
+    "dl_lib_matrixq.c.obj",
+    "dl_lib_matrixq_s3.c.obj",
+    "dl_lib_matrixq8.c.obj",
+    "dl_lib_conv_queue.c.obj",
+    "dl_lib_convq_queue.c.obj",
+    "dl_lib_convq_queue_s3.c.obj",
+    "dl_lib_convq8_queue.c.obj",
+    "esp32s3_dsp.S.obj",
+    "dl_layer_attention.c.obj",
+    "dl_layer_fsmn.c.obj",
+    "dl_layer_glu.c.obj",
+    "dl_layer_liglu.c.obj",
+    "dl_layer_bottleneck_se.c.obj",
+    "dl_layer_pooling.c.obj",
+    "dl_layer_zipformer.c.obj",
+    "dl_nn_args_t.c.obj",
+    "dl_nn_atrous_conv1d.c.obj",
+    "dl_nn_depthwise_conv1d.c.obj",
+    "dl_nn_pointwise_conv1d.c.obj",
+    "dl_nn_activation.c.obj",
+    "dl_nn_normalization.c.obj",
+    "dl_nn_math.c.obj",
+    "dl_nn_conv2d.c.obj",
+    "dl_nn_embedding.c.obj",
+    "dl_tie728_memcpy.S.obj",
+    "dl_tie728_memset.S.obj",
+    "dl_tie728_bzero.S.obj",
+    "dl_tie728_s8.S.obj",
+    "dl_tie728_s8_conv2d.S.obj",
+    "dl_tie728_s16_conv2d_block.S.obj",
+    "dl_tie728_s16_conv2d_block_bc.S.obj",
+    "dl_xtensa_s16_block.S.obj",
+    "dl_c_atrous_conv1d_i16o16k16b16.c.obj",
+    "dl_c_atrous_conv1d_i16o16k8b16.c.obj",
+    "dl_c_atrous_conv1d_i8o16k8b8.c.obj",
+    "dl_c_atrous_conv1d_i8o8k8b8.c.obj",
+    "dl_c_conv2d_i16o16k16b16.c.obj",
+    "dl_c_conv2d_i8o8k8b8.c.obj",
+    "dl_c_depthwise_conv1d_i16o16k16b16.c.obj",
+    "dl_c_depthwise_conv1d_i16o16k8b16.c.obj",
+    "dl_c_depthwise_conv1d_i8o8k8b8.c.obj",
+    "dl_c_normalization_i16o16k16b16.c.obj",
+    "dl_c_normalization_i16o16kfbf.c.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k16.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k16_preload.c.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k16_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k16b16.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k16b16_preload.c.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k16b16_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k16be16.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k16be16_preload.c.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k16be16_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o16k8.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o16k8_preload.c.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o16k8_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o16k8b8.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o16k8b8_preload.c.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o16k8b8_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o8k8.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o8k8_preload.c.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o8k8_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o8k8b8.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o8k8b8_preload.c.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o8k8b8_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o8k8be8.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o8k8be8_preload.c.obj",
+    "dl_tie728_atrous_conv1d_accx_i8o8k8be8_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k8.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k8_preload.c.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k8_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k8b16.S.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k8b16_preload.c.obj",
+    "dl_tie728_atrous_conv1d_accx_i16o16k8b16_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k16.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k16_preload.c.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k16_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k16b16.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k16b16_preload.c.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k16b16_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k16be16.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k16be16_preload.c.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k16be16_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k8b16.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k8b16_preload.c.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k8b16_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k8_preload.c.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k8_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i16o16k8.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o16k8.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o16k8_preload.c.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o16k8_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o16k8b8.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o16k8b8_preload.c.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o16k8b8_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o8k8.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o8k8_preload.c.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o8k8_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o8k8b8.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o8k8b8_preload.c.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o8k8b8_preload_core.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o8k8be8.S.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o8k8be8_preload.c.obj",
+    "dl_tie728_atrous_conv1d_qacc_i8o8k8be8_preload_core.S.obj",
+    "dl_tie728_depthwise_conv1d_qacc_i16o16k16.S.obj",
+    "dl_tie728_depthwise_conv1d_qacc_i16o16k16b16.S.obj",
+    "dl_tie728_depthwise_conv1d_qacc_i16o16k8.S.obj",
+    "dl_tie728_depthwise_conv1d_qacc_i16o16k8b16.S.obj",
+    "dl_tie728_depthwise_conv1d_qacc_i8o8k8.S.obj",
+    "dl_tie728_depthwise_conv1d_qacc_i8o8k8b8.S.obj",
+    "dl_tie728_normalization_accx_i16o16k16.S.obj",
+    "dl_tie728_normalization_accx_i16o16k16b16.S.obj",
+    "dl_tie728_normalization_accx_i16o16.S.obj",
+    "dl_tie728_normalization_accx_i16o16kfbf.S.obj",
+    "dl_tie728_pointwise_conv1d_accx_i16o16k16.S.obj",
+    "dl_tie728_pointwise_conv1d_accx_i16o16k16_preload.c.obj",
+    "dl_tie728_pointwise_conv1d_accx_i16o16k16_preload_core.S.obj",
+    "dl_tie728_pointwise_conv1d_accx_i16o16k16b16.S.obj",
+    "dl_tie728_pointwise_conv1d_accx_i16o16k16b16_preload.c.obj",
+    "dl_tie728_pointwise_conv1d_accx_i16o16k16b16_preload_core.S.obj",
+    "dl_tie728_pointwise_conv1d_accx_i16o16k8.S.obj",
+    "dl_tie728_pointwise_conv1d_accx_i16o16k8_preload.c.obj",
+    "dl_tie728_pointwise_conv1d_accx_i16o16k8_preload_core.S.obj",
+    "dl_tie728_pointwise_conv1d_accx_i16o16k8b16.S.obj",
+    "dl_tie728_pointwise_conv1d_accx_i16o16k8b16_preload.c.obj",
+    "dl_tie728_pointwise_conv1d_accx_i16o16k8b16_preload_core.S.obj",
+    "dl_tie728_pointwise_conv1d_accx_i8o8k8.S.obj",
+    "dl_tie728_pointwise_conv1d_accx_i8o8k8_preload.c.obj",
+    "dl_tie728_pointwise_conv1d_accx_i8o8k8_preload_core.S.obj",
+    "dl_tie728_pointwise_conv1d_accx_i8o8k8b8.S.obj",
+    "dl_tie728_pointwise_conv1d_accx_i8o8k8b8_preload.c.obj",
+    "dl_tie728_pointwise_conv1d_accx_i8o8k8b8_preload_core.S.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i16o16k16.S.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i16o16k16_preload.c.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i16o16k16_preload_core.S.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i16o16k16b16.S.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i16o16k16b16_preload.c.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i16o16k16b16_preload_core.S.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i16o16k8.S.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i16o16k8_preload.c.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i16o16k8_preload_core.S.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i16o16k8b16.S.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i16o16k8b16_preload.c.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i16o16k8b16_preload_core.S.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i8o8k8.S.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i8o8k8_preload.c.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i8o8k8_preload_core.S.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i8o8k8b8.S.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i8o8k8b8_preload.c.obj",
+    "dl_tie728_pointwise_conv1d_qacc_i8o8k8b8_preload_core.S.obj",
+    "hufzip_core.c.obj",
+    "hufzip_model.c.obj",
+    "esp_mfcc_fbank.c.obj",
+    "esp_mfcc_models.c.obj",
+    "esp_speech_features.c.obj",
+    "esp_kiss_fft.c.obj",
+    "fftutil.c.obj",
+    "kfc.c.obj",
+    "esp_kiss_fftr.c.obj",
+    "esp_kiss_fftnd.c.obj",
+    "fft.c.obj",
+    "c_speech_features.c.obj",
+    "mfcc_dsp.S.obj",
+    "fst.c.obj",
+    "symbol.c.obj",
+    "command.c.obj",
+    "fst_determinize.c.obj",
+    "fst_minimize.c.obj",
+    "fst_draw.c.obj",
+    "fst_write.c.obj",
+    "subword.c.obj",
+    "lib_a-setjmp.o",
+    "plant_wake_math_closure.o"
+  ],
+  "target_accuracy_and_speed_pending": true
+}

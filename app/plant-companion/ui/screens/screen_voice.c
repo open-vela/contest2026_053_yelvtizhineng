@@ -1,424 +1,159 @@
-/****************************************************************************
- * apps/plant-companion/ui/screens/screen_voice.c
- *
- * ⑥ 语音对话 — 和小绿聊天
- *   顶部：返回 + 「语音聊天」
- *   中部：对话气泡列表（滚动）
- *   底部：🎙️ 说话大按钮（voice_service 录音→AI→TTS）
- *
- * 线程模型：voice_service 回调在 voice 线程触发，这里只写入
- * 待处理缓冲区；lv_timer（500ms，ui_task 上下文）负责真正上屏，
- * 满足「LVGL 对象只在 ui_task 操作」约束。
- ****************************************************************************/
-
-#include <lvgl/lvgl.h>
+#include <nuttx/config.h>
+#include <errno.h>
+#include <stdio.h>
 #include <string.h>
-
+#include <stdatomic.h>
 #include "screen_voice.h"
+#include "voice_scene.h"
 #include "../ui_app.h"
-#include "../theme/theme_plant.h"
-#include "../assets/fonts/zh_font.h"
+#include "../widgets/companion_ui.h"
+#include "../../services/voice_service.h"
+#include "../../services/handsfree_service.h"
+#include "../../services/ai_service.h"
 
-#ifdef CONFIG_PLANT_AI_VOICE
-#  include "../../services/voice_service.h"
-#endif
+extern const lv_image_dsc_t *const cu_voice_frames[6];
+typedef struct {
+ lv_timer_t *timer;
+ lv_obj_t *title,*hint,*button,*mascot,*bars[7];
+ uint32_t scene_start;
+ int previous,frame;
+ bool cancelling,leaving;
+} voice_page;
 
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-static lv_obj_t *s_msg_list;
-static lv_obj_t *s_status;
-static lv_timer_t *s_ui_timer;   /* ⚠️ 必须随页面销毁，否则 UAF */
-
-/* 跨线程待处理消息（voice 线程写，ui_task 读） */
-
-#define VOICE_PENDING_MAX 4
-
-/* 2026-09-11 修复：服务器回复显示不全。
- * 上游 voice_service 的 reply 缓冲是 1024 字节，实测一条回复
- * 328 字节（含转写前缀 + 回答），这里原来只有 160 字节 → 被
- * strlcpy 截掉大半，屏幕上只看到开头一小段。改成与上游同宽。 */
-
-#define VOICE_PENDING_TEXT_MAX 1024
-
-static char s_pending_text[VOICE_PENDING_MAX][VOICE_PENDING_TEXT_MAX];
-static bool s_pending_from_user[VOICE_PENDING_MAX];
-static volatile int s_pending_head;
-static volatile int s_pending_tail;
-static int s_last_state = -1;
-
-/* 波形动画竖线 */
-
-#define WAVE_BARS 7
-
-static lv_obj_t *s_wave_bars[WAVE_BARS];
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-static void voice_on_back(lv_event_t *e)
+/* Maintenance reads counters, never LVGL objects or page pointers. There
+ * is no expression fixture; transitions come from the real audio services. */
+static _Atomic int debug_active,debug_scene,debug_frame;
+static _Atomic unsigned debug_ticks,debug_changes,debug_scenes;
+static _Atomic unsigned debug_seen[6];
+static const char *const scene_names[]={"idle","listen","think","speak"};
+void screen_voice_status(void)
 {
-  (void)e;
-  ui_app_pop_screen();
+ int scene=atomic_load(&debug_scene);
+ printf("[VoiceUI] active=%d scene=%s frame=%d ticks=%u frames=%u transitions=%u seen=%u,%u,%u,%u,%u,%u\n",
+  atomic_load(&debug_active),scene_names[scene],atomic_load(&debug_frame),
+  atomic_load(&debug_ticks),atomic_load(&debug_changes),atomic_load(&debug_scenes),
+  atomic_load(&debug_seen[0]),atomic_load(&debug_seen[1]),atomic_load(&debug_seen[2]),
+  atomic_load(&debug_seen[3]),atomic_load(&debug_seen[4]),atomic_load(&debug_seen[5]));
 }
-
-/* ⚠️ 2026-08-31 PANIC 根因修复：页面销毁（返回）时删除 UI 定时器。
- * 此前 lv_timer_create 后从不删除 → 页面 lv_obj_delete 后 timer 仍每
- * 500ms 访问已释放的 s_status/s_wave_bars/s_msg_list → use-after-free，
- * 崩溃在 LVGL get_selector_style_prop（实测 PC=0x42053845）。
- * 与 screen_camera 的 cam_on_delete 同款修复。 */
-
-static void voice_on_delete(lv_event_t *e)
+static void text_if_changed(lv_obj_t *label,const char *text)
+{if(strcmp(lv_label_get_text(label),text)!=0)lv_label_set_text(label,text);}
+static void back(lv_event_t *e)
 {
-  (void)e;
-
-#ifdef CONFIG_PLANT_AI_VOICE
-  /* 页面销毁：立即中止进行中的语音会话（录音/播放/等待），
-   * 防止 voice worker 还在跑但 UI 已销毁（回调已无页面可写）。 */
-  voice_service_abort();
-#endif
-
-  if (s_ui_timer != NULL)
-    {
-      lv_timer_delete(s_ui_timer);
-      s_ui_timer = NULL;
-    }
-
-  /* 清静态指针，防止残留引用已释放对象 */
-
-  s_msg_list = NULL;
-  s_status = NULL;
-  memset(s_wave_bars, 0, sizeof(s_wave_bars));
-
-  /* 清待处理消息（voice 线程可能还在写，但页面已销毁，丢弃即可） */
-
-  s_pending_head = 0;
-  s_pending_tail = 0;
-  s_last_state = -1;
+ voice_page *p=lv_event_get_user_data(e);p->leaving=true;
+ voice_service_abort();ui_app_pop_screen();
 }
-
-/* voice_service 状态回调（voice 线程）：直接写状态（atomic） */
-
-#ifdef CONFIG_PLANT_AI_VOICE
-static void voice_state_handler(void *user_data, int state)
+static void clicked(lv_event_t *e)
 {
-  (void)user_data;
-  s_last_state = state;
+ voice_page *p=lv_event_get_user_data(e);
+ if(!voice_service_busy()){
+  if(ai_service_busy()||handsfree_service_processing())return;
+  int ret=voice_service_start(NULL,NULL,NULL);
+  if(!ret)ret=voice_service_talk(5);
+  if(ret<0)text_if_changed(p->hint,"暂时没成功，请再试一次");
+  p->cancelling=false;
+ }else if(voice_service_get_state()==VOICE_STATE_LISTENING){
+  voice_service_talk(5); /* Finish without discarding the recording. */
+ }else{
+  voice_service_abort();p->cancelling=true;
+ }
 }
-
-/* voice_service 文本回调（voice 线程）：写入环形待处理区 */
-
-static void voice_text_handler(void *user_data, const char *text, bool from_user)
+static void refresh(voice_page *p)
 {
-  int next;
-  (void)user_data;
-
-  next = (s_pending_head + 1) % VOICE_PENDING_MAX;
-  if (next == s_pending_tail)
-    {
-      return;   /* 队列满，丢弃 */
-    }
-
-  if (text != NULL && strlen(text) >= sizeof(s_pending_text[0]))
-    {
-      printf("[VoiceUI] 回复超长被截断: %u 字节 (缓冲 %u)\n",
-             (unsigned)strlen(text),
-             (unsigned)sizeof(s_pending_text[0]));
-    }
-
-  strlcpy(s_pending_text[s_pending_head],
-          text != NULL ? text : "", sizeof(s_pending_text[0]));
-  printf("[VoiceUI] 消息上屏: %u 字节 from_user=%d\n",
-         (unsigned)strlen(s_pending_text[s_pending_head]),
-         (int)from_user);
-  s_pending_from_user[s_pending_head] = from_user;
-  s_pending_head = next;
+ bool busy=voice_service_busy();int state=voice_service_get_state();
+ bool asr=handsfree_service_processing(),image_busy=ai_service_busy();
+ enum voice_scene scene=voice_scene_choose(busy,state,p->cancelling,asr,
+  handsfree_service_hearing(),handsfree_service_interacting(),
+  handsfree_service_enabled()!=0,image_busy);
+ uint32_t now=lv_tick_get();
+ if(!busy)p->cancelling=false;
+ if(p->previous!=(int)scene){
+  p->previous=scene;p->scene_start=now;
+  atomic_store(&debug_scene,scene);atomic_fetch_add(&debug_scenes,1);
+  printf("[VoiceUI] transition=%s foreground=%d asr=%d\n",scene_names[scene],busy,asr);
+ }
+ uint32_t elapsed=now-p->scene_start;
+ const char *title="小伴在这里",*hint="点一下，聊聊新发现",*button="开始说话";
+ bool disabled=!busy&&(asr||image_busy);
+ if(scene==SCENE_LISTEN){
+  title="我在听呢";
+  hint=busy?"慢慢说，不着急":"说出你想问的问题";
+  if(busy)button="说好啦";
+ }else if(scene==SCENE_THINK){
+  title="让我想一想";
+  hint=asr?"正在听懂你的话":"很快就来回答你";
+  button=busy?"取消":"请稍等";
+  if(image_busy&&!busy){title="正在看照片";hint="看清楚，再告诉你";}
+ }else if(scene==SCENE_SPEAK){
+  title="小伴说给你听";hint="点下面可以停一下";button="停一下";
+ }
+ if(p->cancelling&&busy){title="正在停下来";hint="等一下就好";button="取消";}
+ if(!busy&&voice_service_last_error()<0&&!asr){
+  hint=voice_service_last_error()==-ENOMSG?"没听清，请再说一次":"暂时没成功，请再试一次";
+ }
+ text_if_changed(p->title,title);text_if_changed(p->hint,hint);
+ text_if_changed(lv_obj_get_child(p->button,0),button);
+ if(disabled)lv_obj_add_state(p->button,LV_STATE_DISABLED);
+ else lv_obj_remove_state(p->button,LV_STATE_DISABLED);
+ int frame=voice_scene_frame(scene,elapsed);
+ if(frame!=p->frame){
+  lv_image_set_src(p->mascot,cu_voice_frames[frame]);p->frame=frame;
+  atomic_store(&debug_frame,frame);atomic_fetch_add(&debug_changes,1);
+  atomic_fetch_add(&debug_seen[frame],1);
+ }
+ /* Gentle breathing and wave motion. No file reads, HTTP requests, or
+  * per-tick image allocations in the presentation timer. */
+ lv_obj_set_y(p->mascot,59+((elapsed/500)%4==1?1:0));
+ static const uint8_t wave[8]={8,14,23,30,22,13,7,11};
+ for(int i=0;i<7;i++){
+  bool moving=scene==SCENE_LISTEN||scene==SCENE_SPEAK;
+  int height=moving?wave[(elapsed/140+i)%8]:5;
+  bool show=scene!=SCENE_THINK||(i>=2&&i<=4);
+  if(show)lv_obj_remove_flag(p->bars[i],LV_OBJ_FLAG_HIDDEN);
+  else lv_obj_add_flag(p->bars[i],LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_height(p->bars[i],height);lv_obj_set_y(p->bars[i],113-height/2);
+  lv_obj_set_style_bg_opa(p->bars[i],scene==SCENE_THINK&&i!=(int)(2+elapsed/300%3)?LV_OPA_30:scene==SCENE_IDLE?LV_OPA_30:LV_OPA_COVER,0);
+ }
+ atomic_fetch_add(&debug_ticks,1);
 }
-#endif /* CONFIG_PLANT_AI_VOICE */
-
-/* lv_timer：ui_task 上下文处理待处理消息 + 状态文字 + 波形动画 */
-
-static void voice_ui_timer_cb(lv_timer_t *timer)
+static void poll(lv_timer_t *timer){refresh(lv_timer_get_user_data(timer));}
+static void deleted(lv_event_t *e)
 {
-  static const char *const state_text[] =
-  {
-    "点一下开始说话", "正在听你说...", "AI思考中...", "正在说话..."
-  };
-  int i;
-  (void)timer;
-
-  /* 状态文字 */
-
-  if (s_status != NULL && s_last_state >= VOICE_STATE_IDLE &&
-      s_last_state <= VOICE_STATE_SPEAKING)
-    {
-      lv_label_set_text(s_status, state_text[s_last_state]);
-    }
-
-  /* 波形动画：LISTENING/SPEAKING 时摆动，其余静止 */
-
-  for (i = 0; i < WAVE_BARS; i++)
-    {
-      if (s_wave_bars[i] != NULL)
-        {
-          bool active = (s_last_state == VOICE_STATE_LISTENING ||
-                         s_last_state == VOICE_STATE_SPEAKING);
-
-          if (active)
-            {
-              lv_obj_set_height(s_wave_bars[i],
-                                8 + (lv_rand(0, 100) * 20) / 100);
-            }
-          else
-            {
-              lv_obj_set_height(s_wave_bars[i], 8);
-            }
-        }
-    }
-
-  /* 待处理消息上屏 */
-
-  while (s_pending_tail != s_pending_head)
-    {
-      const char *text = s_pending_text[s_pending_tail];
-
-      if (s_pending_from_user[s_pending_tail])
-        {
-          screen_voice_add_user_msg(NULL, text);
-        }
-      else
-        {
-          screen_voice_add_ai_reply(NULL, text);
-        }
-
-      s_pending_tail = (s_pending_tail + 1) % VOICE_PENDING_MAX;
-    }
+ voice_page *p=lv_event_get_user_data(e);
+ if(p->timer)lv_timer_delete(p->timer);
+ lv_obj_delete(p->mascot);
+ atomic_store(&debug_active,0);
+ if(!p->leaving)voice_service_abort();lv_free(p);
 }
-
-/* 🎙️ 说话：触发 voice_service 一轮对话 */
-
-static void voice_on_talk(lv_event_t *e)
+static lv_obj_t *decoration(lv_obj_t *parent,int x,int y,int w,int h,uint32_t color,int radius)
 {
-  (void)e;
-
-#ifdef CONFIG_PLANT_AI_VOICE
-  {
-    int ret;
-
-    ret = voice_service_talk(3);
-    if (ret < 0 && s_status != NULL)
-      {
-        lv_label_set_text(s_status, "正在忙，稍等一下...");
-      }
-  }
-#else
-  /* 语音模块未启用：演示一问一答 */
-
-  screen_voice_add_user_msg(NULL, "小绿绿今天需要浇水吗？");
-  screen_voice_add_ai_reply(NULL, "让我看看... 💧 土壤水分62%，还很滋润呢！3天后再浇就好啦~");
-#endif
+ lv_obj_t *o=cu_panel(parent,x,y,w,h,color,radius);
+ lv_obj_remove_flag(o,LV_OBJ_FLAG_CLICKABLE);return o;
 }
-
-/* 创建波形动画条（底部说话按钮上方） */
-
-static void wave_create(lv_obj_t *parent)
-{
-  lv_obj_t *wave = lv_obj_create(parent);
-  int i;
-
-  lv_obj_remove_style_all(wave);
-  lv_obj_set_size(wave, 120, 24);
-  lv_obj_set_pos(wave, 180, 320 - 150);
-  lv_obj_set_flex_flow(wave, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(wave, LV_FLEX_ALIGN_SPACE_EVENLY,
-                        LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-  for (i = 0; i < WAVE_BARS; i++)
-    {
-      lv_obj_t *bar = lv_obj_create(wave);
-
-      lv_obj_remove_style_all(bar);
-      lv_obj_set_size(bar, 8, 8);
-      lv_obj_set_style_radius(bar, LV_RADIUS_CIRCLE, 0);
-      lv_obj_set_style_bg_color(bar, lv_color_hex(TP_CLR_VOICE_PINK), 0);
-      lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
-
-      s_wave_bars[i] = bar;
-    }
-}
-
-/****************************************************************************
- * Public Functions
- ****************************************************************************/
-
 lv_obj_t *screen_voice_create(void)
 {
-  lv_obj_t *scr = lv_obj_create(lv_screen_active());
-  lv_obj_t *back;
-  lv_obj_t *title;
-  lv_obj_t *talk;
-
-  lv_obj_remove_style_all(scr);
-  lv_obj_set_size(scr, 480, 320);
-  lv_obj_set_style_bg_color(scr, lv_color_hex(0xfdf2f8), 0);
-  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
-  lv_obj_set_style_bg_grad_color(scr, lv_color_hex(TP_CLR_BG_GRAD_A), 0);
-  lv_obj_set_style_bg_grad_dir(scr, LV_GRAD_DIR_VER, 0);
-
-  /* 顶部：返回 + 标题 */
-
-  back = lv_button_create(scr);
-  lv_obj_remove_style_all(back);
-  lv_obj_set_size(back, 96, TP_TOP_BAR_H);
-  lv_obj_set_pos(back, 0, 0);
-  lv_obj_set_style_text_color(back, lv_color_hex(TP_CLR_VOICE_PINK), 0);
-  lv_obj_set_style_text_font(back, TP_FONT_BODY, 0);
-  theme_btn_set_text(back, LV_SYMBOL_LEFT " 返回");
-  lv_obj_add_event_cb(back, voice_on_back, LV_EVENT_CLICKED, NULL);
-
-  title = lv_label_create(scr);
-  lv_label_set_text(title, "和小绿聊天");
-  lv_obj_set_style_text_font(title, TP_FONT_TITLE, 0);
-  lv_obj_set_style_text_color(title, lv_color_hex(TP_CLR_VOICE_PINK), 0);
-  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 8);
-
-  /* 对话气泡列表（滚动区） */
-
-  s_msg_list = lv_obj_create(scr);
-  lv_obj_remove_style_all(s_msg_list);
-  lv_obj_set_pos(s_msg_list, 0, TP_TOP_BAR_H);
-  lv_obj_set_size(s_msg_list, 480, 320 - TP_TOP_BAR_H - 150);
-  lv_obj_set_style_pad_all(s_msg_list, 12, 0);
-  lv_obj_set_style_pad_row(s_msg_list, 10, 0);
-  lv_obj_set_flex_flow(s_msg_list, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_flex_align(s_msg_list, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START,
-                        LV_FLEX_ALIGN_START);
-  lv_obj_set_scroll_dir(s_msg_list, LV_DIR_VER);
-
-  /* 初始欢迎气泡 */
-
-  {
-    lv_obj_t *bubble = lv_obj_create(s_msg_list);
-    lv_obj_remove_style_all(bubble);
-    lv_obj_set_style_bg_color(bubble, lv_color_hex(0xffffff), 0);
-    lv_obj_set_style_bg_opa(bubble, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(bubble, TP_RADIUS_SMALL, 0);
-    lv_obj_set_style_pad_all(bubble, 12, 0);
-    /* 2026-09-11 修复横向只显示 2/3：原写死 300px，聊天区可用 456px。 */
-    lv_obj_set_width(bubble, LV_PCT(100));
-
-    lv_obj_t *txt = lv_label_create(bubble);
-    lv_label_set_text(txt, "你好呀！我是小绿绿 🌱 点一下下面的按钮，跟我说说话吧");
-    lv_obj_set_style_text_font(txt, TP_FONT_BODY, 0);
-    lv_obj_set_width(txt, LV_PCT(100));
-  }
-
-  /* 波形动画 */
-
-  wave_create(scr);
-
-  /* 底部：状态文字 + 🎙️ 说话大按钮 */
-
-  s_status = lv_label_create(scr);
-  lv_label_set_text(s_status, "点一下开始说话");
-  lv_obj_set_style_text_font(s_status, TP_FONT_BODY, 0);
-  lv_obj_set_style_text_color(s_status, lv_color_hex(TP_CLR_TEXT_SUB), 0);
-  lv_obj_align(s_status, LV_ALIGN_BOTTOM_MID, 0, -104);
-
-  talk = lv_button_create(scr);
-  lv_obj_remove_style_all(talk);
-  lv_obj_set_size(talk, 88, 88);
-  lv_obj_align(talk, LV_ALIGN_BOTTOM_MID, 0, -14);
-  lv_obj_set_style_radius(talk, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_color(talk, lv_color_hex(TP_CLR_VOICE_PINK), 0);
-  lv_obj_set_style_bg_opa(talk, LV_OPA_COVER, 0);
-  lv_obj_set_style_text_color(talk, lv_color_hex(0xffffff), 0);
-  lv_obj_set_style_text_font(talk, &lv_font_montserrat_20, 0);
-  theme_btn_set_text(talk, LV_SYMBOL_AUDIO);
-  lv_obj_add_event_cb(talk, voice_on_talk, LV_EVENT_CLICKED, NULL);
-
-  /* 启动 voice_service（若未启动）并注册回调 */
-
-#ifdef CONFIG_PLANT_AI_VOICE
-  voice_service_start(voice_state_handler, voice_text_handler, NULL);
-#endif
-
-  /* ui_task 定时器：处理跨线程消息 */
-
-  /* 2026-09-11 用户要求：把聊天对话框（消息区）提到本页最上层，
-   * 避免被页内其它控件压住（消息区与底部按钮不重叠，不影响交互）。 */
-
-  lv_obj_move_foreground(s_msg_list);
-
-  s_ui_timer = lv_timer_create(voice_ui_timer_cb, 500, NULL);
-
-  /* ⚠️ 页面销毁必须删 timer（否则 UAF 崩溃），见 voice_on_delete */
-
-  lv_obj_add_event_cb(scr, voice_on_delete, LV_EVENT_DELETE, NULL);
-
-  return scr;
-}
-
-void screen_voice_add_ai_reply(lv_obj_t *scr, const char *text)
-{
-  lv_obj_t *bubble;
-  lv_obj_t *txt;
-  (void)scr;
-
-  if (s_msg_list == NULL)
-    {
-      return;
-    }
-
-  bubble = lv_obj_create(s_msg_list);
-  lv_obj_remove_style_all(bubble);
-  lv_obj_set_style_bg_color(bubble, lv_color_hex(0xffffff), 0);
-  lv_obj_set_style_bg_opa(bubble, LV_OPA_COVER, 0);
-  lv_obj_set_style_radius(bubble, TP_RADIUS_SMALL, 0);
-  lv_obj_set_style_pad_all(bubble, 12, 0);
-  lv_obj_set_width(bubble, LV_PCT(100));
-
-  txt = lv_label_create(bubble);
-  zh_label_set_text_safe(txt, text);
-  lv_obj_set_style_text_font(txt, TP_FONT_BODY, 0);
-  lv_obj_set_style_text_color(txt, lv_color_hex(TP_CLR_VOICE_PINK), 0);
-  lv_obj_set_width(txt, LV_PCT(100));
-
-  /* 先跑一次布局，保证气泡高度已算好，再滚动到可见，
-   * 否则长回复的最后几行会停在可视区外（看起来像被截断）。 */
-
-  lv_obj_update_layout(s_msg_list);
-  lv_obj_scroll_to_view(bubble, LV_ANIM_OFF);
-}
-
-void screen_voice_add_user_msg(lv_obj_t *scr, const char *text)
-{
-  lv_obj_t *bubble;
-  lv_obj_t *txt;
-  (void)scr;
-
-  if (s_msg_list == NULL)
-    {
-      return;
-    }
-
-  bubble = lv_obj_create(s_msg_list);
-  lv_obj_remove_style_all(bubble);
-  lv_obj_set_style_bg_color(bubble, lv_color_hex(TP_CLR_VOICE_PINK), 0);
-  lv_obj_set_style_bg_opa(bubble, LV_OPA_COVER, 0);
-  lv_obj_set_style_radius(bubble, TP_RADIUS_SMALL, 0);
-  lv_obj_set_style_pad_all(bubble, 12, 0);
-  lv_obj_set_width(bubble, LV_PCT(100));
-  lv_obj_align(bubble, LV_ALIGN_TOP_RIGHT, 0, 0);
-
-  txt = lv_label_create(bubble);
-  zh_label_set_text_safe(txt, text);
-  lv_obj_set_style_text_font(txt, TP_FONT_BODY, 0);
-  lv_obj_set_style_text_color(txt, lv_color_hex(0xffffff), 0);
-  lv_obj_set_width(txt, LV_PCT(100));
-
-  lv_obj_update_layout(s_msg_list);
-  lv_obj_scroll_to_view(bubble, LV_ANIM_OFF);
+ lv_obj_t *root=cu_root();voice_page *p=lv_malloc(sizeof(*p));if(!p)return root;
+ *p=(voice_page){.previous=-1,.frame=-1};
+ lv_obj_add_event_cb(root,deleted,LV_EVENT_DELETE,p);
+ lv_obj_set_style_bg_color(root,lv_color_hex(0xfbfaf2),0);
+ cu_button(root,12,6,64,44,"返回",16,0xe4edda,back,p);
+ cu_label(root,163,13,190,"和小伴说话",22,CU_INK);
+ decoration(root,23,58,190,171,0xeef2df,80);
+ decoration(root,48,218,145,12,0xd9e6c2,60);
+ p->mascot=lv_image_create(root);
+ lv_obj_remove_flag(p->mascot,LV_OBJ_FLAG_CLICKABLE);
+ lv_obj_set_pos(p->mascot,38,59);lv_image_set_src(p->mascot,cu_voice_frames[0]);
+ lv_obj_t *bubble=decoration(root,232,70,230,150,0xfffdf8,24);
+ p->title=cu_label(bubble,14,17,204,"小伴在这里",30,CU_INK);
+ p->hint=cu_label(bubble,14,64,204,"点一下，聊聊新发现",16,0x71806b);
+ for(int i=0;i<7;i++)p->bars[i]=decoration(bubble,34+i*24,109,10,5,0x8fbd64,5);
+ p->button=cu_button(root,20,240,440,64,"开始说话",30,CU_GREEN,clicked,p);
+ lv_obj_set_style_bg_opa(p->button,LV_OPA_50,LV_STATE_DISABLED);
+ cu_image(p->button,&cu_mic,124,16);
+ lv_obj_align(lv_obj_get_child(p->button,0),LV_ALIGN_TOP_LEFT,172,14);
+ lv_obj_set_width(lv_obj_get_child(p->button,0),180);
+ atomic_store(&debug_active,1);atomic_store(&debug_ticks,0);
+ atomic_store(&debug_changes,0);atomic_store(&debug_scenes,0);
+ for(int i=0;i<6;i++)atomic_store(&debug_seen[i],0);
+ p->timer=lv_timer_create(poll,100,p);refresh(p);
+ return root;
 }

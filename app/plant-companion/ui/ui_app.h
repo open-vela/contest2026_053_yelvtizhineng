@@ -27,6 +27,9 @@ int ui_app_start(void);
  * 停止 UI 主循环（供调试命令/退出使用，可选）。
  */
 void ui_app_stop(void);
+/* Worker-only bounded pause between drawing passes; UI owner must not call. */
+int ui_app_render_pause(bool pause);
+int64_t ui_app_unix_time(void);
 
 /**
  * 全屏二级页管理（②③⑥ 拍照/诊断/语音）：
@@ -35,6 +38,12 @@ void ui_app_stop(void);
  */
 void ui_app_push_screen(lv_obj_t *scr);
 void ui_app_pop_screen(void);
+/* LVGL owner only, outside touch callbacks, before voice feedback starts. */
+void ui_app_voice_finish_navigation(void);
+/* LVGL owner only: keep an in-use data/diary page through a conversation. */
+void ui_app_voice_open_chat(void);
+bool ui_app_voice_close_chat(bool only_paging_context);
+void ui_app_voice_back_to_parent(void);
 
 /**
  * 调试截屏：请求 ui_task 用 LVGL snapshot 把当前屏幕渲染进 buf 并写成 BMP。
@@ -53,6 +62,7 @@ int ui_app_capture_to_file(const char *path, void *buf, size_t bufsize);
  */
 int ui_app_capture_ascii(void *buf, size_t bufsize,
                          int x, int y, int w, int h);
+int ui_app_capture_ink(int x, int y, int w, int h);
 
 /**
  * 调试对象树转储（plant objs）：请求 ui_task 遍历当前可见屏对象树，
@@ -89,6 +99,13 @@ void ui_app_tsim_stop(void);
  * @return 0 已投递；-1 UI 未就绪；-2 上一次点按还没松手
  */
 int ui_app_tap_at(int x, int y);
+
+/**
+ * 调试滑动（plant scroll <x> <y> <dy> <steps>）：走同一路合成 pointer indev，
+ * 注入一次真实的按下、连续移动、抬起事件。
+ */
+int ui_app_scroll_at(int x, int y, int dy, int steps);
+int ui_app_scroll_left(void);
 
 /** 剩余次数；未在运行返回 -1 */
 int ui_app_tsim_left(void);

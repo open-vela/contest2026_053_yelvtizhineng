@@ -26,6 +26,7 @@
 #include "es8311.h"
 #include "es7210.h"
 #include "voice_agent.h"
+#include "../system_monitor/user_preferences.h"
 
 /* I2C 总线初始化（内核符号，链接时解析） */
 
@@ -46,7 +47,12 @@ static bool g_inited;
  * 按要求输出音量下调 50%（听感减半 ≈ -10dB）→ 0xD2(210)。
  * 可用 NSH `plant voice vol [0-255]` 运行时微调，不必重烧固件。 */
 
+#if CONFIG_ESP32S3_I2S0_BCLKPIN == 17
+static uint8_t g_dac_volume = 0xC6; /* User-selected BOX level. */
+#else
 static uint8_t g_dac_volume = 0xD2;
+#endif
+static bool g_volume_explicit;
 
 /****************************************************************************
  * 公共 API：音频外设初始化（幂等）
@@ -75,12 +81,16 @@ int voice_agent_init(void)
   esp_sr_psram_early_init();
 #endif
 
-  g_i2c = esp32s3_i2cbus_initialize(VA_I2C_BUS);
+  if(g_i2c==NULL)g_i2c = esp32s3_i2cbus_initialize(VA_I2C_BUS);
   if (g_i2c == NULL)
     {
       fprintf(stderr, "[VoiceAgent] I2C%d init failed\n", VA_I2C_BUS);
       return -ENODEV;
     }
+
+  if (!g_volume_explicit)
+    g_dac_volume = (uint8_t)plant_pref_load_int(PLANT_PREF_VOLUME_PATH,
+                                             g_dac_volume, 0, 255);
 
   /* ES8311：上电配置 */
 
@@ -190,14 +200,18 @@ int voice_agent_init(void)
 
 int voice_agent_set_dac_volume(uint8_t vol)
 {
-  g_dac_volume = vol;
-
+  int ret;
   if (g_i2c != NULL)
     {
-      return es8311_set_volume(g_i2c, vol);
+      ret = es8311_set_volume(g_i2c, vol);
+      if (ret < 0) return ret;
     }
-
-  return 0;
+  g_dac_volume = vol;
+  g_volume_explicit = true;
+  ret = plant_pref_save_int(PLANT_PREF_VOLUME_PATH, vol);
+  if (ret < 0) printf("[Voice] volume active, preference save failed: %d\n", ret);
+  else printf("[Voice] volume saved: %u\n", (unsigned)vol);
+  return ret;
 }
 
 uint8_t voice_agent_get_dac_volume(void)

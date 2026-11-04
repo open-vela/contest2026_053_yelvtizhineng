@@ -9,6 +9,9 @@
 #define __PLANT_UI_SCREEN_DIAGNOSE_H
 
 #include <lvgl/lvgl.h>
+#include <stddef.h>
+int screen_diagnose_voice_save(void);
+int screen_diagnose_voice_result(char *text,size_t size);
 
 #ifdef __cplusplus
 extern "C"

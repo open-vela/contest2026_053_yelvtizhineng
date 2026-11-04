@@ -49,7 +49,7 @@
 #  define OTA_FW_VERSION_MINOR  3
 #endif
 #ifndef OTA_FW_VERSION_PATCH
-#  define OTA_FW_VERSION_PATCH  29
+#  define OTA_FW_VERSION_PATCH  239
 #endif
 
 /****************************************************************************

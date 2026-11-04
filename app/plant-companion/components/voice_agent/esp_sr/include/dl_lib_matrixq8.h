@@ -77,4 +77,3 @@ dl_matrix2dq8_t *dl_matrixq8_from_matrix2d(const dl_matrix2d_t *m, dl_matrix2dq8
 #endif
 
 #endif
-

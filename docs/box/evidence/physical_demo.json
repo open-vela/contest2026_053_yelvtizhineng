@@ -1,0 +1,162 @@
+{
+  "firmware": "1.3.239",
+  "device": "ESP32-BOX",
+  "date": "2026-11-04",
+  "physical_acoustic_prompts": true,
+  "stages": [
+    {
+      "stage": "01 语音唤醒",
+      "utterance": "你好，小伴。",
+      "functional_flow_completed": true,
+      "actions": [
+        "wake"
+      ],
+      "measured_seconds_after_prompt": {
+        "本地唤醒": 0.625,
+        "执行指令": 1.303,
+        "开始播报": 1.948
+      }
+    },
+    {
+      "stage": "02 绿萝养护问答",
+      "utterance": "绿萝应该怎么养？请用两句话回答。",
+      "functional_flow_completed": true,
+      "actions": [
+        "ask"
+      ],
+      "measured_seconds_after_prompt": {
+        "执行指令": 1.413,
+        "开始播报": 6.936
+      }
+    },
+    {
+      "stage": "03 语音打开相机",
+      "utterance": "打开相机。",
+      "functional_flow_completed": true,
+      "actions": [
+        "camera"
+      ],
+      "measured_seconds_after_prompt": {
+        "执行指令": 0.502,
+        "开始播报": 2.44
+      }
+    },
+    {
+      "stage": "04 拍照植物体检",
+      "utterance": "帮我拍照。",
+      "functional_flow_completed": true,
+      "actions": [
+        "photo"
+      ],
+      "measured_seconds_after_prompt": {
+        "执行指令": 0.128,
+        "拍到照片": 3.036,
+        "收到体检结果": 5.529,
+        "开始播报": 7.344
+      }
+    },
+    {
+      "stage": "05 保存植物观察记录",
+      "utterance": "保存到成长日记。",
+      "functional_flow_completed": true,
+      "actions": [
+        "save"
+      ],
+      "measured_seconds_after_prompt": {
+        "执行指令": 0.133,
+        "开始播报": 1.653
+      }
+    },
+    {
+      "stage": "06 回到首页",
+      "utterance": "回到首页。",
+      "functional_flow_completed": true,
+      "actions": [
+        "home"
+      ],
+      "measured_seconds_after_prompt": {
+        "执行指令": 0.141,
+        "开始播报": 1.125
+      }
+    },
+    {
+      "stage": "07 查看无线传感器数据",
+      "utterance": "查看状态。",
+      "functional_flow_completed": true,
+      "actions": [
+        "data"
+      ],
+      "measured_seconds_after_prompt": {
+        "执行指令": 0.551,
+        "开始播报": 2.176
+      }
+    },
+    {
+      "stage": "08 询问土壤水分",
+      "utterance": "土壤湿度是多少？",
+      "functional_flow_completed": true,
+      "actions": [
+        "metric"
+      ],
+      "measured_seconds_after_prompt": {
+        "执行指令": 0.49,
+        "开始播报": 2.814
+      }
+    },
+    {
+      "stage": "09 根据土壤数据交流养护",
+      "utterance": "结合土壤数据，这盆绿萝应该怎么养？",
+      "functional_flow_completed": true,
+      "actions": [
+        "ask"
+      ],
+      "measured_seconds_after_prompt": {
+        "执行指令": 1.755,
+        "开始播报": 9.921
+      }
+    },
+    {
+      "stage": "10 查看成长日记",
+      "utterance": "请帮我打开相册。",
+      "functional_flow_completed": true,
+      "actions": [
+        "diary"
+      ],
+      "measured_seconds_after_prompt": {
+        "执行指令": 0.319,
+        "开始播报": 2.288
+      }
+    },
+    {
+      "stage": "11 返回首页",
+      "utterance": "回到首页。",
+      "functional_flow_completed": true,
+      "actions": [
+        "home"
+      ],
+      "measured_seconds_after_prompt": {
+        "执行指令": 0.142,
+        "开始播报": 1.141
+      }
+    },
+    {
+      "stage": "12 结束交流",
+      "utterance": "小伴，休息吧。",
+      "functional_flow_completed": true,
+      "actions": [
+        "sleep"
+      ],
+      "measured_seconds_after_prompt": {
+        "执行指令": 0.121,
+        "开始播报": 1.556
+      }
+    }
+  ],
+  "plant_result": {
+    "name": "绿萝",
+    "score": 85,
+    "visible_observation": "状态良好，叶片翠绿茂盛无明显损伤。",
+    "shutter_to_response_ms": 4470
+  },
+  "new_public_build_flashed": false
+}

@@ -28,6 +28,7 @@
 #define AI_VOICE_AI_RATE         16000
 
 /* Max capture length for one utterance (seconds at 16 kHz) */
+#define AI_VOICE_STREAM_MAX_SECONDS 15
 #define AI_VOICE_MAX_SECONDS     5
 #define AI_VOICE_PCM16K_MAX      (AI_VOICE_AI_RATE * 2 * AI_VOICE_MAX_SECONDS)
 
@@ -58,6 +59,10 @@ int ai_voice_record(FAR uint8_t *wav, size_t wav_size, int seconds);
 typedef void (*ai_voice_stream_cb_t)(FAR const int16_t *pcm16,
                                      size_t samples, void *arg);
 
+int ai_voice_background_record(ai_voice_stream_cb_t cb,void *arg,int max_seconds,int silent_blocks);
+void ai_voice_background_finish(void);
+/* In-memory callback only; retains foreground cancel/finish semantics. */
+int ai_voice_stream_record_local(ai_voice_stream_cb_t cb,void *arg,int max_seconds,int silent_blocks);
 int ai_voice_stream_record(ai_voice_stream_cb_t cb, void *arg,
                            int max_seconds, int silent_blocks);
 
@@ -100,6 +105,7 @@ int ai_voice_play_file(FAR const char *wav_path);
  * data 在后）。内部 6.4KB 静态暂存同时充当起播前预缓冲（~200ms@16k）。 */
 
 int ai_voice_stream_play_begin(void);
+int ai_voice_local_tone_benchmark(void);
 int ai_voice_stream_play_push(FAR const uint8_t *data, size_t len);
 int ai_voice_stream_play_end(void);
 
